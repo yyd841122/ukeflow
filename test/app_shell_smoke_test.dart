@@ -4,11 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/app.dart';
 
+import 'helpers/chord_fixtures.dart';
+
 void main() {
   // 每个用例各建一个 ProviderScope，各自创建并关闭 AppDatabase；关闭是异步的，
   // 下一个用例建库时会撞上 drift「重复建库」调试启发式误报。测试用例之间没有
   // 共享 executor 的竞态，按 drift 给出的口径关掉该警告。
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
+  Widget app() => ProviderScope(
+    overrides: [chordLibraryFixtureOverride()],
+    child: const UkeFlowApp(),
+  );
   Finder navLabel(String label) => find.descendant(
     of: find.byType(NavigationBar),
     matching: find.text(label),
@@ -16,7 +24,7 @@ void main() {
 
   // 工单 01 验收：App 启动渲染出导航壳。
   testWidgets('启动渲染五页签导航壳，初始落在调音器', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: UkeFlowApp()));
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
@@ -29,13 +37,25 @@ void main() {
   });
 
   testWidgets('点击页签可在五个页面间切换', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: UkeFlowApp()));
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    for (final label in ['和弦', '跟练', '路径', '曲库', '调音器']) {
-      await tester.tap(navLabel(label));
+    // 页面标记 = 各页内独有的文本（占位页标题 / 和弦库分组头，工单 02 起和弦页为真页面）。
+    const pageMarkers = {
+      '调音器': '此页由后续工单实现',
+      '和弦': '常用',
+      '跟练': '此页由后续工单实现',
+      '路径': '此页由后续工单实现',
+      '曲库': '此页由后续工单实现',
+    };
+    for (final entry in pageMarkers.entries) {
+      await tester.tap(navLabel(entry.key));
       await tester.pumpAndSettle();
-      expect(find.text(label), findsNWidgets(2), reason: '点 $label 后其页面应显示');
+      expect(
+        find.text(entry.value),
+        findsWidgets,
+        reason: '点 ${entry.key} 后应显示其页面',
+      );
     }
   });
 }

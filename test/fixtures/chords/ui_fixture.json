@@ -1,0 +1,146 @@
+{
+  "main": {
+    "strings": 4,
+    "fretsOnChord": 4,
+    "name": "ukulele"
+  },
+  "chords": {
+    "A": [
+      {
+        "key": "A",
+        "suffix": "minor",
+        "positions": [
+          {
+            "frets": [
+              2,
+              0,
+              0,
+              0
+            ],
+            "fingers": [
+              2,
+              0,
+              0,
+              0
+            ],
+            "baseFret": 1,
+            "barres": []
+          },
+          {
+            "frets": [
+              2,
+              4,
+              4,
+              3
+            ],
+            "fingers": [
+              1,
+              3,
+              3,
+              2
+            ],
+            "baseFret": 1,
+            "barres": []
+          }
+        ]
+      },
+      {
+        "key": "A",
+        "suffix": "7",
+        "positions": [
+          {
+            "frets": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "fingers": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "baseFret": 1,
+            "barres": []
+          }
+        ]
+      }
+    ],
+    "C": [
+      {
+        "key": "C",
+        "suffix": "major",
+        "positions": [
+          {
+            "frets": [
+              0,
+              0,
+              0,
+              3
+            ],
+            "fingers": [
+              0,
+              0,
+              0,
+              3
+            ],
+            "baseFret": 1,
+            "barres": []
+          }
+        ]
+      }
+    ],
+    "G": [
+      {
+        "key": "G",
+        "suffix": "7",
+        "positions": [
+          {
+            "frets": [
+              0,
+              2,
+              1,
+              2
+            ],
+            "fingers": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "baseFret": 1,
+            "barres": []
+          }
+        ]
+      }
+    ],
+    "B": [
+      {
+        "key": "B",
+        "suffix": "minor",
+        "positions": [
+          {
+            "frets": [
+              4,
+              2,
+              2,
+              2
+            ],
+            "fingers": [
+              3,
+              1,
+              1,
+              1
+            ],
+            "baseFret": 1,
+            "barres": [
+              2
+            ],
+            "capo": true
+          }
+        ]
+      }
+    ]
+  }
+}
