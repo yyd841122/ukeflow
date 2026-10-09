@@ -11,3 +11,7 @@
 - [ ] release 构建装机流畅
 - [ ] spikes/ 目录删除,文档中对它的引用清理
 - [ ] 遗留 TODO 清零或移入 v2 清单
+
+## Comments
+
+- 2026-10-09 (工单01 会话): 真机长测之前适合再跑一次全库跨模型审计(/cc-suite:audit),作为 M5 收尾的质量 gate;与每票的 /code-review(diff 轴)互补,不重复。
