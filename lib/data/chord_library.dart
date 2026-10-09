@@ -13,6 +13,9 @@ class ChordLibrary {
 
   final List<Chord> chords;
 
+  /// 全库和弦名集合（Chord.label）：谱面校验的白名单（ADR-0006）。
+  Set<String> get labels => {for (final chord in chords) chord.label};
+
   /// 和弦图品位窗行数。绘制契约：解析拒绝 ≠ 4 的 fretsOnChord。
   static const fretsOnChord = 4;
 

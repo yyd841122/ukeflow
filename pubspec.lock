@@ -33,6 +33,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.4.1"
+  chord_pro:
+    dependency: "direct main"
+    description:
+      name: chord_pro
+      sha256: f5b8745553e45031e39d53430738fc878259c01a433df0933af23e585ec4666e
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.8.0"
   clock:
     dependency: transitive
     description:
