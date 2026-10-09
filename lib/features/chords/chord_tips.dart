@@ -74,7 +74,7 @@ const curatedChordTips = <String, (String, String)>{
   ),
   'G7': (
     '食指按 E 弦 1 品，中指按 C 弦 2 品，无名指按 A 弦 2 品，G 弦空弦。',
-    '和 G 来回切换时手型别散架，只需换食指位置。',
+    'G 和 G7 只差 E 弦一个音（3 品 ↔ 1 品），但三根手指的分工整体轮换——别沿用 G 的手型直接按，逐弦核对。',
   ),
   'Gm': (
     '食指按 A 弦 1 品，中指按 C 弦 2 品，无名指按 E 弦 3 品，G 弦空弦。',
@@ -118,10 +118,11 @@ const curatedChordTips = <String, (String, String)>{
 (String, String) chordTips(Chord chord) {
   final curated = curatedChordTips[chord.label];
   if (curated != null) return curated;
-  return (_generic(chord.primaryFingering), '逐弦拨响：哪根发闷，就调整那根手指的位置与力度。');
+  return (genericChordTips(chord.primaryFingering), '逐弦拨响：哪根发闷，就调整那根手指的位置与力度。');
 }
 
-String _generic(ChordFingering f) {
+/// 按指法形状生成的通用要点（长尾和弦与详情页非主按法共用）。
+String genericChordTips(ChordFingering f) {
   final muted = f.frets.where((x) => x == -1).length;
   final parts = <String>[];
   if (f.barres.isNotEmpty) {

@@ -80,6 +80,30 @@ void main() {
     expect(diagram.fingering.frets, [2, 4, 4, 3]);
   });
 
+  testWidgets('切到非主指法时要点随图切换，切回主指法恢复详细要点', (tester) async {
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Am'));
+    await tester.pumpAndSettle();
+    // 主指法：详细要点 + 常见错误都在。
+    expect(find.text('常见错误'), findsOneWidget);
+    expect(find.textContaining('主指法'), findsNothing);
+
+    // 非主指法：详细要点不再出现，显示按图生成的提示与来源说明。
+    await tester.tap(find.text('按法 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('常见错误'), findsNothing);
+    expect(find.textContaining('主指法'), findsOneWidget);
+    expect(find.textContaining('此按法从第'), findsNothing); // fixture 按法 2 baseFret=1
+
+    // 切回主指法：恢复。
+    await tester.tap(find.text('按法 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('常见错误'), findsOneWidget);
+    expect(find.textContaining('主指法'), findsNothing);
+  });
+
   testWidgets('坏数据加载失败时页面可见报错', (tester) async {
     await tester.pumpWidget(_errorApp());
     await tester.pump(); // 第一帧：AsyncLoading

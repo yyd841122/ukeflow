@@ -21,7 +21,13 @@ class _ChordDetailPageState extends State<ChordDetailPage> {
   @override
   Widget build(BuildContext context) {
     final chord = widget.chord;
-    final (essence, mistakes) = chordTips(chord);
+    final primaryIndex = chord.fingerings.indexOf(chord.primaryFingering);
+    final showingPrimary = _index == primaryIndex;
+    // 要点文案按主指法撰写；看其它按法时改显示按当前指法形状生成的提示，
+    // 保证文字与图永远一致。
+    final (essence, mistakes) = showingPrimary
+        ? chordTips(chord)
+        : (genericChordTips(chord.fingerings[_index]), null);
     return Scaffold(
       appBar: AppBar(title: Text(chord.label)),
       body: ListView(
@@ -41,11 +47,23 @@ class _ChordDetailPageState extends State<ChordDetailPage> {
                   ),
               ],
             ),
+            if (!showingPrimary)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '详细要点按主指法（按法 ${primaryIndex + 1}）撰写，当前按法要点按图生成',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
           ],
           const SizedBox(height: 16),
           _TipCard(title: '按法要点', body: essence),
-          const SizedBox(height: 12),
-          _TipCard(title: '常见错误', body: mistakes),
+          if (mistakes != null) ...[
+            const SizedBox(height: 12),
+            _TipCard(title: '常见错误', body: mistakes),
+          ],
           const SizedBox(height: 12),
           Text(
             '○ 空弦　× 闷音　点内数字 = 手指编号',
