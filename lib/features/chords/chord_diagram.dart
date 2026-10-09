@@ -6,28 +6,42 @@ import 'chord_diagram_layout.dart';
 /// 和弦图（GLOSSARY：和弦指法的可视化）：琴格网 + 品位点（含手指编号）+
 /// 空弦 ○ / 闷音 × 标记 + 横按条 + 起始品位标签。
 class ChordDiagram extends StatelessWidget {
-  const ChordDiagram({super.key, required this.fingering, this.width = 88});
+  const ChordDiagram({
+    super.key,
+    required this.fingering,
+    this.width = 88,
+    this.showStringLabels = false,
+  });
 
   final ChordFingering fingering;
 
   /// 图宽；高按比例 1.3 倍（含弦枕上方标记区）。
   final double width;
 
+  /// 琴格下方标注弦号与音名（④G ③C ②E ①A，GLOSSARY「弦号」）。
+  /// 大图开启，浏览小图空间不够不开。
+  final bool showStringLabels;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return CustomPaint(
       size: Size(width, width * 1.3),
-      painter: _ChordDiagramPainter(ChordDiagramLayout(fingering), scheme),
+      painter: _ChordDiagramPainter(
+        ChordDiagramLayout(fingering),
+        scheme,
+        showStringLabels: showStringLabels,
+      ),
     );
   }
 }
 
 class _ChordDiagramPainter extends CustomPainter {
-  _ChordDiagramPainter(this.layout, this.scheme);
+  _ChordDiagramPainter(this.layout, this.scheme, {this.showStringLabels = false});
 
   final ChordDiagramLayout layout;
   final ColorScheme scheme;
+  final bool showStringLabels;
 
   static const _strings = 4;
 
@@ -36,7 +50,7 @@ class _ChordDiagramPainter extends CustomPainter {
     final margin = size.width * 0.10;
     final markerR = size.width * 0.055;
     final topPad = markerR * 2.6;
-    final bottomPad = size.width * 0.04;
+    final bottomPad = showStringLabels ? size.width * 0.16 : size.width * 0.04;
     final stringSpacing = (size.width - margin * 2) / (_strings - 1);
     final fretSpacing = (size.height - topPad - bottomPad) / layout.fretsOnChord;
     final dotR = fretSpacing * 0.40;
@@ -114,6 +128,22 @@ class _ChordDiagramPainter extends CustomPainter {
       canvas.drawCircle(center, dotR, Paint()..color = scheme.primary);
       if (dot.finger > 0) {
         _text(canvas, '${dot.finger}', center, dotR * 1.15, scheme.onPrimary);
+      }
+    }
+
+    // 弦号 + 音名标注（④G ③C ②E ①A）。
+    if (showStringLabels) {
+      const labels = ['④G', '③C', '②E', '①A'];
+      final gridBottom = topPad + layout.fretsOnChord * fretSpacing;
+      final labelY = gridBottom + (size.height - gridBottom) / 2;
+      for (var i = 0; i < 4; i++) {
+        _text(
+          canvas,
+          labels[i],
+          Offset(stringX(i), labelY),
+          size.width * 0.072,
+          scheme.onSurfaceVariant,
+        );
       }
     }
   }

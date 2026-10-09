@@ -33,7 +33,7 @@ class _ChordDetailPageState extends State<ChordDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Center(child: ChordDiagram(fingering: chord.fingerings[_index], width: 230)),
+          Center(child: ChordDiagram(fingering: chord.fingerings[_index], width: 230, showStringLabels: true)),
           if (chord.fingerings.length > 1) ...[
             const SizedBox(height: 12),
             Wrap(
