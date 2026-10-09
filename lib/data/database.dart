@@ -12,6 +12,15 @@ class AppDatabase extends GeneratedDatabase {
   @override
   int get schemaVersion => 1;
 
+  // v1 前期 schema 只加不改：建库与升级都 createAll（生成 IF NOT EXISTS，幂等），
+  // 后续工单加表只需建表 + 递增 schemaVersion，升级安装也能拿到新表；
+  // 出现破坏性变更时再替换为专门的迁移步骤。
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) => m.createAll(),
+  );
+
   // 尚无任何表；后续工单加表时改用 drift codegen 生成。
   @override
   Iterable<TableInfo> get allTables => const [];

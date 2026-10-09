@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,51 +43,32 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  static const _destinations = [
-    NavigationDestination(icon: Icon(Icons.tune), label: '调音器'),
-    NavigationDestination(icon: Icon(Icons.music_note), label: '和弦'),
-    NavigationDestination(icon: Icon(Icons.play_circle_outline), label: '跟练'),
-    NavigationDestination(icon: Icon(Icons.route), label: '路径'),
-    NavigationDestination(icon: Icon(Icons.library_music), label: '曲库'),
-  ];
-
-  static const _pages = [
-    TunerPage(),
-    ChordsPage(),
-    PlayPage(),
-    PathPage(),
-    LibraryPage(),
+  static const _tabs = [
+    (label: '调音器', icon: Icons.tune, page: TunerPage()),
+    (label: '和弦', icon: Icons.music_note, page: ChordsPage()),
+    (label: '跟练', icon: Icons.play_circle_outline, page: PlayPage()),
+    (label: '路径', icon: Icons.route, page: PathPage()),
+    (label: '曲库', icon: Icons.library_music, page: LibraryPage()),
   ];
 
   int _index = 0;
 
   @override
-  void initState() {
-    super.initState();
-    unawaited(_warmUpDatabase());
-  }
-
-  /// 启动即触碰数据库，让 drift 空库在真机上真正打开一次：
-  /// 出问题当场在 logcat 留下痕迹，而不是等后续工单第一次查询才暴露。
-  Future<void> _warmUpDatabase() async {
-    try {
-      await ref
-          .read(appDatabaseProvider)
-          .customSelect('SELECT 1 AS ok')
-          .getSingle();
-    } catch (error, stackTrace) {
-      debugPrint('UkeFlow: 数据库打开失败 $error\n$stackTrace');
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // 启动即预热数据库（见 databaseWarmupProvider）。
+    ref.watch(databaseWarmupProvider);
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(
+        index: _index,
+        children: [for (final tab in _tabs) tab.page],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: _destinations,
+        destinations: [
+          for (final tab in _tabs)
+            NavigationDestination(icon: Icon(tab.icon), label: tab.label),
+        ],
       ),
     );
   }
