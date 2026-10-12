@@ -107,6 +107,13 @@ void main() {
       hasLength(1),
       reason: '宽度均分',
     );
+    // 标签单行等高:真机截屏曾抓到选中 chip 的 ✓ 挤压「按法 1」折行被裁,
+    // 这类裁切不抛溢出异常,只有量高度能逮到。
+    final textRects = [
+      for (var i = 1; i <= 4; i++) tester.getRect(find.text('按法 $i')),
+    ];
+    expect(textRects.map((r) => r.height).toSet(), hasLength(1), reason: '标签等高');
+    expect(textRects.first.height, lessThan(24), reason: '标签单行,未折行');
   });
 
   testWidgets('引擎初始化失败:错误以 SnackBar 呈现,不崩页', (tester) async {
