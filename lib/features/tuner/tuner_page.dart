@@ -33,8 +33,9 @@ class _TunerPageState extends ConsumerState<TunerPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const SizedBox(height: 40),
         const PlaceholderPage(title: '调音器', icon: Icons.tune),
-        const SizedBox(height: 24),
+        const SizedBox(height: 32),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -49,13 +50,35 @@ class _TunerPageState extends ConsumerState<TunerPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
+                Row(
                   children: [
+                    // 一行四钮宽度均分,大音名 + 小弦号,对应四根弦。
                     for (final string in UkeString.values)
-                      FilledButton.tonal(
-                        onPressed: () => _pluck(string),
-                        child: Text('${string.number}弦 ${string.label}'),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: FilledButton.tonal(
+                            onPressed: () => _pluck(string),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  string.label,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                Text(
+                                  '${string.number}弦',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                   ],
                 ),
