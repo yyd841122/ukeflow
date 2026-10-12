@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/app.dart';
+import 'package:ukeflow/core/audio/fake_audio_engine.dart';
+import 'package:ukeflow/core/audio/providers.dart';
 
 import 'helpers/chord_fixtures.dart';
 
@@ -57,5 +59,32 @@ void main() {
         reason: '点 ${entry.key} 后应显示其页面',
       );
     }
+  });
+
+  testWidgets('跟练页的节拍器入口可直达节拍器页(假引擎)', (tester) async {
+    final engine = FakeAudioEngine();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chordLibraryFixtureOverride(),
+          audioEngineProvider.overrideWithValue(engine),
+        ],
+        child: const UkeFlowApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(navLabel('跟练'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('节拍器'));
+    await tester.pumpAndSettle();
+    expect(find.text('BPM'), findsOneWidget);
+    expect(find.text('引擎就绪'), findsOneWidget);
+    expect(engine.loadedKeys, containsAll(['tick_strong', 'tick_weak']));
+
+    // 弹回:页面卸载即停,不残留定时器。
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('BPM'), findsNothing);
   });
 }
