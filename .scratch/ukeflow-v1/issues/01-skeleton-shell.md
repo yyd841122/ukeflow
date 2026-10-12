@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `flutter build apk` 成功并安装到真机(OPPO PCAM00,连接方式见 spikes/tech_validation/README.md)
 - [x] 底部导航五页可切换,主题统一(中文 UI)
