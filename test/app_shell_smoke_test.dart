@@ -87,4 +87,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('BPM'), findsNothing);
   });
+
+  testWidgets('跟练页的节奏型训练入口可直达训练页(假引擎)', (tester) async {
+    final engine = FakeAudioEngine();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chordLibraryFixtureOverride(),
+          audioEngineProvider.overrideWithValue(engine),
+        ],
+        child: const UkeFlowApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(navLabel('跟练'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('节奏型训练'));
+    await tester.pumpAndSettle();
+    expect(find.text('节奏型训练'), findsWidgets, reason: '页标题与入口并存');
+    expect(find.text('引擎就绪'), findsOneWidget);
+    expect(engine.loadedKeys, containsAll(['tick_strong', 'tick_weak']));
+
+    // 弹回:页面卸载即停,不残留定时器。
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rhythm-toggle')), findsNothing);
+  });
 }

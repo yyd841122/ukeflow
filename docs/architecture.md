@@ -26,6 +26,7 @@ lib/
 │   ├── model/        # StrumChart(ChordPro→Section/Line/Tokens)、TabChart(逐音事件:弦/品位/时刻)、
 │   │                 # Chord、PracticePath/DailyTask/CheckIn、StrumPattern(节奏型)
 │   ├── chart/        # ChordPro 校验器(段落闭合/和弦名白名单)、谱库仓库
+│   ├── practice/     # 练习状态纯函数((时间网格/动作事件时间轴, 引擎时刻)→练习状态);时间轴编译(工单08)同住于此
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、charts(自建)、settings；assets/：内置谱、chords-db、采样

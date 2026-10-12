@@ -15,4 +15,4 @@
 ## Comments
 
 - 2026-10-09 (工单01 会话): 本票是同步引擎心脏。落地并通过 /code-review 后,建议用跨模型审计(xiaolai/cc-suite 的 /cc-suite:audit,需 codex CLI)对本票触及的同步引擎文件做一次范围审计——Codex 与 Claude 盲区不相关,这是全项目风险最集中处,值得第二意见。里程碑级动作,非每票必跑。
-- 2026-10-12 (工单03 会话): 本票重做 PlayPage 时,须迁移暂挂其上的节拍器入口(节拍器页现为 `features/rhythm/metronome_page.dart`,经 Navigator.push 打开)——勿随占位页一起删掉;后续可考虑与节奏型训练器(工单06)合并为同一入口。
+- 2026-10-12 (工单03 会话;06 会话更新): 本票重做 PlayPage 时,须迁移暂挂其上的两个入口——节拍器(`features/rhythm/metronome_page.dart`)与节奏型训练器(`features/rhythm/rhythm_trainer_page.dart`,工单 06 增设),均经 Navigator.push 打开——勿随占位页一起删掉;后续可考虑合并为同一入口。
