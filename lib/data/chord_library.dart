@@ -104,6 +104,9 @@ class ChordLibrary {
     }
     final midiJson = _opt(json, 'midi');
     final midi = midiJson == null ? null : _ints(midiJson, '$ctx midi');
+    if (midi != null && midi.length != frets.length) {
+      throw ChordDataError('$ctx：midi 应有 ${frets.length} 根弦的数据（实际 ${midi.length}）');
+    }
     return ChordFingering(
       frets: frets,
       fingers: fingers,

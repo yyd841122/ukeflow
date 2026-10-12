@@ -1,23 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/providers.dart';
 import '../../data/chord_library.dart';
 import 'chord_diagram.dart';
 import 'chord_tips.dart';
 
-/// 和弦详情：大指法图 + 按法切换 + 按法要点 + 常见错误。
-/// 示范音试听由工单 05 在此页追加。
-class ChordDetailPage extends StatefulWidget {
+/// 和弦详情：大指法图 + 试听（按当前指法错峰拨响应响的弦，工单 05）+
+/// 按法切换 + 按法要点 + 常见错误。
+class ChordDetailPage extends ConsumerStatefulWidget {
   const ChordDetailPage({super.key, required this.chord});
 
   final Chord chord;
 
   @override
-  State<ChordDetailPage> createState() => _ChordDetailPageState();
+  ConsumerState<ChordDetailPage> createState() => _ChordDetailPageState();
 }
 
-class _ChordDetailPageState extends State<ChordDetailPage> {
+class _ChordDetailPageState extends ConsumerState<ChordDetailPage> {
   late int _index = widget.chord.fingerings.indexOf(widget.chord.primaryFingering);
 
+  /// 试听当前指法(GLOSSARY「和弦示范音」):闷音弦跳过、空弦拨响,
+  /// 错峰与音源加载细节都在 PluckPlayer.strum。失败以 SnackBar 呈现。
+  Future<void> _audition() async {
+    try {
+      await ref.read(pluckPlayerProvider).strum(
+        freqs: widget.chord.fingerings[_index].stringFrequencies,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('试听失败:$error')));
+      }
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final chord = widget.chord;
@@ -34,6 +51,15 @@ class _ChordDetailPageState extends State<ChordDetailPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Center(child: ChordDiagram(fingering: chord.fingerings[_index], width: 230, showStringLabels: true)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _audition,
+              icon: const Icon(Icons.music_note),
+              label: const Text('试听'),
+            ),
+          ),
           if (chord.fingerings.length > 1) ...[
             const SizedBox(height: 12),
             Wrap(

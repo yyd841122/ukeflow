@@ -1,0 +1,10 @@
+{
+  "main": {"strings": 4, "fretsOnChord": 4, "name": "ukulele"},
+  "chords": {
+    "C": [
+      {"key": "C", "suffix": "major", "positions": [
+        {"frets": [0, 0, 0, 3], "fingers": [0, 0, 0, 3], "baseFret": 1, "barres": [], "midi": [67, 60, 64]}
+      ]}
+    ]
+  }
+}

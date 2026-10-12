@@ -55,6 +55,7 @@ void main() {
       ('bad_basefret.json', '起始品位'),
       ('bad_no_positions.json', 'positions'),
       ('bad_fretsonchord.json', '品位窗'),
+      ('bad_midi_length.json', 'midi'),
     ];
     for (final (name, keyword) in cases) {
       test('$name 抛 ChordDataException 且报错含上下文（$keyword）', () {

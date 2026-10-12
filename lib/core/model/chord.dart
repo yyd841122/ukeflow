@@ -1,6 +1,10 @@
 /// 和弦域模型（GLOSSARY「和弦指法」）：数据形态来自 chords-db ukulele.json。
 library;
 
+import 'dart:math' as math;
+
+import 'uke_string.dart';
+
 /// 一个和弦指法的一种按法（chords-db 的 position）。
 ///
 /// 弦序：下标 0..3 = G C E A（4 弦 → 1 弦）。
@@ -30,6 +34,20 @@ class ChordFingering {
 
   /// 各弦 midi 音高（源数据可选字段；示范音工单据此算频率）。
   final List<int>? midi;
+
+  /// 各弦发声基频（Hz），下标与 [frets] 一致（4 弦→1 弦，GLOSSARY「弦号」）。
+  /// 闷音弦（-1）为 null——不发声；有声弦的频率优先取源数据 [midi]
+  /// （工单 02 已对全量资产验证 midi 与品位换算零误差），
+  /// 缺失时按「空弦基频 × 2^(绝对品位/12)」推算，绝对品位 = 值 + baseFret - 1。
+  List<double?> get stringFrequencies => [
+    for (var i = 0; i < frets.length; i++)
+      if (frets[i] == -1)
+        null
+      else if (midi != null)
+        440.0 * math.pow(2, (midi![i] - 69) / 12)
+      else
+        UkeString.values[i].frequency * math.pow(2, (frets[i] + baseFret - 1) / 12),
+  ];
 }
 
 /// 一个和弦：根音 + 后缀 + 全部指法按法。

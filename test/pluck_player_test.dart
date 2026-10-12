@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ukeflow/core/audio/audio_engine.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/pluck_player.dart';
 
@@ -59,4 +63,103 @@ void main() {
 
     expect(engine.scheduleLog.single.time, const Duration(milliseconds: 2120));
   });
+
+/// 工单 05 seam 2:strum 错峰拨响(和弦示范音;工单 11 示范试听复用同一入口)。
+group('strum 错峰拨响', () {
+  test('四音各占一个弦位时位:公共基准 + 45ms 等差(含静默弦位)', () async {
+    final engine = FakeAudioEngine()..now = const Duration(milliseconds: 700);
+    final player = PluckPlayer(engine: engine);
+
+    await player.strum(freqs: const [392.0, 261.63, 329.63, 523.25]);
+
+    expect(engine.scheduleLog.map((c) => c.time), [
+      const Duration(milliseconds: 700),
+      const Duration(milliseconds: 745),
+      const Duration(milliseconds: 790),
+      const Duration(milliseconds: 835),
+    ], reason: '错峰间隔 = strumGap,与各音加载完成先后无关');
+    expect(engine.loadedKeys, hasLength(4));
+  });
+
+  test('闷音弦(null)占时位不发声;全闷音零注入零预定', () async {
+    final engine = FakeAudioEngine()..now = const Duration(milliseconds: 100);
+    final player = PluckPlayer(engine: engine);
+
+    await player.strum(freqs: const [null, 329.63, 392.0, 523.25]);
+
+    expect(engine.scheduleLog, hasLength(3));
+    expect(engine.scheduleLog.map((c) => c.time), [
+      const Duration(milliseconds: 145),
+      const Duration(milliseconds: 190),
+      const Duration(milliseconds: 235),
+    ], reason: '0 号弦位静默但仍占时位——拨片物理上扫过它');
+
+    final quietEngine = FakeAudioEngine();
+    await PluckPlayer(
+      engine: quietEngine,
+    ).strum(freqs: const [null, null, null, null]);
+    expect(quietEngine.scheduleLog, isEmpty);
+    expect(quietEngine.loadedKeys, isEmpty);
+  });
+
+  test('加载期间的时钟流逝不挤压错峰:基准在全部注入完成后读一次', () async {
+    final engine = _GatedLoadEngine()..now = Duration.zero;
+    final player = PluckPlayer(engine: engine);
+
+    final done = player.strum(freqs: const [392.0, 261.63, 329.63]);
+    await Future<void>.delayed(Duration.zero); // 三笔注入都到门口
+    expect(engine.gates.keys.toSet(), {
+      'pluck_392.0_1500',
+      'pluck_261.63_1500',
+      'pluck_329.63_1500',
+    });
+
+    // 注入分批完成,期间时钟流逝(真机首次载入的病态放大版)。
+    engine.now = const Duration(seconds: 1);
+    engine.gates['pluck_392.0_1500']!.complete();
+    await Future<void>.delayed(Duration.zero);
+    engine.now = const Duration(seconds: 2);
+    engine.gates['pluck_261.63_1500']!.complete();
+    await Future<void>.delayed(Duration.zero);
+    engine.now = const Duration(seconds: 3);
+    engine.gates['pluck_329.63_1500']!.complete();
+
+    await done;
+    expect(engine.scheduleLog.map((c) => c.time), [
+      const Duration(seconds: 3),
+      const Duration(seconds: 3, milliseconds: 45),
+      const Duration(seconds: 3, milliseconds: 90),
+    ], reason: '基准 = 全部注入后的引擎时刻,一次读定;退化成逐音 pluck(after:) 会把加载时延揉进错峰间隔');
+  });
+
+  test('音源缓存与 pluck 共用:同音不重注入', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    await player.pluck(freq: 392);
+    await player.strum(freqs: const [392.0, 261.63]);
+    await player.strum(freqs: const [392.0, 261.63]);
+
+    expect(engine.loadedKeys, hasLength(2), reason: '392 与 261.63 各注入一次');
+    expect(engine.scheduleLog, hasLength(5), reason: '1 + 2 + 2 次预定');
+  });
+
+  test('引擎初始化失败:错误上抛给调用方', () async {
+    final engine = FakeAudioEngine()..failInitialization = true;
+    final player = PluckPlayer(engine: engine);
+
+    await expectLater(player.strum(freqs: const [392.0]), throwsException);
+  });
+});
+}
+
+/// loadMem 受门控的假引擎:模拟注入耗时不定的真机现场(工单 05 错峰把关用)。
+class _GatedLoadEngine extends FakeAudioEngine {
+  final gates = <String, Completer<void>>{};
+
+  @override
+  Future<EngineSound> loadMem(String key, Uint8List wavBytes) =>
+      (gates[key] ??= Completer<void>()).future.then(
+        (_) => super.loadMem(key, wavBytes),
+      );
 }

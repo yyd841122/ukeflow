@@ -59,6 +59,8 @@ void main() {
     expect(find.text('Am'), findsWidgets); // AppBar 标题 + 详情内容
     expect(find.byType(ChordDiagram), findsWidgets);
     expect(find.text('按法要点'), findsOneWidget);
+    // 试听钮把常见错误卡片推到首屏之外：滚到再断言。
+    await tester.scrollUntilVisible(find.text('常见错误'), 200);
     expect(find.text('常见错误'), findsOneWidget);
     // 详情默认展示主指法（2000）。
     final diagram =
@@ -86,9 +88,12 @@ void main() {
 
     await tester.tap(find.text('Am'));
     await tester.pumpAndSettle();
-    // 主指法：详细要点 + 常见错误都在。
+    // 主指法：详细要点 + 常见错误都在（后者在试听钮下方,滚到再断言,看完回页首）。
+    await tester.scrollUntilVisible(find.text('常见错误'), 200);
     expect(find.text('常见错误'), findsOneWidget);
     expect(find.textContaining('主指法'), findsNothing);
+    await tester.drag(find.byType(ListView), const Offset(0, 600));
+    await tester.pumpAndSettle();
 
     // 非主指法：详细要点不再出现，显示按图生成的提示与来源说明。
     await tester.tap(find.text('按法 2'));
@@ -100,6 +105,7 @@ void main() {
     // 切回主指法：恢复。
     await tester.tap(find.text('按法 1'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('常见错误'), 200);
     expect(find.text('常见错误'), findsOneWidget);
     expect(find.textContaining('主指法'), findsNothing);
   });
