@@ -52,22 +52,34 @@ class _TunerPageState extends ConsumerState<TunerPage> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    // 一行四钮宽度均分,大音名 + 小弦号,对应四根弦。
+                    // 一行四钮宽度均分;钮内两行——大音名在上、弦号在下,
+                    // 两行沿同一竖轴居中(crossAxisAlignment.center)。
+                    // 按钮水平内边距收小:M3 默认 24dp 会把四等分按钮的
+                    // 内宽挤到 ~18dp,「4弦」被迫折成两行。
                     for (final string in UkeString.values)
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: FilledButton.tonal(
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                            ),
                             onPressed: () => _pluck(string),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Text(
                                   string.label,
+                                  maxLines: 1,
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
                                 Text(
                                   '${string.number}弦',
+                                  maxLines: 1,
+                                  softWrap: false,
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         color: Theme.of(
