@@ -1,6 +1,7 @@
-import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
+import 'wav_pcm16.dart';
 
 /// 代码合成节拍音:内存生成 WAV(PCM16 mono),不经任何资源文件。
 /// 纯函数——同参数输出逐字节一致,测试无需引擎(ADR-0004:音源与引擎解耦)。
@@ -37,36 +38,6 @@ abstract final class TickSynth {
           .round();
       view.setInt16(i * 2, v.clamp(-32768, 32767), Endian.little);
     }
-    return _wrapWav(sampleRate: sampleRate, pcm16: pcm);
-  }
-
-  /// 给 PCM16 mono 数据包上规范 WAV 头。
-  static Uint8List _wrapWav({required int sampleRate, required Uint8List pcm16}) {
-    final out = BytesBuilder();
-    void u32le(int v) {
-      final b = ByteData(4)..setInt32(0, v, Endian.little);
-      out.add(b.buffer.asUint8List());
-    }
-
-    void u16le(int v) {
-      final b = ByteData(2)..setUint16(0, v, Endian.little);
-      out.add(b.buffer.asUint8List());
-    }
-
-    out.add(ascii.encode('RIFF'));
-    u32le(36 + pcm16.length);
-    out.add(ascii.encode('WAVE'));
-    out.add(ascii.encode('fmt '));
-    u32le(16);
-    u16le(1); // PCM
-    u16le(1); // mono
-    u32le(sampleRate);
-    u32le(sampleRate * 2); // byteRate
-    u16le(2); // blockAlign
-    u16le(16); // bits
-    out.add(ascii.encode('data'));
-    u32le(pcm16.length);
-    out.add(pcm16);
-    return out.takeBytes();
+    return wrapPcm16MonoWav(sampleRate: sampleRate, pcm16: pcm);
   }
 }

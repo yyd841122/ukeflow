@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/tick_synth.dart';
+import 'helpers/wav_samples.dart';
 
 /// TickSynth:代码合成节拍 WAV(无资源文件)。
 /// 期望值全部独立来源:WAV 规范手工真值、声学量(过零率/包络/量程界)。
@@ -9,28 +10,17 @@ void main() {
   int le16(Uint8List b, int i) => b[i] | (b[i + 1] << 8);
   int le32(Uint8List b, int i) =>
       b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24);
-  String ascii4(Uint8List b, int i) => String.fromCharCodes(b.sublist(i, i + 4));
-
-  /// 样本幅值(-32768..32767)。
-  int sampleAt(Uint8List wav, int index) =>
-      ByteData.sublistView(wav).getInt16(44 + index * 2, Endian.little);
+  String ascii4(Uint8List b, int i) =>
+      String.fromCharCodes(b.sublist(i, i + 4));
 
   /// 前 [ms] 毫秒内的正向过零次数(频率的独立证据)。
   int positiveZeroCrossings(Uint8List wav, int sampleRate, int ms) {
     final n = sampleRate * ms ~/ 1000;
     var count = 0;
     for (var i = 1; i < n; i++) {
-      if (sampleAt(wav, i - 1) <= 0 && sampleAt(wav, i) > 0) count++;
+      if (wavSampleAt(wav, i - 1) <= 0 && wavSampleAt(wav, i) > 0) count++;
     }
     return count;
-  }
-
-  int peakOf(Uint8List wav, int fromSample, int toSample) {
-    var peak = 0;
-    for (var i = fromSample; i < toSample; i++) {
-      peak = peak.abs() > sampleAt(wav, i).abs() ? peak : sampleAt(wav, i);
-    }
-    return peak;
   }
 
   const rate = 44100;
@@ -70,17 +60,17 @@ void main() {
 
   test('发声非静音、不削波,首样本为 0', () {
     for (final wav in [strong, weak]) {
-      final peak = peakOf(wav, 0, le32(wav, 40) ~/ 2).abs();
+      final peak = wavPeakOf(wav, 0, le32(wav, 40) ~/ 2).abs();
       expect(peak, greaterThan(32767 ~/ 2), reason: '应可听见');
       expect(peak, lessThanOrEqualTo(32767), reason: '不得削波');
-      expect(sampleAt(wav, 0), 0, reason: 'sin(0)=0,起始无跳变');
+      expect(wavSampleAt(wav, 0), 0, reason: 'sin(0)=0,起始无跳变');
     }
   });
 
   test('指数包络:尾段峰值显著低于头段(自然衰减,无爆音尾巴)', () {
     final total = le32(strong, 40) ~/ 2;
-    final headPeak = peakOf(strong, 0, total ~/ 4).abs();
-    final tailPeak = peakOf(strong, total * 3 ~/ 4, total).abs();
+    final headPeak = wavPeakOf(strong, 0, total ~/ 4).abs();
+    final tailPeak = wavPeakOf(strong, total * 3 ~/ 4, total).abs();
     expect(tailPeak, lessThan(headPeak ~/ 4));
   });
 
@@ -94,8 +84,8 @@ void main() {
   test('强弱拍响度分明:weak 峰值低于 strong', () {
     final total = le32(strong, 40) ~/ 2;
     expect(
-      peakOf(weak, 0, total).abs(),
-      lessThan(peakOf(strong, 0, total).abs()),
+      wavPeakOf(weak, 0, total).abs(),
+      lessThan(wavPeakOf(strong, 0, total).abs()),
     );
   });
 
