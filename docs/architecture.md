@@ -26,7 +26,9 @@ lib/
 │   ├── model/        # StrumChart(ChordPro→Section/Line/Tokens)、TabChart(逐音事件:弦/品位/时刻)、
 │   │                 # Chord、PracticePath/DailyTask/CheckIn、StrumPattern(节奏型)
 │   ├── chart/        # ChordPro 校验器(段落闭合/和弦名白名单)、谱库仓库
-│   ├── practice/     # 练习状态纯函数((时间网格/动作事件时间轴, 引擎时刻)→练习状态);时间轴编译(工单08)同住于此
+│   ├── practice/     # 练习内核(纯函数,零引擎依赖):play_timeline.dart 时间轴编译(谱+节奏型+BPM+变速→动作事件时间轴)、
+│   │                 # practice_state.dart 跟练练习状态((时间轴,引擎时刻)→当前拍/动作/预告/歌词行)、
+│   │                 # rhythm_state.dart 节奏型训练状态(循环网格先行版)
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、charts(自建)、settings；assets/：内置谱、chords-db、采样
@@ -46,9 +48,14 @@ lib/
 - **唯一时钟** = `SoLoud.instance.getEngineTime()`。禁止挂钟参与任何音画对齐。
 - 跟练视图是纯函数：`(engineTime) → UI 状态`（当前拍、下一动作、高亮、歌词行）。
   UI 以 ~16ms 轮询重绘（spike B 已验证此模式漂移可忽略）。
-- 曲谱预编译为**动作事件时间轴**：`List<PlayEvent>(engineTime, kind, data)`，
-  kind ∈ {strum(方向,和弦), note(弦,品位), lyric(行), section}。
-  当前动作 = 二分查找 now；俄罗斯方块预告 = 取 (now, now+lookahead] 窗口。
+- 曲谱预编译为**动作事件时间轴**（core/practice/play_timeline.dart）：
+  sealed PlayEvent（PlayStrumEvent 扫弦[方向+和弦] / PlayLyricEvent 歌词行 /
+  PlaySectionEvent 段落），时刻为**相对量**（自 0），锚定 t0 由消费方决定；
+  指弹谱的单音事件（note 弦+品位）归指弹谱模型（工单 12/13），弹唱谱时间轴
+  只含扫弦/歌词行/段落。事件时刻逐事件四舍五入不累加，与 BeatSchedule.beatTime
+  同语义——拍点扫弦与节拍声同源同刻（工单 08 测试守护）。
+  当前动作 = 二分查找 now；俄罗斯方块预告 = 取 (now, now+lookahead] 窗口
+  （core/practice/practice_state.dart）。
 - 一切发声（节拍 tick、扫弦采样错峰、KS 拨弦、逐音示范）都走 `playClocked` 预定，
   与视觉事件出自**同一份时间轴**——音画同步是结构保证，不是校准出来的。
 
