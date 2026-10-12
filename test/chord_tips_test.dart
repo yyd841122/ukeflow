@@ -12,33 +12,49 @@ void main() {
   const fingerNames = {
     '食指': 1, '中指': 2, '无名指': 3, '小指': 4,
   };
+  // 弦标句式「圈号+音名」(④G ③C ②E ①A,与指法图弦标一致)。
+  final glyphByLetter = const {'G': '④', 'C': '③', 'E': '②', 'A': '①'};
+  final stringRefRe = RegExp(r'([①②③④])([GCEA])');
   final frettedRe = RegExp(
-    r'(食指|中指|无名指|小指)?按 ([GCEA])（(\d)）弦 (\d) 品(（(食指|中指|无名指|小指)）)?',
+    r'(食指|中指|无名指|小指)?按 ([①②③④])([GCEA])弦 (\d) 品(（(食指|中指|无名指|小指)）)?',
   );
-  final barreRe = RegExp(r'食指横按 ((?:[GCEA]（\d）(?:、)?)+)弦的 (\d) 品');
-  final openRe = RegExp(r'((?:[GCEA]（\d）(?:、)?)+)弦空');
+  final barreRe = RegExp(r'食指横按 ((?:[①②③④][GCEA](?:、)?)+)弦的 (\d) 品');
+  final openRe = RegExp(r'((?:[①②③④][GCEA](?:、)?)+)弦空');
+
+  /// 圈号必须与音名配对(④G 而非 ①G)——写反了新手会按错弦。
+  void checkPair(RegExpMatch m, int glyphGroup, int letterGroup) =>
+      expect(
+        glyphByLetter[m.group(letterGroup)!],
+        m.group(glyphGroup)!,
+        reason: '弦标 ${m.group(0)} 的圈号与音名不配对',
+      );
 
   /// 从语法化文案解析 (弦名 → (绝对品位, 手指)) 与空弦集合。
   (Map<String, (int, int)>, Set<String>) parseEssence(String essence) {
     final fretted = <String, (int, int)>{};
     var rest = essence;
     for (final m in barreRe.allMatches(rest)) {
-      for (final c in RegExp(r'([GCEA])（\d）').allMatches(m.group(1)!)) {
-        fretted[c.group(1)!] = (int.parse(m.group(2)!), 1);
+      for (final c in stringRefRe.allMatches(m.group(1)!)) {
+        checkPair(c, 1, 2);
+        fretted[c.group(2)!] = (int.parse(m.group(2)!), 1);
       }
       rest = rest.replaceFirst(m.group(0)!, '');
     }
     for (final m in frettedRe.allMatches(rest)) {
       final fingerName = m.group(1) ?? m.group(6);
-      fretted[m.group(2)!] = (
+      checkPair(m, 2, 3);
+      fretted[m.group(3)!] = (
         int.parse(m.group(4)!),
         fingerNames[fingerName!]!,
       );
     }
-    final opens = <String>{
-      for (final m in openRe.allMatches(rest))
-        for (final c in RegExp(r'([GCEA])（\d）').allMatches(m.group(1)!)) c.group(1)!,
-    };
+    final opens = <String>{};
+    for (final m in openRe.allMatches(rest)) {
+      for (final c in stringRefRe.allMatches(m.group(1)!)) {
+        checkPair(c, 1, 2);
+        opens.add(c.group(2)!);
+      }
+    }
     if (rest.contains('四根弦全部空')) {
       opens.addAll(const ['G', 'C', 'E', 'A']);
     } else if (rest.contains('其余')) {

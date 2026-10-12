@@ -84,6 +84,31 @@ void main() {
     expect(engine.loadedKeys, hasLength(6));
   });
 
+  testWidgets('手机宽度(360dp)下四个按法 chip 一行均分,不溢出不折行', (tester) async {
+    // 默认测试面 800×600 抓不到窄屏溢出;按真机 OPPO 360dp 宽重设(工单 04 教训)。
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+    await pumpPage(tester, chordOf('C')); // C 有 4 个按法,全库上限
+
+    expect(tester.takeException(), isNull);
+    final chips = find.byType(ChoiceChip);
+    expect(chips, findsNWidgets(4));
+    final rects = [
+      for (var i = 0; i < 4; i++) tester.getRect(chips.at(i)),
+    ];
+    expect(
+      rects.map((r) => r.top),
+      everyElement(rects.first.top),
+      reason: '四个按法同一行',
+    );
+    expect(
+      rects.map((r) => r.width).toSet(),
+      hasLength(1),
+      reason: '宽度均分',
+    );
+  });
+
   testWidgets('引擎初始化失败:错误以 SnackBar 呈现,不崩页', (tester) async {
     engine = FakeAudioEngine()..failInitialization = true;
     await tester.pumpWidget(
