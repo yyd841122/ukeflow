@@ -38,7 +38,9 @@ class ChordFingering {
   /// 各弦发声基频（Hz），下标与 [frets] 一致（4 弦→1 弦，GLOSSARY「弦号」）。
   /// 闷音弦（-1）为 null——不发声；有声弦的频率优先取源数据 [midi]
   /// （工单 02 已对全量资产验证 midi 与品位换算零误差），
-  /// 缺失时按「空弦基频 × 2^(绝对品位/12)」推算，绝对品位 = 值 + baseFret - 1。
+  /// 缺失时按「空弦基频 × 2^(半音数/12)」推算。半音数语义照源数据核实过
+  /// （全库 baseFret>1 含空弦的 4 例指法，midi 均为空弦原音）：空弦 0 恒为
+  /// 空弦音，不参与窗口偏移；按品弦半音数 = 值 + baseFret - 1。
   List<double?> get stringFrequencies => [
     for (var i = 0; i < frets.length; i++)
       if (frets[i] == -1)
@@ -46,7 +48,8 @@ class ChordFingering {
       else if (midi != null)
         440.0 * math.pow(2, (midi![i] - 69) / 12)
       else
-        UkeString.values[i].frequency * math.pow(2, (frets[i] + baseFret - 1) / 12),
+        UkeString.values[i].frequency *
+            math.pow(2, (frets[i] == 0 ? 0 : frets[i] + baseFret - 1) / 12),
   ];
 }
 

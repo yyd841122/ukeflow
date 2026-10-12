@@ -67,5 +67,20 @@ void main() {
         expect(viaFrets[i]!, closeTo(viaMidi[i]!, 0.01), reason: '第 $i 弦');
       }
     });
+
+    test('空弦不参与窗口偏移:高把位含空弦指法(A13b5b9 真实形状)两路一致', () {
+      // 源数据 A13b5b9:frets [0,2,3,1] baseFret 9,midi [67,70,75,78]——
+      // 0 号弦 midi 是空弦原音 G4,评审曾抓到兜底路把它抬高 8 品。
+      final viaMidi = f(
+        [0, 2, 3, 1],
+        baseFret: 9,
+        midi: [67, 70, 75, 78],
+      ).stringFrequencies;
+      final viaFrets = f([0, 2, 3, 1], baseFret: 9).stringFrequencies;
+      expect(viaFrets[0], closeTo(391.9954, 0.01), reason: '空弦 = G4 原音');
+      for (var i = 0; i < 4; i++) {
+        expect(viaFrets[i]!, closeTo(viaMidi[i]!, 0.01), reason: '第 $i 弦');
+      }
+    });
   });
 }

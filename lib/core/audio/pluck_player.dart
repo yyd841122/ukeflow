@@ -29,8 +29,9 @@ class PluckPlayer {
 
   /// 错峰拨响一组弦音(和弦示范音,工单 11 示范试听复用同一入口):
   /// [freqs] 按弹奏位次排列(4 弦→1 弦),闷音弦为 null——占时位但不拨响,
-  /// 相邻弦位错峰 [strumGap]。全部音源先并行完成合成与注入,再读
-  /// 一次引擎时钟作公共基准,采样级错峰——错峰间隔不受加载耗时影响。
+  /// 相邻弦位错峰 [strumGap]。全部音源先完成注入再读一次引擎时钟作
+  /// 公共基准,采样级错峰——错峰间隔不受加载耗时影响(合成串行、
+  /// loadMem 注入并发,时序保证只在注入这一层需要)。
   Future<void> strum({required List<double?> freqs}) async {
     await engine.ensureInitialized();
     final sounds = await Future.wait([
