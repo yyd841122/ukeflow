@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/chart/strum_chart_parser.dart';
+import 'package:ukeflow/core/model/tab_chart.dart';
 import 'package:ukeflow/data/chart_providers.dart';
 
 /// 练习内核测试（工单 08）共用：谱文本 → 弹唱谱，
@@ -7,8 +8,10 @@ import 'package:ukeflow/data/chart_providers.dart';
 const testAllowedChords = {'C', 'G', 'Am', 'F', 'Em', 'Dm'};
 
 StrumChart parseChart(String source) {
-  final result =
-      StrumChartParser.parse(source, allowedChords: testAllowedChords);
+  final result = StrumChartParser.parse(
+    source,
+    allowedChords: testAllowedChords,
+  );
   expect(result.ok, isTrue, reason: '测试谱必须过校验：${result.issues}');
   return result.chart!;
 }
@@ -36,11 +39,28 @@ const practiceFixtureChartText = '''
 /// 每次取用现解析（parseChart 里有 expect，须在测试内求值）。
 StrumChart get practiceFixtureChart => parseChart(practiceFixtureChartText);
 
+/// 指弹跟练（工单 13）测试用小谱:80 BPM = 750ms/拍,半拍音钉非整除
+/// 边界;事件时刻 0 / 750 / 1875 / 2250ms,全曲 4 拍(1 小节) = 3000ms。
+const tabFixtureChart = TabChart(
+  title: '指弹测试曲',
+  artist: '测试者',
+  tempo: 80,
+  notes: [
+    TabNote(string: 1, fret: 3, beat: 0),
+    TabNote(string: 1, fret: 0, beat: 1),
+    TabNote(string: 2, fret: 3, beat: 2.5),
+    TabNote(string: 3, fret: 2, beat: 3),
+  ],
+);
+
 /// 跟练页签（工单 09）UI 测试：内置曲库 provider 覆盖为给定测试谱，
 /// 不碰真资产（testWidgets 的 FakeAsync 里 rootBundle 真实文件 I/O 永远
 /// 完不了）。求值发生在 provider 首次被读时（测试 zone 内，expect 合法）。
 // ignore: strict_top_level_inference
 builtinChartsFixtureOverride(List<({String id, StrumChart chart})> charts) =>
-    builtinChartsProvider.overrideWith((ref) async => [
-          for (final entry in charts) BuiltInChart(id: entry.id, chart: entry.chart),
-        ]);
+    builtinChartsProvider.overrideWith(
+      (ref) async => [
+        for (final entry in charts)
+          BuiltInChart(id: entry.id, chart: entry.chart),
+      ],
+    );

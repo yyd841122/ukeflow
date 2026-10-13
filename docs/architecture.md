@@ -30,7 +30,8 @@ lib/
 │   ├── practice/     # 练习内核(纯函数,零引擎依赖):play_timeline.dart 时间轴编译(谱+节奏型+BPM+变速→动作事件时间轴)、
 │   │                 # practice_state.dart 跟练练习状态((时间轴,引擎时刻)→当前拍/动作/预告/歌词行)、
 │   │                 # rhythm_state.dart 节奏型训练状态(循环网格先行版)、
-│   │                 # tab_timeline.dart 指弹谱→逐音事件时间轴(工单 12,取整语义与弹唱时间轴同型、类型独立)
+│   │                 # tab_timeline.dart 指弹谱→逐音事件时间轴(工单 12,取整语义与弹唱时间轴同型、类型独立)、
+│   │                 # tab_practice_state.dart 逐音练习状态((时间轴,引擎时刻)→当前音/预亮窗/拍,工单 13)
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、charts(自建)、settings；assets/：内置谱、chords-db、采样
