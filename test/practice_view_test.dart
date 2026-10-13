@@ -117,7 +117,12 @@ void main() {
       'C',
       reason: '当前和弦随小节切换',
     );
-    final diagram = tester.widget<ChordDiagram>(find.byType(ChordDiagram));
+    final diagram = tester.widget<ChordDiagram>(
+      find.descendant(
+        of: find.byKey(const Key('chord-card')),
+        matching: find.byType(ChordDiagram),
+      ),
+    );
     expect(diagram.fingering.frets, [0, 0, 0, 3], reason: 'C 主指法指法图');
   });
 
@@ -162,6 +167,26 @@ void main() {
       '2',
       reason: '槽 3 = 拍 2 的后半拍',
     );
+  });
+
+  testWidgets('下一和弦小预告:曲首显示下一换和弦点 C,图小一号', (tester) async {
+    await pumpView(tester, const Duration(milliseconds: 100));
+
+    expect(
+      tester.widget<Text>(find.byKey(const Key('next-chord-name'))).data,
+      'C',
+      reason: 'fixture 第 2 小节 [C] 是 Am 之后的换和弦点',
+    );
+    expect(find.byKey(const Key('next-chord-diagram')), findsOneWidget);
+    final nextRect = tester.getRect(find.byKey(const Key('next-chord-diagram')));
+    final curRect = tester.getRect(find.byKey(const Key('chord-diagram')));
+    expect(nextRect.width, lessThan(curRect.width), reason: '预告用小尺寸');
+  });
+
+  testWidgets('曲末无下一和弦:预告卡不占位', (tester) async {
+    // 第 4 小节 [Am] 之后没有换和弦点了。
+    await pumpView(tester, const Duration(seconds: 9, milliseconds: 100));
+    expect(find.byKey(const Key('next-chord-card')), findsNothing);
   });
 
   testWidgets('窄屏(360dp)不溢出', (tester) async {

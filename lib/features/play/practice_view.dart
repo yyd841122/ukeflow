@@ -9,10 +9,11 @@ import '../../data/chord_library.dart' show Chord;
 import '../chords/chord_diagram.dart';
 
 /// 跟练运行视图(GLOSSARY「跟练」的显示层):给定练习状态画全部视觉。
-/// 版式:右手要看的在**上**——当前和弦指法卡、扫弦箭头条、拍号;
-/// 中段是唱词——段落标签与歌词提词(顶锚,紧贴提示块);**底**部收一条
-/// 总进度。薄渲染(ADR-0005):无时钟无动画,一切信息读 [practice],
-/// 由跟练页以 ~16ms 轮询重灌;本组件自己不产生任何时间。
+/// 版式:右手要看的在**上**——当前和弦指法卡(旁挂小号「下一和弦」预告)、
+/// 扫弦箭头条、拍号;中段是唱词——段落标签与歌词提词(顶锚,进度条
+/// 紧随其下,留白全部落在页面最底)。薄渲染(ADR-0005):无时钟无动画,
+/// 一切信息读 [practice],由跟练页以 ~16ms 轮询重灌;本组件自己不产生
+/// 任何时间。
 class PracticeView extends StatelessWidget {
   const PracticeView({
     super.key,
@@ -44,9 +45,17 @@ class PracticeView extends StatelessWidget {
         // ── 上:右手弹奏提示 ──
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: _ChordCard(
-            chordName: practice.currentStrum?.chord,
-            chord: _currentChord,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            children: [
+              _ChordCard(
+                chordName: practice.currentStrum?.chord,
+                chord: _currentChord,
+              ),
+              if (_nextChordName case final nextName?)
+                _NextChordCard(chordName: nextName, chord: chords[nextName]),
+            ],
           ),
         ),
         Padding(
@@ -60,7 +69,7 @@ class PracticeView extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleLarge,
         ),
-        // ── 中:唱词 ──
+        // ── 中:唱词(顶锚,进度条紧随其后,留白不夹在中间) ──
         if (practice.currentSection?.section.label case final label?) ...[
           const SizedBox(height: 12),
           Text(
@@ -73,18 +82,99 @@ class PracticeView extends StatelessWidget {
           ),
         ],
         Expanded(
-          child: _LyricsArea(lyrics: timeline.lyrics, currentIndex: lyricIndex),
-        ),
-        // ── 底:进度 ──
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: LinearProgressIndicator(
-            key: const Key('progress'),
-            value: timeline.totalBeats == 0
-                ? 0
-                : practice.beat / timeline.totalBeats,
+          child: LayoutBuilder(
+            builder: (context, box) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 歌词块收缩到内容实际高度(≤可用高度),进度条贴在其下——
+                // 留白全部落到进度条之下,不夹在两块中间。
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: box.maxHeight - 16),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                    child: _lyricLines(scheme, lyricIndex),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: LinearProgressIndicator(
+                    key: const Key('progress'),
+                    value: timeline.totalBeats == 0
+                        ? 0
+                        : practice.beat / timeline.totalBeats,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _lyricLines(ColorScheme scheme, int lyricIndex) {
+    if (lyricIndex < 0 || lyricIndex >= timeline.lyrics.length) {
+      return Center(
+        child: Text('♪', style: TextStyle(color: scheme.outline, fontSize: 28)),
+      );
+    }
+    final current = timeline.lyrics[lyricIndex].line;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (lyricIndex > 0)
+          _ChordLyricLine(
+            timeline.lyrics[lyricIndex - 1].line,
+            lyricStyle: TextStyle(
+              fontSize: 15,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
+            ),
+            chordStyle: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
+            ),
+          ),
+        const SizedBox(height: 10),
+        _ChordLyricLine(
+          current,
+          key: const Key('lyric-current'),
+          lyricStyle: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurface,
+            height: 1.3,
+          ),
+          chordStyle: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: scheme.primary,
+          ),
+        ),
+        const SizedBox(height: 14),
+        for (var ahead = 1; ahead <= 2; ahead++) ...[
+          if (lyricIndex + ahead < timeline.lyrics.length)
+            _ChordLyricLine(
+              timeline.lyrics[lyricIndex + ahead].line,
+              lyricStyle: TextStyle(
+                fontSize: 16,
+                color: scheme.onSurfaceVariant.withValues(
+                  alpha: ahead == 1 ? 0.75 : 0.45,
+                ),
+              ),
+              chordStyle: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant.withValues(
+                  alpha: ahead == 1 ? 0.75 : 0.45,
+                ),
+              ),
+            ),
+          if (ahead < 2) const SizedBox(height: 8),
+        ],
       ],
     );
   }
@@ -95,6 +185,21 @@ class PracticeView extends StatelessWidget {
     return name == null ? null : chords[name];
   }
 
+  /// 下一和弦(俄罗斯方块预告的最小切片):自下一小节起,第一个与当前
+  /// 和弦不同的和弦名;曲末/无名 → null。完整动作预告窗归工单 10。
+  String? get _nextChordName {
+    final currentName = practice.currentStrum?.chord;
+    if (currentName == null) return null;
+    final nextBar = practice.beat ~/ beatsPerBar + 1;
+    for (final strum in timeline.strums) {
+      if (strum.barIndex < nextBar) continue;
+      if (strum.chord != null && strum.chord != currentName) {
+        return strum.chord;
+      }
+    }
+    return null;
+  }
+
   /// 当前点亮槽位。跨小节空档(下小节首槽是空拍)时上一小节的动作
   /// 不带入新小节,整行回描边待命。
   int? get _currentSlot {
@@ -103,92 +208,6 @@ class PracticeView extends StatelessWidget {
       return null;
     }
     return strum.slotInBar;
-  }
-}
-
-/// 歌词提词:上一行淡出、当前行大字高亮、后续两行渐淡,整块垂直居中。
-/// 行随练习状态推进整体上移,即「歌词随节拍滚动」(阶梯式;平滑滚动
-/// 需时间插值,归后续打磨)。
-class _LyricsArea extends StatelessWidget {
-  const _LyricsArea({required this.lyrics, required this.currentIndex});
-
-  final List<PlayLyricEvent> lyrics;
-  final int currentIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (currentIndex < 0 || currentIndex >= lyrics.length) {
-      return Center(
-        child: Text('♪', style: TextStyle(color: scheme.outline, fontSize: 28)),
-      );
-    }
-    final current = lyrics[currentIndex].line;
-    // 歌词紧贴顶部弹奏提示块(间隙最小,版式反馈:沉底会在两块间留大空);
-    // 留白落在歌词与停止键之间。长歌词/大字超出可用高度时可滚(RenderFlex
-    // 溢出条纹在真机上就是内容被截断)。
-    return Align(
-      alignment: Alignment.topCenter,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (currentIndex > 0)
-              _ChordLyricLine(
-                lyrics[currentIndex - 1].line,
-                lyricStyle: TextStyle(
-                  fontSize: 15,
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
-                ),
-                chordStyle: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
-                ),
-              ),
-            const SizedBox(height: 10),
-            _ChordLyricLine(
-              current,
-              key: const Key('lyric-current'),
-              lyricStyle: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurface,
-                height: 1.3,
-              ),
-              chordStyle: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: scheme.primary,
-              ),
-            ),
-            const SizedBox(height: 14),
-            for (var ahead = 1; ahead <= 2; ahead++) ...[
-              if (currentIndex + ahead < lyrics.length)
-                _ChordLyricLine(
-                  lyrics[currentIndex + ahead].line,
-                  lyricStyle: TextStyle(
-                    fontSize: 16,
-                    color: scheme.onSurfaceVariant.withValues(
-                      alpha: ahead == 1 ? 0.75 : 0.45,
-                    ),
-                  ),
-                  chordStyle: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSurfaceVariant.withValues(
-                      alpha: ahead == 1 ? 0.75 : 0.45,
-                    ),
-                  ),
-                ),
-              if (ahead < 2) const SizedBox(height: 8),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -298,6 +317,66 @@ class _ChordCard extends StatelessWidget {
                 '当前和弦',
                 style: TextStyle(
                   fontSize: 12,
+                  color: onCard.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 下一和弦小预告(俄罗斯方块式,工单 10 预告窗的最小切片):
+/// 小尺寸名字+指法图,次级容器弱化——「待会儿换到什么」扫一眼即知,
+/// 不与当前和弦卡抢注意力。
+class _NextChordCard extends StatelessWidget {
+  const _NextChordCard({required this.chordName, required this.chord});
+
+  final String? chordName;
+  final Chord? chord;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final onCard = scheme.onSecondaryContainer;
+    return Container(
+      key: const Key('next-chord-card'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chord != null) ...[
+            ChordDiagram(
+              key: const Key('next-chord-diagram'),
+              fingering: chord!.primaryFingering,
+              width: 44,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                chordName ?? '—',
+                key: const Key('next-chord-name'),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: onCard,
+                  height: 1.1,
+                ),
+              ),
+              Text(
+                '下一和弦',
+                style: TextStyle(
+                  fontSize: 10,
                   color: onCard.withValues(alpha: 0.7),
                 ),
               ),
