@@ -10,9 +10,9 @@ import '../chords/chord_diagram.dart';
 
 /// 跟练运行视图(GLOSSARY「跟练」的显示层):给定练习状态画全部视觉。
 /// 版式:右手要看的在**上**——当前和弦指法卡、扫弦箭头条、拍号;
-/// 唱的在下——段落标签与歌词提词(沉底)。薄渲染(ADR-0005):无时钟
-/// 无动画,一切信息读 [practice],由跟练页以 ~16ms 轮询重灌;
-/// 本组件自己不产生任何时间。
+/// 中段是唱词——段落标签与歌词提词(顶锚,紧贴提示块);**底**部收一条
+/// 总进度。薄渲染(ADR-0005):无时钟无动画,一切信息读 [practice],
+/// 由跟练页以 ~16ms 轮询重灌;本组件自己不产生任何时间。
 class PracticeView extends StatelessWidget {
   const PracticeView({
     super.key,
@@ -43,24 +43,10 @@ class PracticeView extends StatelessWidget {
       children: [
         // ── 上:右手弹奏提示 ──
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: LinearProgressIndicator(
-            key: const Key('progress'),
-            value: timeline.totalBeats == 0
-                ? 0
-                : practice.beat / timeline.totalBeats,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ChordCard(
-                chordName: practice.currentStrum?.chord,
-                chord: _currentChord,
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: _ChordCard(
+            chordName: practice.currentStrum?.chord,
+            chord: _currentChord,
           ),
         ),
         Padding(
@@ -74,7 +60,7 @@ class PracticeView extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleLarge,
         ),
-        // ── 下:唱词 ──
+        // ── 中:唱词 ──
         if (practice.currentSection?.section.label case final label?) ...[
           const SizedBox(height: 12),
           Text(
@@ -88,6 +74,16 @@ class PracticeView extends StatelessWidget {
         ],
         Expanded(
           child: _LyricsArea(lyrics: timeline.lyrics, currentIndex: lyricIndex),
+        ),
+        // ── 底:进度 ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: LinearProgressIndicator(
+            key: const Key('progress'),
+            value: timeline.totalBeats == 0
+                ? 0
+                : practice.beat / timeline.totalBeats,
+          ),
         ),
       ],
     );
