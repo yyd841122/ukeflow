@@ -4,7 +4,7 @@
 
 **Blocked by:** (无;①②③为正确性项建议优先,⑥与工单10 变速重编译同缝,修时对齐)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] 重锚有界:changeBpm 不再与已排队拍倒挂(40→208 边角有测试)
 - [x] 迟到拍策略有界并有测试
@@ -23,3 +23,4 @@
   - **#6/#10 边界统一**:beatAt 拍序号 = 最大的 b 使 round(b×periodMs) ≤ elapsed 毫秒(连续网格估算 ±1 修正),与 beatTime 同一取整边界——拍声与视觉同毫秒翻转,`practice_view._currentSlot` 跨小节守卫的 ~0.4ms 空白帧消除(61BPM 3934ms 回归锁定)。副产物:曲末边界与名义曲长 totalDuration 恰好重合(同为 round(totalBeats×periodMs)),practiceStateAt 文档随之更新,富余窗归末拍。
   - **#8/#9 顺带**:PlayTimeline 构造收私有,strums/lyrics/sections 分类视图自 events 单一来源派生(外部无法再供给发散/失序列表);行→小节分配抽 `_lineBarChords` 帮助函数(74 行四层嵌套拆薄)。
   - 评审(双轴子代理):spec 轴全项落地、无超范围;按 findings 收尾——reanchored 直调缝在 round() 前先校验(此前抛 UnsupportedError 而非 ArgumentError),changeBpm 取消循环各 stop 独立容错(与恢复路径同一纪律);共享校验谓词 `requirePositiveFinite` 收拢 5 处;`_pending` 改具名 record,重排回拨抽 `withNextBeat`。start 双读引擎时钟在 >40ms 线程停顿时会丢第 0 拍(旧实现必响,但那正是无界追赶的缝)——文档化接受。测试侧校验循环同形 4 处未收拢(量小不值得抽),留观。
+- 2026-10-13 (本票会话): **用户真机验收通过,转 done**。验收构建 = db88c9a release APK(OPPO PCAM00 无线 adb 安装)。验收项:节拍器运行中变速 40↔208(平滑无乱拍倒挂、无补响)、启动第 0 拍即响、跟练翻小节条带无空白帧。本票关闭:cc-suite 审计 #1–#10 全数处置(提取债 #14/#19/#20 仍在票 19),同步引擎 core 层边角清账。
