@@ -128,12 +128,13 @@ class _LyricsArea extends StatelessWidget {
       );
     }
     final current = lyrics[currentIndex].line;
-    // 歌词沉底(版式:弹奏提示在上、唱词在下);长歌词/大字超出可用
-    // 高度时可滚(RenderFlex 溢出条纹在真机上就是内容被截断)。
+    // 歌词紧贴顶部弹奏提示块(间隙最小,版式反馈:沉底会在两块间留大空);
+    // 留白落在歌词与停止键之间。长歌词/大字超出可用高度时可滚(RenderFlex
+    // 溢出条纹在真机上就是内容被截断)。
     return Align(
-      alignment: Alignment.bottomCenter,
+      alignment: Alignment.topCenter,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
