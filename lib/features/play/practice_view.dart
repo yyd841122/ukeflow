@@ -86,16 +86,16 @@ class PracticeView extends StatelessWidget {
             builder: (context, box) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 歌词块收缩到内容实际高度(≤可用高度),进度条贴在其下——
-                // 留白全部落到进度条之下,不夹在两块中间。
+                // 歌词块收缩到内容实际高度(≤可用高度),进度条在其下
+                // 留 16px 呼吸间隙;余下留白全部落到进度条之下。
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: box.maxHeight - 16),
+                  constraints: BoxConstraints(maxHeight: box.maxHeight - 32),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
                     child: _lyricLines(scheme, lyricIndex),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: LinearProgressIndicator(
