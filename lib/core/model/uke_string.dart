@@ -20,4 +20,9 @@ enum UkeString {
 
   /// 空弦基频 Hz。
   final double frequency;
+
+  /// 弦号 → 弦(GLOSSARY「弦号」:1 = A…4 = G)。指弹谱逐音事件与
+  /// 四线谱渲染按弦号取弦共用此查取;越界抛 StateError(坏数据当场炸)。
+  static UkeString byNumber(int number) =>
+      values.firstWhere((s) => s.number == number);
 }

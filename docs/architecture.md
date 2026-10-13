@@ -25,10 +25,12 @@ lib/
 │   │                 # KarplusStrong(拨弦→PCM→loadMem)、Scheduler(节拍/跟练共用时钟)
 │   ├── model/        # StrumChart(ChordPro→Section/Line/Tokens)、TabChart(逐音事件:弦/品位/时刻)、
 │   │                 # Chord、PracticePath/DailyTask/CheckIn、StrumPattern(节奏型)
-│   ├── chart/        # ChordPro 校验器(段落闭合/和弦名白名单)、谱库仓库
+│   ├── chart/        # ChordPro 校验器(段落闭合/和弦名白名单)、谱库仓库、
+│   │                 # builtin_tab_charts(内置指弹曲 Dart 常量目录+校验,ADR-0003 v1 无解析导入)
 │   ├── practice/     # 练习内核(纯函数,零引擎依赖):play_timeline.dart 时间轴编译(谱+节奏型+BPM+变速→动作事件时间轴)、
 │   │                 # practice_state.dart 跟练练习状态((时间轴,引擎时刻)→当前拍/动作/预告/歌词行)、
-│   │                 # rhythm_state.dart 节奏型训练状态(循环网格先行版)
+│   │                 # rhythm_state.dart 节奏型训练状态(循环网格先行版)、
+│   │                 # tab_timeline.dart 指弹谱→逐音事件时间轴(工单 12,取整语义与弹唱时间轴同型、类型独立)
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、charts(自建)、settings；assets/：内置谱、chords-db、采样
@@ -51,7 +53,10 @@ lib/
 - 曲谱预编译为**动作事件时间轴**（core/practice/play_timeline.dart）：
   sealed PlayEvent（PlayStrumEvent 扫弦[方向+和弦] / PlayLyricEvent 歌词行 /
   PlaySectionEvent 段落），时刻为**相对量**（自 0），锚定 t0 由消费方决定；
-  指弹谱的单音事件（note 弦+品位）归指弹谱模型（工单 12/13），弹唱谱时间轴
+  指弹谱的单音事件（note 弦+品位）归指弹逐音事件时间轴
+  （core/practice/tab_timeline.dart，工单 12；与弹唱时间轴取整语义同型、
+  sealed 事件族互不统属——ADR-0003 的模型分界在时间轴层同样成立），
+  弹唱谱时间轴
   只含扫弦/歌词行/段落。事件时刻逐事件四舍五入不累加，与 BeatSchedule.beatTime
   同语义——拍点扫弦与节拍声同源同刻（工单 08 测试守护）。
   当前动作 = 二分查找 now；俄罗斯方块预告 = 取 (now, now+lookahead] 窗口

@@ -47,6 +47,28 @@ void main() {
     expect(find.text('节奏型训练'), findsOneWidget);
   });
 
+  testWidgets('指弹曲区:内置两首入列,点开进四线谱读谱页', (tester) async {
+    await pumpTab(tester);
+
+    // 指弹曲区直接来自 Dart 常量目录(零资产、零引擎,不注入也可见)。
+    expect(find.text('指弹曲'), findsOneWidget);
+    expect(find.text('小星星'), findsOneWidget);
+    expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
+    expect(find.text('欢乐颂'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('tab-chart-xiao-xing-xing')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('tab-chart-canvas')),
+      findsOneWidget,
+      reason: '进入指弹谱页',
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('内置曲库'), findsOneWidget);
+  });
+
   testWidgets('点曲进跟练页,弹回回列表', (tester) async {
     await pumpTab(tester);
 

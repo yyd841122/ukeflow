@@ -15,8 +15,7 @@
 /// 纯函数、零引擎依赖（spec 测试接缝一），标准 flutter test 覆盖。
 library;
 
-import '../audio/beat_scheduling.dart'
-    show beatsPerBar, requirePositiveFinite;
+import '../audio/beat_scheduling.dart' show beatsPerBar, effectivePeriodMs;
 import '../model/strum_chart.dart';
 import '../model/strum_pattern.dart';
 
@@ -85,17 +84,23 @@ class PlayTimeline {
   /// 来源派生（编译顺序保证同刻 section→lyric→strum 定序、各自升序）,
   /// 外部无法再供给与视图发散/失序的列表。唯一构造入口是
   /// [compileTimeline]。
-  PlayTimeline._(List<PlayEvent> events, {
+  PlayTimeline._(
+    List<PlayEvent> events, {
     required this.periodMs,
     required this.totalBeats,
-  })  : events = List.unmodifiable(events),
-        strums = List.unmodifiable(
-            [for (final event in events) if (event is PlayStrumEvent) event]),
-        lyrics = List.unmodifiable(
-            [for (final event in events) if (event is PlayLyricEvent) event]),
-        sections = List.unmodifiable([
-          for (final event in events) if (event is PlaySectionEvent) event
-        ]);
+  }) : events = List.unmodifiable(events),
+       strums = List.unmodifiable([
+         for (final event in events)
+           if (event is PlayStrumEvent) event,
+       ]),
+       lyrics = List.unmodifiable([
+         for (final event in events)
+           if (event is PlayLyricEvent) event,
+       ]),
+       sections = List.unmodifiable([
+         for (final event in events)
+           if (event is PlaySectionEvent) event,
+       ]);
 
   /// 全部事件，按时刻升序；同一时刻按 section→lyric→strum 定序。
   /// 示范试听（工单 11）按序遍历它预定发声。
@@ -134,14 +139,9 @@ PlayTimeline compileTimeline({
   required double bpm,
   double speed = 1.0,
 }) {
-  // 入参校验抛 ArgumentError(release 也生效,不靠 assert):非正/非有限
-  // 的 BPM 与变速比会让有效拍长爆炸(负值倒轴、0/NaN 取整炸、溢出塌缩)。
-  requirePositiveFinite(bpm, 'bpm', 'BPM');
-  requirePositiveFinite(speed, 'speed', '变速比（产品范围 50%–100%）');
-  final periodMs = 60000 / bpm / speed;
-  if (periodMs.isInfinite) {
-    throw ArgumentError.value(periodMs, 'periodMs', '有效拍长非有限（BPM×变速比过小）');
-  }
+  // 入参校验与拍周期换算走 beat_scheduling 的单一来源(非正/非有限的
+  // BPM 与变速比抛 ArgumentError,release 也生效,不靠 assert)。
+  final periodMs = effectivePeriodMs(bpm: bpm, speed: speed);
   final slotMs = periodMs / 2;
 
   // 逐事件四舍五入，不累加（与本文件头注释的定型语义一致）。
@@ -155,38 +155,48 @@ PlayTimeline compileTimeline({
   String? currentChord;
   for (var si = 0; si < chart.sections.length; si++) {
     final section = chart.sections[si];
-    events.add(PlaySectionEvent(
-      time: slotTime(bar * eighthsPerBar),
-      sectionIndex: si,
-      section: section,
-    ));
+    events.add(
+      PlaySectionEvent(
+        time: slotTime(bar * eighthsPerBar),
+        sectionIndex: si,
+        section: section,
+      ),
+    );
 
     for (var li = 0; li < section.lines.length; li++) {
       final line = section.lines[li];
-      events.add(PlayLyricEvent(
-        time: slotTime(bar * eighthsPerBar),
-        sectionIndex: si,
-        lineIndex: li,
-        line: line,
-      ));
+      events.add(
+        PlayLyricEvent(
+          time: slotTime(bar * eighthsPerBar),
+          sectionIndex: si,
+          lineIndex: li,
+          line: line,
+        ),
+      );
 
       for (final barChord in _lineBarChords(line, currentChord)) {
         currentChord = barChord;
         for (final (slot, stroke) in strokes) {
-          events.add(PlayStrumEvent(
-            time: slotTime(bar * eighthsPerBar + slot),
-            barIndex: bar,
-            slotInBar: slot,
-            direction: stroke,
-            chord: currentChord,
-          ));
+          events.add(
+            PlayStrumEvent(
+              time: slotTime(bar * eighthsPerBar + slot),
+              barIndex: bar,
+              slotInBar: slot,
+              direction: stroke,
+              chord: currentChord,
+            ),
+          );
         }
         bar++;
       }
     }
   }
 
-  return PlayTimeline._(events, periodMs: periodMs, totalBeats: bar * beatsPerBar);
+  return PlayTimeline._(
+    events,
+    periodMs: periodMs,
+    totalBeats: bar * beatsPerBar,
+  );
 }
 
 /// 行→小节分配（**编译的唯一裁量处**）：行内 k 个和弦记号独占 k 小节
@@ -194,5 +204,5 @@ PlayTimeline compileTimeline({
 /// [currentChord]。返回本行逐小节的生效和弦（长度即该行小节数）。
 List<String?> _lineBarChords(StrumLine line, String? currentChord) =>
     line.chords.isEmpty
-        ? [currentChord]
-        : [for (final mark in line.chords) mark.name];
+    ? [currentChord]
+    : [for (final mark in line.chords) mark.name];

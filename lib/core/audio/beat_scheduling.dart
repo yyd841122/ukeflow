@@ -15,6 +15,20 @@ void requirePositiveFinite(double value, String name, String subject) {
   }
 }
 
+/// 有效拍长(毫秒,四分)= 60000/BPM/变速比:BPM 与变速比的公共缝校验
+/// (非正/非有限抛 [ArgumentError],release 也生效)与拍周期换算的单一
+/// 来源。compileTimeline(弹唱)与 compileTabTimeline(指弹,工单 12)
+/// 共用——两谱模型各自独立(ADR-0003),数值缝只此一处。
+double effectivePeriodMs({required double bpm, required double speed}) {
+  requirePositiveFinite(bpm, 'bpm', 'BPM');
+  requirePositiveFinite(speed, 'speed', '变速比(产品范围 50%–100%)');
+  final periodMs = 60000 / bpm / speed;
+  if (periodMs.isInfinite) {
+    throw ArgumentError.value(periodMs, 'periodMs', '有效拍长非有限(BPM×变速比过小)');
+  }
+  return periodMs;
+}
+
 /// 节拍时间轴的不可变状态:锚点 [t0]、首个未预定拍 [nextBeat]、拍周期
 /// [periodMs](毫秒,= 60000/bpm)、可选总拍数 [totalBeats](null = 连续)。
 ///
@@ -109,11 +123,11 @@ class BeatSchedule {
 
   /// 拷贝并改写首个未预定拍(变速重排回拨用),其余字段不变。
   BeatSchedule withNextBeat(int nextBeat) => BeatSchedule(
-        t0: t0,
-        nextBeat: nextBeat,
-        periodMs: periodMs,
-        totalBeats: totalBeats,
-      );
+    t0: t0,
+    nextBeat: nextBeat,
+    periodMs: periodMs,
+    totalBeats: totalBeats,
+  );
 }
 
 /// 视觉拍状态:拍序号、小节内位置(0..3)、是否强拍。
