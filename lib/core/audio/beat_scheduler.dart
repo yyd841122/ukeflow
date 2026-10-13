@@ -48,20 +48,32 @@ class BeatScheduler {
     return s == null ? null : (t0: s.t0, periodMs: s.periodMs);
   }
 
-  /// 从引擎当前时刻起跑,并立即过一次窗(第 0 拍即刻可闻)。已知残余
-  /// 风险:t0 与首过是引擎时钟的两次读数,若启动瞬间线程停顿超过迟到
-  /// 容差(40ms)则第 0 拍被跳过——旧实现必响第 0 拍,但那正是无界追赶
-  /// 的缝;此情仅引擎线程异常停顿时发生,接受之。
+  /// 从锚点起跑,并立即过一次窗(第 0 拍即刻可闻)。已知残余风险:t0 与
+  /// 首过是引擎时钟的两次读数,若启动瞬间线程停顿超过迟到容差(40ms)
+  /// 则第 0 拍被跳过——旧实现必响第 0 拍,但那正是无界追赶的缝;此情仅
+  /// 引擎线程异常停顿时发生,接受之。
   /// [totalBeats] 给定时走出最后一拍不再预定(跟练曲末无幻拍声,
   /// 与 practiceStateAt 的曲末判定同界);null = 连续(节拍器/训练器)。
-  /// [bpm] 非正抛 [ArgumentError](控制器钳制是调用方的职责,公共缝自守)。
-  void start({required int bpm, int? totalBeats}) {
-    _requireBpm(bpm);
+  /// [t0]/[nextBeat] 缺省 = 引擎当前时刻、自拍 0 起跑;显式给出即为
+  /// **锚点重建**(工单 10 暂停恢复):调用方以 t0 = 引擎当前 − 冻结逝时、
+  /// nextBeat = ceil(已逝拍数) 重建同一网格——已响拍不重放,恰在拍点
+  /// 恢复的拍迟到 0ms 在容差内立即补响。周期与 BPM 的换算(60000/bpm,
+  /// 含变速 60000/bpm/speed)由调用方一次算清传入,调度器只认拍周期,
+  /// 与时间轴编译严格同式(声画同刻,无双公式取整分叉)。
+  /// [periodMs] 非有限正值抛 [ArgumentError](校验先于 stop,运行状态
+  /// 不受扰动;控制器钳制是调用方的职责,公共缝自守)。
+  void start({
+    required double periodMs,
+    int? totalBeats,
+    Duration? t0,
+    int nextBeat = 0,
+  }) {
+    requirePositiveFinite(periodMs, 'periodMs', '拍周期');
     stop();
     _schedule = BeatSchedule(
-      t0: engine.engineTime(),
-      nextBeat: 0,
-      periodMs: 60000 / bpm,
+      t0: t0 ?? engine.engineTime(),
+      nextBeat: nextBeat,
+      periodMs: periodMs,
       totalBeats: totalBeats,
     );
     // 先建定时器再首过:首过抛错时 catch 里的 stop() 才能取消它。
@@ -69,19 +81,20 @@ class BeatScheduler {
     _pass();
   }
 
-  /// 运行中换 BPM 即时生效(相位保持重锚定,已排队未响拍按新网格重排,
-  /// 不与旧网格倒挂);未运行时忽略。[bpm] 非正抛 [ArgumentError]。
-  void changeBpm(int bpm) {
-    _requireBpm(bpm);
+  /// 运行中换拍周期即时生效(相位保持重锚定,已排队未响拍按新网格重排,
+  /// 不与旧网格倒挂);未运行时忽略。[periodMs] 非有限正值抛
+  /// [ArgumentError]。
+  void changePeriod(double periodMs) {
+    requirePositiveFinite(periodMs, 'periodMs', '拍周期');
     final s = _schedule;
     if (s == null || !running) return;
     final now = engine.engineTime();
-    var next = s.reanchored(now, 60000 / bpm);
+    var next = s.reanchored(now, periodMs);
     // 重锚有界:取消旧网格已预定、尚未发声的拍,rewind 到最早被取消的
     // 拍号,交还正常过窗按新网格重排(拍号与拍内相位保持)——大跨度变速
     // (如 40→208)不重排时,旧拍会排在新网格拍之后,倒挂出格。
     // 各取消独立容错(与 _pass 恢复路径同一纪律):单个 stop 失败不得
-    // 让 changeBpm 半途抛出、留下半更新状态。
+    // 让 changePeriod 半途抛出、留下半更新状态。
     int? earliestCancelled;
     for (final entry in _pending) {
       if (entry.time > now) {
@@ -99,10 +112,6 @@ class BeatScheduler {
     }
     _schedule = next;
     _pass();
-  }
-
-  static void _requireBpm(int bpm) {
-    if (bpm <= 0) throw ArgumentError.value(bpm, 'bpm', 'BPM 必须为正');
   }
 
   /// 停止:取消轮询,停掉尚未发声的预定,清空时间轴。

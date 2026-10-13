@@ -112,7 +112,7 @@ class MetronomeController extends Notifier<MetronomeState> {
       pickSound: _pick,
       onError: _onEngineError,
     );
-    scheduler.start(bpm: state.bpm);
+    scheduler.start(periodMs: 60000 / state.bpm);
     _scheduler = scheduler;
     state = state.copyWith(running: true, error: null);
     refreshScheduled();
@@ -129,7 +129,7 @@ class MetronomeController extends Notifier<MetronomeState> {
   /// 设 BPM(钳制 40–208);运行中即时生效(相位保持重锚定)。
   void setBpm(int bpm) {
     state = state.copyWith(bpm: bpm.clamp(minBpm, maxBpm));
-    _scheduler?.changeBpm(state.bpm);
+    _scheduler?.changePeriod(60000 / state.bpm);
     refreshScheduled();
   }
 

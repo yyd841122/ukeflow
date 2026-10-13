@@ -22,6 +22,7 @@ class PracticeState {
     required this.beat,
     required this.beatInBar,
     required this.isStrongBeat,
+    required this.previousStrum,
     required this.currentStrum,
     required this.upcomingStrums,
     required this.currentLine,
@@ -40,6 +41,10 @@ class PracticeState {
   /// 当前扫弦动作＝最后一个时刻 ≤ now 的扫弦事件；持稳到下一动作，
   /// 空拍槽不翻转（手照摆不触弦）。曲首还没有任何动作时为 null。
   final PlayStrumEvent? currentStrum;
+
+  /// 上一扫弦动作（俄罗斯方块预告的「过去动作淡出」位，工单 10）＝
+  /// 倒数第二个时刻 ≤ now 的扫弦事件；曲首不足两个动作时为 null。
+  final PlayStrumEvent? previousStrum;
 
   /// 预告窗口 (now, now+previewWindow] 内的扫弦动作，按时刻升序、
   /// 已完成的绝不回流。当前动作不在其中。
@@ -81,6 +86,7 @@ PracticeState? practiceStateAt({
     beatInBar: beatInBar,
     isStrongBeat: isStrongBeat,
     currentStrum: lastStrum < 0 ? null : strums[lastStrum],
+    previousStrum: lastStrum < 1 ? null : strums[lastStrum - 1],
     upcomingStrums: List.unmodifiable([
       for (var i = lastStrum + 1;
           i < strums.length && strums[i].time <= elapsed + previewWindow;
@@ -90,6 +96,38 @@ PracticeState? practiceStateAt({
     currentLine: _current(timeline.lyrics, elapsed),
     currentSection: _current(timeline.sections, elapsed),
   );
+}
+
+/// 预备数拍状态（工单 10）：预备期还剩几拍（4..1 倒计）。
+class PrepState {
+  const PrepState({required this.count});
+
+  /// 剩余预备拍数（自 [prepBeats] 倒数到 1）。
+  final int count;
+}
+
+/// 引擎时刻 [now] → 预备数拍状态。预备窗为 [t0Prep, t0Prep +
+/// prepBeats×periodMs)（节拍网格的前 prepBeats 拍）：窗内返回剩余倒计
+/// （第 k 预备拍倒数 prepBeats−k），曲头起（第 prepBeats 拍边界含富余窗）
+/// 预备已结束返回 null；[t0Prep] 之前（产品不可达，纯函数自守）同样
+/// null。
+///
+/// 锚必须是**预备第 0 拍**（调度器网格原点 t0，无取整），不能是「曲头 =
+/// t0 + round(prepBeats×periodMs)」——取整后的曲头反推剩余拍会出
+/// ±1 拍误差（208BPM：4×288.46 取整 1154，0 时刻剩余 4.0005 拍，
+/// ceil 炸成 5 被误判窗外）。取整语义与 beatAt 同族：拍内 floor。
+PrepState? prepStateAt({
+  required Duration now,
+  required Duration t0Prep,
+  required double periodMs,
+  int prepBeats = 4,
+}) {
+  requirePositiveFinite(periodMs, 'periodMs', '拍周期');
+  final elapsedUs = (now - t0Prep).inMicroseconds;
+  if (elapsedUs < 0) return null;
+  final beat = elapsedUs / (periodMs * 1000);
+  if (beat >= prepBeats) return null;
+  return PrepState(count: prepBeats - beat.floor());
 }
 
 /// 时刻 ≤ [time] 的最后一个事件的通用取用（二分查找已定位，直接取）。

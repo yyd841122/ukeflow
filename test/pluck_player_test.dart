@@ -151,6 +151,43 @@ group('strum 错峰拨响', () {
     await expectLater(player.strum(freqs: const [392.0]), throwsException);
   });
 });
+
+/// 工单 10 接缝:预注入 + 同步查取(参考音=示范扫弦的调度器依赖——
+/// 起跑前把全曲和弦音源一次注入到位,过窗调度免 await)。
+group('preloadSounds/loadedSound', () {
+  test('批量注入;loadedSound 同步查取已注入音源,未注入为 null', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    expect(player.loadedSound(392), isNull, reason: '未注入为 null');
+
+    await player.preloadSounds(const [392.0, 261.63]);
+    expect(engine.loadedKeys, ['pluck_392.0_1500', 'pluck_261.63_1500']);
+    final sound = player.loadedSound(392);
+    expect(sound, isNotNull);
+    expect(sound!.key, 'pluck_392.0_1500');
+    expect(player.loadedSound(440), isNull, reason: '未注入的音高仍 null');
+  });
+
+  test('与 pluck/strum 共用缓存:同音不重注入', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    await player.preloadSounds(const [392.0]);
+    await player.strum(freqs: const [392.0, 261.63]);
+
+    expect(engine.loadedKeys, hasLength(2), reason: '392 只注入一次');
+    expect(engine.scheduleLog, hasLength(2), reason: 'strum 两弦都预定');
+  });
+
+  test('注入失败:错误上抛,同步查取不为 null(无半成品)', () async {
+    final engine = FakeAudioEngine()..failInitialization = true;
+    final player = PluckPlayer(engine: engine);
+
+    await expectLater(player.preloadSounds(const [392.0]), throwsException);
+    expect(player.loadedSound(392), isNull);
+  });
+});
 }
 
 /// loadMem 受门控的假引擎:模拟注入耗时不定的真机现场(工单 05 错峰把关用)。

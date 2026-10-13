@@ -20,6 +20,11 @@ abstract final class TickSynth {
   static Uint8List weak({int sampleRate = 44100}) =>
       build(sampleRate: sampleRate, ms: _ms, freq: 600, gain: 0.55);
 
+  /// 预备数拍(工单 10):1.4kHz、增益 0.85——比正曲强拍更亮一档,
+  /// 「预备 4-3-2-1 → 进歌」的边界一耳朵可辨。
+  static Uint8List count({int sampleRate = 44100}) =>
+      build(sampleRate: sampleRate, ms: _ms, freq: 1400, gain: 0.85);
+
   /// 合成一段节拍 WAV:正弦 [freq]Hz、增益 [gain]、时长 [ms] 毫秒、
   /// 指数衰减包络([_decay],数值越大尾音越短)。
   static Uint8List build({

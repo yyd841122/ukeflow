@@ -14,6 +14,9 @@ class PluckPlayer {
   final AudioEngine engine;
   final Map<String, Future<EngineSound>> _sounds = {};
 
+  /// 注入成功的音源(键同 [loadedSound]):同步查取的底册。
+  final Map<String, EngineSound> _ready = {};
+
   /// 拨响 [freq]Hz 音,持续 [ms] 毫秒;[after] 为相对引擎当前时刻的延迟
   /// (工单 05 和弦示范音据此错峰拨响)。首次拨响前确保引擎就绪;
   /// 初始化失败等错误原样上抛,由调用方决定呈现。
@@ -48,16 +51,37 @@ class PluckPlayer {
     }
   }
 
+  /// 「音高×时长」的音源键( [_soundFor]/[loadedSound] 单一来源;键用
+  /// double 的精确串,近音高不碰撞、同音必同键)。
+  static String _keyFor(double freq, [int ms = 1500]) => 'pluck_${freq}_$ms';
+
   /// 「音高×时长」对应的音源,首次取用时合成并注入(缓存见类注释)。
   Future<EngineSound> _soundFor(double freq, [int ms = 1500]) {
-    // 键用 double 的精确串(最短往返表示):近音高不碰撞,同音必同键。
-    final key = 'pluck_${freq}_$ms';
+    final key = _keyFor(freq, ms);
     return _sounds[key] ??= _load(key, freq, ms);
   }
 
+  /// 预注入一批拨弦音源(工单 10 参考音=示范扫弦:跟练起跑前把全曲
+  /// 和弦音源一次注入到位,调度期免 await);与 pluck/strum 共用缓存。
+  Future<void> preloadSounds(Iterable<double> freqs) async {
+    await engine.ensureInitialized();
+    for (final freq in freqs) {
+      await _soundFor(freq);
+    }
+  }
+
+  /// 已注入音源的同步查取(调度器过窗免 await 用);未注入返回 null。
+  /// 只有注入成功过的音高非 null,无半成品。
+  EngineSound? loadedSound(double freq, [int ms = 1500]) =>
+      _ready[_keyFor(freq, ms)];
+
   Future<EngineSound> _load(String key, double freq, int ms) async {
     try {
-      return await engine.loadMem(key, KarplusStrong.pluck(freq: freq, ms: ms));
+      final sound = await engine.loadMem(
+        key,
+        KarplusStrong.pluck(freq: freq, ms: ms),
+      );
+      return _ready[key] = sound;
     } on Object {
       _sounds.remove(key); // 注入失败不缓存,下次拨同音可重试
       rethrow;

@@ -88,7 +88,7 @@ class BeatSchedule {
   /// 本纯函数只管网格连续:新网格保证首个未预定拍落在 now + 剩余相位 ×
   /// 新周期 处,elapsed(已逝拍数,含相位)在旧新网格间连续,听感
   /// "同一拍内平滑变速"。调度态感知(已排队未响拍的取消与重排)在
-  /// [BeatScheduler.changeBpm]:它把 nextBeat 回拨到最早被取消的拍号,
+  /// [BeatScheduler.changePeriod]:它把 nextBeat 回拨到最早被取消的拍号,
   /// 交还正常过窗按新网格重排——大跨度变速不重排会新旧拍倒挂。
   BeatSchedule reanchored(Duration now, double newPeriodMs) {
     // 入口校验先于一切:构造器也会拦,但下方 t0 表达式先求值,非有限

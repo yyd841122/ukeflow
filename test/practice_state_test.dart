@@ -243,4 +243,80 @@ void main() {
       expect(state.isStrongBeat, visual.$3, reason: '$ms 处强弱应与节拍器一致');
     }
   });
+
+  // ── 工单 10:控制态查询 ────────────────────────────────────────────
+
+  test('previousStrum:当前动作的上一动作;曲首为 null', () {
+    final timeline = fiveBars();
+
+    // elapsed 600:当前 = 500ms 扫弦,上一 = 0ms 扫弦。
+    final mid = practiceStateAt(timeline: timeline, t0: t0, now: at(600))!;
+    expect(mid.currentStrum!.time, const Duration(milliseconds: 500));
+    expect(mid.previousStrum!.time, Duration.zero);
+
+    // 曲首(elapsed 0):当前 = 首扫弦,无上一动作。
+    final first = practiceStateAt(timeline: timeline, t0: t0, now: at(0))!;
+    expect(first.currentStrum!.time, Duration.zero);
+    expect(first.previousStrum, isNull);
+  });
+
+  test('prepStateAt:预备窗内返回剩余倒计,窗前/窗后 null', () {
+    // 预备 4 拍 @ 750ms/拍:预备窗 [t0Prep, t0Prep+3000)。
+    const t0Prep = Duration(milliseconds: 5000);
+    const periodMs = 750.0;
+    int? countAt(int msAfterPrep) => prepStateAt(
+          now: t0Prep + Duration(milliseconds: msAfterPrep),
+          t0Prep: t0Prep,
+          periodMs: periodMs,
+        )?.count;
+
+    expect(countAt(0), 4, reason: '预备第 1 拍:倒数 4');
+    expect(countAt(749), 4, reason: '仍在第 1 预备拍内');
+    expect(countAt(750), 3, reason: '恰入第 2 预备拍:倒数 3');
+    expect(countAt(1500), 2);
+    expect(countAt(2250), 1, reason: '最后预备拍:倒数 1');
+    expect(countAt(2999), 1);
+    // 曲头(第 4 预备拍边界含富余窗):预备已结束。
+    expect(countAt(3000), isNull);
+    expect(countAt(3001), isNull);
+    expect(
+      prepStateAt(
+        now: t0Prep - const Duration(milliseconds: 1),
+        t0Prep: t0Prep,
+        periodMs: periodMs,
+      ),
+      isNull,
+      reason: '预备窗之前(产品不可达,纯函数自守)',
+    );
+  });
+
+  test('prepStateAt:非整除拍周期(208BPM)边界不误判窗外', () {
+    // 208BPM:周期 288.46ms,预备跨度 round(4×288.46) = 1154ms。
+    // 锚在预备第 0 拍(网格原点)时 0 时刻恒倒数 4;若锚取整后的曲头
+    // 反推,0 时刻剩余 4.0005 拍、ceil=5 会被误判窗外(曾炸出)。
+    const t0Prep = Duration.zero;
+    const periodMs = 60000 / 208;
+    expect(
+      prepStateAt(now: Duration.zero, t0Prep: t0Prep, periodMs: periodMs)!.count,
+      4,
+    );
+    expect(
+      prepStateAt(
+        now: Duration(milliseconds: 1153),
+        t0Prep: t0Prep,
+        periodMs: periodMs,
+      )!.count,
+      1,
+      reason: '曲头前 1ms 仍在最后预备拍',
+    );
+    expect(
+      prepStateAt(
+        now: Duration(milliseconds: 1154),
+        t0Prep: t0Prep,
+        periodMs: periodMs,
+      ),
+      isNull,
+      reason: '取整曲头(round(4×period))起预备结束',
+    );
+  });
 }

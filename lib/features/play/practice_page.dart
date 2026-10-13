@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/audio/providers.dart';
 import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
+import '../../core/model/strum_pattern.dart';
+import '../../core/practice/play_timeline.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart';
 import 'chart_meta.dart';
@@ -14,10 +15,10 @@ import 'practice_view.dart';
 
 /// 跟练会话页(GLOSSARY「跟练」):一首内置弹唱谱的完整练习现场。
 ///
-/// 空闲面板定参数(BPM/节奏型)后开始;运行时页面只是练习状态的轮询壳
-/// (ADR-0005):16ms 定时器只当重绘触发器,一切时刻经 practiceStateAt
-/// 读引擎时钟,页内无第二时间源。v1 固定速度从头到尾,曲末自动回闲;
-/// 暂停/变速/预告窗在工单 10。
+/// 空闲面板定参数(BPM/变速/节奏型/参考音)后开始;运行时页面只是练习
+/// 状态的轮询壳(ADR-0005):16ms 定时器只当重绘触发器,一切时刻经
+/// [practiceStateAt]/[prepStateAt] 按 [PlayPracticeController.visualNow]
+/// 读出,页内无第二时间源。预备数拍期显示倒计面板;曲末自动回闲。
 class PracticePage extends ConsumerStatefulWidget {
   const PracticePage({super.key, required this.chart});
 
@@ -35,6 +36,9 @@ class _PracticePageState extends ConsumerState<PracticePage> {
   /// 最近一次轮询算出的练习状态(运行中视图的全部数据源);空闲 null。
   PracticeState? _visual;
 
+  /// 预备数拍期剩余倒计(4..1);非 null = 倒计面板。正曲期 null。
+  int? _prepCount;
+
   // dispose 里不能用 ref(Riverpod 3):notifier 在 initState 缓存成字段。
   late final PlayPracticeController _controller;
 
@@ -45,11 +49,14 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     // 定参+预热都在帧末:Riverpod 3 禁止 build 生命周期内改 provider 状态。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _controller.prepareFor(widget.chart);
+        _controller.prepareFor(widget.chart, chords: _chords());
         _controller.warmup(); // 离开页面即停:不留后台节拍声。
       }
     });
   }
+
+  /// 和弦名 → 和弦(谱面和弦已过白名单,恒可查;库未就绪给空表降级)。
+  Map<String, Chord> _chords() => _chordMap(ref.read(chordLibraryProvider).value);
 
   @override
   void dispose() {
@@ -65,11 +72,22 @@ class _PracticePageState extends ConsumerState<PracticePage> {
   void _onPoll() {
     final timeline = _controller.timeline;
     final anchor = _controller.visualAnchor;
-    if (timeline == null || anchor == null) return;
+    final now = _controller.visualNow();
+    if (timeline == null || anchor == null || now == null) return;
+
+    // 预备数拍期:倒计面板(预备拍与正曲同一节拍网格,查询同源;
+    // 锚在调度 t0,经控制器查询——曲头反推会有取整误差,见 prepStateAt)。
+    final prep = _controller.prepStateNow();
+    if (prep != null) {
+      if (prep.count != _prepCount) setState(() => _prepCount = prep.count);
+      return;
+    }
+    if (_prepCount != null) setState(() => _prepCount = null); // 预备毕,切正曲
+
     final practice = practiceStateAt(
       timeline: timeline,
       t0: anchor.t0,
-      now: ref.read(audioEngineProvider).engineTime(),
+      now: now,
     );
     if (practice == null) {
       _controller.stop(); // 曲末(节拍网格走出最后一拍):回闲,轮询随之自停。
@@ -86,7 +104,10 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 
   void _startPoll() {
     _poll?.cancel();
-    setState(() => _visual = null);
+    setState(() {
+      _visual = null;
+      _prepCount = null;
+    });
     _poll = Timer.periodic(_pollInterval, (_) => _onPoll());
     _onPoll(); // 首查同步完成(与 BeatScheduler 先过窗同理):进入即有画面。
   }
@@ -105,6 +126,12 @@ class _PracticePageState extends ConsumerState<PracticePage> {
         next.running ? _startPoll() : _stopPoll();
       }
     });
+    // 和弦库异步就绪后推给控制器(预备扫弦音源;进页时多半还没就绪)。
+    ref.listen(chordLibraryProvider, (previous, next) {
+      if (next.value case final ChordLibrary library?) {
+        _controller.setChords(_chordMap(library));
+      }
+    });
     return Scaffold(
       appBar: AppBar(title: Text(widget.chart.title)),
       body: SafeArea(
@@ -115,7 +142,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     );
   }
 
-  // ── 空闲面板:定 BPM 与节奏型,开始 ──────────────────────────────
+  // ── 空闲面板:定 BPM/变速/节奏型/参考音,开始 ─────────────────────
 
   Widget _idleBody(PlayPracticeState state) {
     return SingleChildScrollView(
@@ -135,15 +162,28 @@ class _PracticePageState extends ConsumerState<PracticePage> {
           Text('速度', style: _sectionLabelStyle),
           _bpmControl(state),
           const SizedBox(height: 16),
+          Text('变速', style: _sectionLabelStyle),
+          _SpeedControl(
+            speed: state.speed,
+            onChanged: _controller.setSpeed,
+          ),
+          const SizedBox(height: 16),
           Text('节奏型', style: _sectionLabelStyle),
           const SizedBox(height: 8),
           _patternPicker(state),
+          const SizedBox(height: 16),
+          Text('参考音', style: _sectionLabelStyle),
+          const SizedBox(height: 8),
+          _ReferenceToggle(
+            reference: state.reference,
+            onChanged: _controller.setReference,
+          ),
           const SizedBox(height: 32),
           FilledButton.icon(
             key: const Key('practice-start'),
             // 引擎未就绪不可启;空谱(无段落)不可启。
             onPressed: state.engineReady && widget.chart.sections.isNotEmpty
-                ? () => _controller.start(chart: widget.chart)
+                ? () => _controller.start(chart: widget.chart, chords: _chords())
                 : null,
             icon: const Icon(Icons.play_arrow),
             label: const Text('开始跟练'),
@@ -244,12 +284,48 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     );
   }
 
-  // ── 运行面板:练习状态的薄渲染 + 停止 ────────────────────────────
+  // ── 运行面板:预备倒计/正曲视图 + 控制 ──────────────────────────
 
   Widget _runningBody(
     PlayPracticeState state,
     AsyncValue<ChordLibrary> libraryAsync,
   ) {
+    return Column(
+      children: [
+        Expanded(
+          child: _prepCount != null
+              ? _prepPanel(_prepCount!)
+              : _songBody(libraryAsync, state.pattern),
+        ),
+        _controls(state),
+      ],
+    );
+  }
+
+  /// 预备数拍面板:大字倒计 + 提示。预备拍的声音由调度器管(专用音源),
+  /// 这里只读 [prepStateAt] 的倒计。
+  Widget _prepPanel(int prepCount) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '$prepCount',
+          key: const Key('prep-count'),
+          style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          prepCount > 2 ? '跟着拍子数,准备手指' : '马上开弹',
+          style: TextStyle(color: Theme.of(context).colorScheme.outline),
+        ),
+      ],
+    );
+  }
+
+  Widget _songBody(AsyncValue<ChordLibrary> libraryAsync, StrumPattern pattern) {
     final timeline = _controller.timeline;
     final visual = _visual;
     if (timeline == null || visual == null) {
@@ -259,29 +335,274 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     // 和弦库缺位(资产坏损等极端路径)不冻结练习:指法小图缺席,
     // 和弦名/歌词/箭头照走(视图对查不到的和弦本就兜底显示名字)。
     // Riverpod 3 的 AsyncValue.value 在 error 态返回 null,恰作降级判据。
-    final library = libraryAsync.value;
-    return Column(
+    final chords = _chordMap(libraryAsync.value);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: PracticeView(
             timeline: timeline,
             practice: visual,
-            pattern: state.pattern,
-            chords: library == null
-                ? const {}
-                : {for (final chord in library.chords) chord.label: chord},
+            pattern: pattern,
+            chords: chords,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            key: const Key('practice-stop'),
-            onPressed: () => _controller.stop(),
-            icon: const Icon(Icons.stop),
-            label: const Text('停止'),
+        _PreviewRail(practice: visual, chords: chords),
+      ],
+    );
+  }
+
+  /// 运行控制:暂停/继续、回到开头、停止(一行);变速与参考音(两行)。
+  Widget _controls(PlayPracticeState state) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  key: const Key('practice-pause'),
+                  onPressed: state.paused
+                      ? _controller.resume
+                      : _controller.pause,
+                  icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
+                  label: Text(state.paused ? '继续' : '暂停'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                key: const Key('practice-restart'),
+                onPressed: _controller.restart,
+                icon: const Icon(Icons.replay),
+                label: const Text('回到开头'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                key: const Key('practice-stop'),
+                onPressed: _controller.stop,
+                icon: const Icon(Icons.stop),
+                label: const Text('停止'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _SpeedControl(speed: state.speed, onChanged: _controller.setSpeed),
+          _ReferenceToggle(
+            reference: state.reference,
+            onChanged: _controller.setReference,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 和弦库 → 和弦名映射(跟练页三处共用;null 库给空表降级)。
+Map<String, Chord> _chordMap(ChordLibrary? library) => library == null
+    ? const {}
+    : {for (final chord in library.chords) chord.label: chord};
+
+/// 变速控制(空闲与运行共用):原速的 50%–100%,5% 一档。
+class _SpeedControl extends StatelessWidget {
+  const _SpeedControl({required this.speed, required this.onChanged});
+
+  final double speed;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = (speed * 100).round();
+    return Row(
+      children: [
+        SizedBox(
+          width: 52,
+          child: Text(
+            '$percent%',
+            key: const Key('speed-value'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            key: const Key('speed-slider'),
+            value: speed,
+            min: PlayPracticeController.minSpeed,
+            max: PlayPracticeController.maxSpeed,
+            divisions: 10,
+            label: '$percent%',
+            onChanged: onChanged,
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 参考音切换(空闲与运行共用):节拍声 / 示范扫弦声。
+class _ReferenceToggle extends StatelessWidget {
+  const _ReferenceToggle({required this.reference, required this.onChanged});
+
+  final ReferenceSound reference;
+  final ValueChanged<ReferenceSound> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // ButtonSegment 无 key 参数:Key 挂在 label 上(点 label 即选段)。
+    return SegmentedButton<ReferenceSound>(
+      segments: const [
+        ButtonSegment(
+          value: ReferenceSound.beat,
+          icon: Icon(Icons.music_note),
+          label: Text('节拍声', key: Key('reference-beat')),
+        ),
+        ButtonSegment(
+          value: ReferenceSound.strum,
+          icon: Icon(Icons.graphic_eq),
+          label: Text('示范扫弦', key: Key('reference-strum')),
+        ),
+      ],
+      selected: {reference},
+      onSelectionChanged: (selection) => onChanged(selection.first),
+    );
+  }
+}
+
+/// 俄罗斯方块预告栏(工单 10,侧边):上一动作淡出、当前动作突出、
+/// 预告窗内未来动作依次可读。一切信息读 [practice](轮询重灌),
+/// 本组件无时钟无动画。
+class _PreviewRail extends StatelessWidget {
+  const _PreviewRail({required this.practice, required this.chords});
+
+  /// 直排的未来动作上限(超出折叠为计数,见 build 内注释)。
+  static const maxUpcoming = 6;
+
+  final PracticeState practice;
+  final Map<String, Chord> chords;
+
+  @override
+  Widget build(BuildContext context) {
+    final upcoming = practice.upcomingStrums;
+    final shownUpcoming = upcoming.length > maxUpcoming
+        ? upcoming.sublist(0, maxUpcoming)
+        : upcoming;
+    final entries = <Widget>[
+      // 过去动作淡出(俄罗斯方块的「已落定」位)。
+      if (practice.previousStrum case final PlayStrumEvent past)
+        _PreviewTile(
+          key: const Key('preview-past'),
+          event: past,
+          style: _PreviewStyle.past,
+        ),
+      if (practice.currentStrum case final PlayStrumEvent current)
+        _PreviewTile(
+          key: const Key('preview-current'),
+          event: current,
+          style: _PreviewStyle.current,
+        ),
+      for (var i = 0; i < shownUpcoming.length; i++)
+        _PreviewTile(
+          key: Key('preview-upcoming-$i'),
+          event: shownUpcoming[i],
+          style: _PreviewStyle.upcoming,
+        ),
+      // 快节奏(如 208BPM 密集型)下 2 秒窗内动作可多达十来个,整列
+      // 直排会撑爆高度:只收最近的若干个,余量折叠为计数(最近的才
+      // 来得及读,远的本来就是格子里的一团)。
+      if (upcoming.length > maxUpcoming)
+        Text(
+          '+${upcoming.length - maxUpcoming}',
+          key: const Key('preview-overflow'),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+        ),
+    ];
+    return SizedBox(
+      width: 84,
+      // 短视口兜底:容量上限之外再给滚动,任何屏高不溢出。
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            for (final entry in entries) ...[
+              entry,
+              const SizedBox(height: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _PreviewStyle { past, current, upcoming }
+
+/// 预告栏一格:方向箭头 + 和弦名。三档样式:过去淡出、当前主色突出、
+/// 未来描边待命。
+class _PreviewTile extends StatelessWidget {
+  const _PreviewTile({
+    super.key,
+    required this.event,
+    required this.style,
+  });
+
+  final PlayStrumEvent event;
+  final _PreviewStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final Color fill;
+    final Color content;
+    final Border? border;
+    switch (style) {
+      case _PreviewStyle.past:
+        fill = Colors.transparent;
+        content = scheme.onSurfaceVariant.withValues(alpha: 0.35);
+        border = null;
+      case _PreviewStyle.current:
+        fill = scheme.primaryContainer;
+        content = scheme.onPrimaryContainer;
+        border = null;
+      case _PreviewStyle.upcoming:
+        fill = Colors.transparent;
+        content = scheme.onSurface;
+        border = Border.all(color: scheme.outlineVariant);
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(10),
+        border: border,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            event.direction == StrumDirection.down
+                ? Icons.arrow_downward
+                : Icons.arrow_upward,
+            color: content,
+            size: 20,
+          ),
+          Text(
+            event.chord ?? '—',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: content,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

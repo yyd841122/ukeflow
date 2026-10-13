@@ -125,7 +125,7 @@ class RhythmTrainerController extends Notifier<RhythmTrainerState> {
       pickSound: _pick,
       onError: _onEngineError,
     );
-    scheduler.start(bpm: state.bpm);
+    scheduler.start(periodMs: 60000 / state.bpm);
     _scheduler = scheduler;
     state = state.copyWith(running: true, error: null);
   }
@@ -143,7 +143,7 @@ class RhythmTrainerController extends Notifier<RhythmTrainerState> {
   /// 设 BPM(钳制 40–208);运行中即时生效(相位保持重锚定)。
   void setBpm(int bpm) {
     state = state.copyWith(bpm: bpm.clamp(minBpm, maxBpm));
-    _scheduler?.changeBpm(state.bpm);
+    _scheduler?.changePeriod(60000 / state.bpm);
   }
 
   /// 4/4 强弱拍节拍声;节拍声关时静默(返回 null 即该拍不发声)。
