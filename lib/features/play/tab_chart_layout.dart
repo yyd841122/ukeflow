@@ -24,10 +24,22 @@ class TabChartLayout {
   static const lineGap = 30.0;
   static const noteRadius = 9.0;
 
-  /// 纵向:弦号标注区(上)+ 4 弦 3 档 + 底部余白。
+  /// 纵向:弦号标注区(上)+ 4 弦 3 档 + 底部余白(有歌词缀字的谱在
+  /// 余白处再让出一条歌词行,唱词落在最低弦线下,不与谱面重叠)。
   static const _topPad = 22.0;
   static const _bottomPad = 14.0;
-  static const height = _topPad + 3 * lineGap + _bottomPad;
+  static const _lyricBand = 22.0;
+  static const _heightBase = _topPad + 3 * lineGap + _bottomPad;
+  static const fontSize = 14.0;
+
+  /// 画布高:无词谱即 [_heightBase],有词谱加一条歌词带。
+  double get height => hasLyrics ? _heightBase + _lyricBand : _heightBase;
+
+  /// 歌词行的纵向中心(最低弦线之下);仅 [hasLyrics] 时有意义。
+  double get lyricY => TabChartLayout.stringY(4) + _bottomPad + _lyricBand / 2;
+
+  /// 谱内是否有歌词缀字(歌词带是否让位由此单一判定)。
+  bool get hasLyrics => notes.any((n) => n.lyric != null);
 
   /// 横向:音区左留白(容纳音点圆)…右留白。
   static const firstPad = 16.0;

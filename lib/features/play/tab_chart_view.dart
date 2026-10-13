@@ -24,14 +24,14 @@ class TabChartView extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final layout = TabChartLayout(chart, pxPerBeat: pxPerBeat);
     return SizedBox(
-      height: TabChartLayout.height,
+      height: layout.height,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 左侧弦号列固定,横向滚动时读谱不失参照。
           CustomPaint(
             key: const Key('tab-chart-labels'),
-            size: const Size(_labelWidth, TabChartLayout.height),
+            size: Size(_labelWidth, layout.height),
             painter: _StringLabelsPainter(scheme),
           ),
           Expanded(
@@ -39,7 +39,7 @@ class TabChartView extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: CustomPaint(
                 key: const Key('tab-chart-canvas'),
-                size: Size(layout.chartWidth, TabChartLayout.height),
+                size: Size(layout.chartWidth, layout.height),
                 painter: _TabChartPainter(layout, scheme),
               ),
             ),
@@ -145,6 +145,20 @@ class _TabChartPainter extends CustomPainter {
         center,
         TabChartLayout.noteRadius * 1.15,
         scheme.onPrimary,
+      );
+    }
+
+    // 歌词缀字:唱词落在该音正下方的歌词行(逐音缀字,新手跟唱;
+    // 长音的字居中停在音位上,唱到下一字前不移动)。
+    for (final note in layout.notes) {
+      final lyric = note.lyric;
+      if (lyric == null) continue;
+      _text(
+        canvas,
+        lyric,
+        Offset(layout.noteX(note.beat), layout.lyricY),
+        TabChartLayout.fontSize,
+        scheme.onSurface,
       );
     }
   }

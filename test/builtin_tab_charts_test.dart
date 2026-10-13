@@ -41,6 +41,16 @@ void main() {
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 46);
     expect(song.notes.last.frequency, closeTo(261.6255653005986, 1e-9));
+
+    // 歌词逐音一字恰好对齐:每句 7 字对 7 音,42 音全带词。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(42));
+    expect(lyrics.take(7).join(), '一闪一闪亮晶晶');
+    expect(lyrics.sublist(7, 14).join(), '满天都是小星星');
+    expect(lyrics.sublist(14, 21).join(), '挂在天上放光明');
+    expect(lyrics.sublist(21, 28).join(), '好像许多小眼睛');
+    expect(lyrics.sublist(28, 35).join(), '一闪一闪亮晶晶');
+    expect(lyrics.sublist(35).join(), '满天都是小星星');
   });
 
   test('欢乐颂:30 音 8 小节,附点节奏落在半拍位', () {
@@ -69,5 +79,16 @@ void main() {
     expect(song.notes.last.beat, 30.0);
     expect(song.notes.last.string, 3);
     expect(song.notes.last.fret, 0);
+
+    // 歌词逐音缀字:30 音全带词,四句各 8/7/8/7 字;附点音位对
+    // 「照(附点四分)大(半拍)地(二拍长音)」「圣 殿 里」。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(30));
+    expect(lyrics.take(8).join(), '欢乐女神圣洁美丽');
+    expect(lyrics.sublist(8, 15).join(), '灿烂光芒照大地');
+    expect(lyrics.sublist(15, 23).join(), '我们心中充满热情');
+    expect(lyrics.sublist(23).join(), '来到你的圣殿里');
+    expect(song.notes.where((n) => n.beat == 13.5).single.lyric, '大');
+    expect(song.notes.where((n) => n.beat == 29.5).single.lyric, '殿');
   });
 }

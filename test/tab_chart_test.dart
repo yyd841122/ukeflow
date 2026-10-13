@@ -57,6 +57,20 @@ void main() {
       );
     });
 
+    test('歌词缀字为空白串(录入坏损)抛错;null 与非空白合法', () {
+      expect(
+        () => validateTabChart(
+          chart([TabNote(string: 1, fret: 0, beat: 0, lyric: ' ')]),
+        ),
+        throwsA(isA<TabDataError>()),
+      );
+      final ok = chart([
+        TabNote(string: 1, fret: 0, beat: 0, lyric: '一'),
+        TabNote(string: 1, fret: 0, beat: 1),
+      ]);
+      expect(identical(validateTabChart(ok), ok), isTrue);
+    });
+
     test('合法谱原样通过(返回同对象)', () {
       final ok = chart([
         TabNote(string: 4, fret: 0, beat: 0),

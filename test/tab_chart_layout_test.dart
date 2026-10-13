@@ -13,6 +13,32 @@ void main() {
     expect(TabChartLayout.stringY(3), lessThan(TabChartLayout.stringY(4)));
   });
 
+  test('歌词带:有缀字音的谱加高留出歌词行,无词谱不占白', () {
+    const without = TabChart(
+      title: 't',
+      tempo: 80,
+      notes: [TabNote(string: 1, fret: 0, beat: 0)],
+    );
+    const withLyric = TabChart(
+      title: 't',
+      tempo: 80,
+      notes: [
+        TabNote(string: 1, fret: 0, beat: 0, lyric: '一'),
+        TabNote(string: 2, fret: 0, beat: 1),
+      ],
+    );
+
+    expect(TabChartLayout(without, pxPerBeat: 40).hasLyrics, isFalse);
+    expect(TabChartLayout(withLyric, pxPerBeat: 40).hasLyrics, isTrue);
+    expect(
+      TabChartLayout(withLyric, pxPerBeat: 40).height,
+      greaterThan(TabChartLayout(without, pxPerBeat: 40).height),
+    );
+    // 歌词行在最低弦线之下(唱词不与谱面重叠)。
+    final layout = TabChartLayout(withLyric, pxPerBeat: 40);
+    expect(layout.lyricY, greaterThan(TabChartLayout.stringY(4)));
+  });
+
   test('横向位置:音按拍位推进;小节线在每 4 拍整,恰与该拍音位重合', () {
     final layout = TabChartLayout(
       const TabChart(

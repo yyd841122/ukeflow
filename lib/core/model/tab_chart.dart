@@ -16,7 +16,12 @@ import 'uke_string.dart';
 
 /// 一个音:第 [string] 弦、第 [fret] 品、第 [beat] 拍。
 class TabNote {
-  const TabNote({required this.string, required this.fret, required this.beat});
+  const TabNote({
+    required this.string,
+    required this.fret,
+    required this.beat,
+    this.lyric,
+  });
 
   /// 弦号(GLOSSARY「弦号」):1 弦 = A(最细)…4 弦 = G(最粗),
   /// 四线谱渲染顶线为 1 弦,与外部教学材料一致。
@@ -28,6 +33,12 @@ class TabNote {
   /// 发声时刻(自曲头,四分拍,0 起)。八分半拍 = 0.5——录入域内
   /// (0.25 的倍数)double 精确,无累计误差;编译期逐事件取整成毫秒。
   final double beat;
+
+  /// 该音承载的歌词缀字(如「一」「闪」),null = 无词(器乐音)。
+  /// 内置入门曲的新手友好显示注记:**逐音缀一个字**,不是弹唱谱的
+  /// 「歌词-和弦」对齐文本(ADR-0003 两谱模型分界不动,本字段不向
+  /// 弹唱谱靠拢);旋律音缀词、伴奏音留空即可表达「唱到哪」。
+  final String? lyric;
 
   /// 该音基频(Hz)= 空弦基频 × 2^(品位/12),KS 拨弦音源直接可用。
   double get frequency =>
@@ -109,6 +120,9 @@ TabChart validateTabChart(TabChart chart, {String context = ''}) {
     }
     if (note.beat.isNaN || note.beat.isInfinite || note.beat < 0) {
       throw TabDataError('指弹谱「$where」拍位非负有限才合法:$note');
+    }
+    if (note.lyric != null && note.lyric!.trim().isEmpty) {
+      throw TabDataError('指弹谱「$where」歌词缀字为空白:$note');
     }
   }
   return chart;
