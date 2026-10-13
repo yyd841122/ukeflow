@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/audio_engine.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/pluck_player.dart';
+import 'package:ukeflow/core/model/strum_pattern.dart' show StrumDirection;
 
 /// PluckPlayer:KarplusStrong 合成 → loadMem → playClocked 的引擎接缝。
 /// 一律经 AudioEngine 接口断言(FakeAudioEngine),不碰真引擎——
@@ -186,6 +187,55 @@ group('preloadSounds/loadedSound', () {
 
     await expectLater(player.preloadSounds(const [392.0]), throwsException);
     expect(player.loadedSound(392), isNull);
+  });
+});
+/// 工单 11 接缝:方向定声——下/上扫各取各的衰减时长变体(音色区分
+/// 的单一来源在 PluckPlayer,调度引擎只认音源)。
+group('方向定声 strumMs/loadedStrumSound/preloadStrumSounds', () {
+  test('preloadStrumSounds 两方向各注入一套;loadedStrumSound 按方向查取', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    expect(player.loadedStrumSound(392, StrumDirection.down), isNull,
+        reason: '未注入为 null');
+
+    await player.preloadStrumSounds(const [392.0]);
+    expect(engine.loadedKeys.toSet(), {
+      'pluck_392.0_1500',
+      'pluck_392.0_700',
+    }, reason: '下扫长衰减(与既有默认时长一致)、上扫短促,各一套');
+    final down = player.loadedStrumSound(392, StrumDirection.down);
+    final up = player.loadedStrumSound(392, StrumDirection.up);
+    expect(down!.key, 'pluck_392.0_1500');
+    expect(up!.key, 'pluck_392.0_700');
+  });
+
+  test('与既有缓存共用:同音同方向的变体不重注入', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    await player.preloadSounds(const [392.0]); // 下扫 1500 变体已在
+    await player.preloadStrumSounds(const [392.0]);
+
+    expect(
+      engine.loadedKeys.where((k) => k == 'pluck_392.0_1500'),
+      hasLength(1),
+    );
+    expect(
+      engine.loadedKeys.where((k) => k == 'pluck_392.0_700'),
+      hasLength(1),
+    );
+  });
+
+  test('注入失败:错误上抛,同步查取无半成品', () async {
+    final engine = FakeAudioEngine()..failInitialization = true;
+    final player = PluckPlayer(engine: engine);
+
+    await expectLater(
+      player.preloadStrumSounds(const [392.0]),
+      throwsException,
+    );
+    expect(player.loadedStrumSound(392, StrumDirection.down), isNull);
   });
 });
 }

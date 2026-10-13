@@ -8,6 +8,7 @@ import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart';
+import '../demo/demo_playback_controller.dart';
 import 'chart_meta.dart';
 import 'play_practice_controller.dart';
 import 'practice_view.dart';
@@ -40,11 +41,13 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 
   // dispose 里不能用 ref(Riverpod 3):notifier 在 initState 缓存成字段。
   late final PlayPracticeController _controller;
+  late final DemoPlaybackController _demo;
 
   @override
   void initState() {
     super.initState();
     _controller = ref.read(playPracticeProvider.notifier);
+    _demo = ref.read(demoPlaybackProvider.notifier);
     // 定参+预热都在帧末:Riverpod 3 禁止 build 生命周期内改 provider 状态。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -62,9 +65,12 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     _poll?.cancel();
     // 弹回即停。Riverpod 3 禁止 widget unmount 期间改 provider 状态
     // (直接 stop 会抛"tried to modify a provider"),推迟一个微任务:
-    // 引擎调度与节拍声在下一宏任务前即全停,无任何残留。
+    // 引擎调度与节拍声/试听声在下一宏任务前即全停,无任何残留。
     // 节奏型训练页同此纪律(工单 06 顺修)。
-    scheduleMicrotask(_controller.stop);
+    scheduleMicrotask(() {
+      _controller.stop();
+      _demo.stop();
+    });
     super.dispose();
   }
 
@@ -119,6 +125,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(playPracticeProvider);
+    final demo = ref.watch(demoPlaybackProvider);
     // 运行状态翻转时启停轮询(ref.listen 须在 build 内注册)。
     ref.listen(playPracticeProvider, (previous, next) {
       if (previous?.running != next.running) {
@@ -136,14 +143,14 @@ class _PracticePageState extends ConsumerState<PracticePage> {
       body: SafeArea(
         child: state.running
             ? _runningBody(state, ref.watch(chordLibraryProvider))
-            : _idleBody(state),
+            : _idleBody(state, demo),
       ),
     );
   }
 
-  // ── 空闲面板:定 BPM/变速/节奏型/参考音,开始 ─────────────────────
+  // ── 空闲面板:定 BPM/变速/节奏型/参考音,示范试听,开始 ────────────
 
-  Widget _idleBody(PlayPracticeState state) {
+  Widget _idleBody(PlayPracticeState state, DemoPlaybackState demo) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: Column(
@@ -178,11 +185,37 @@ class _PracticePageState extends ConsumerState<PracticePage> {
             onChanged: _controller.setReference,
           ),
           const SizedBox(height: 32),
+          // 示范试听(工单 11):弹前一键,按当前节奏型+BPM 听整曲扫弦。
+          // 试听中参数控件照常可调(在途按开始一刻的快照,再点即听新的)。
+          OutlinedButton.icon(
+            key: const Key('demo-toggle'),
+            onPressed: _demoAction(state, demo),
+            icon: Icon(
+              demo.status == DemoPlaybackStatus.playing
+                  ? Icons.stop
+                  : Icons.music_note,
+            ),
+            label: Text(
+              demo.status == DemoPlaybackStatus.playing ? '停止试听' : '示范试听',
+            ),
+          ),
+          if (demo.error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              demo.error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 12),
           FilledButton.icon(
             key: const Key('practice-start'),
-            // 引擎未就绪不可启;空谱(无段落)不可启。
+            // 引擎未就绪不可启;空谱(无段落)不可启;试听即停不叠声。
             onPressed: state.engineReady && widget.chart.sections.isNotEmpty
-                ? () => _controller.start(chart: widget.chart, chords: _chords())
+                ? () {
+                    _demo.stop();
+                    _controller.start(chart: widget.chart, chords: _chords());
+                  }
                 : null,
             icon: const Icon(Icons.play_arrow),
             label: const Text('开始跟练'),
@@ -190,6 +223,15 @@ class _PracticePageState extends ConsumerState<PracticePage> {
         ],
       ),
     );
+  }
+
+  /// 试听钮的回调:发声中=停止;空闲且可启(引擎就绪+有段落)=开试听;
+  /// 准备中/不可启 = 禁用。
+  VoidCallback? _demoAction(PlayPracticeState state, DemoPlaybackState demo) {
+    if (demo.status == DemoPlaybackStatus.playing) return _demo.stop;
+    if (demo.status != DemoPlaybackStatus.idle) return null;
+    if (!state.engineReady || widget.chart.sections.isEmpty) return null;
+    return () => _demo.start(chart: widget.chart, chords: _chords());
   }
 
   TextStyle get _sectionLabelStyle => Theme.of(context).textTheme.labelLarge!;

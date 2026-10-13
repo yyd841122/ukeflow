@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/features/demo/demo_playback_controller.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
 
@@ -305,5 +306,126 @@ void main() {
     final countAfterPop = engine.scheduleLog.length;
     await advanceAndPump(tester, 2000);
     expect(engine.scheduleLog, hasLength(countAfterPop), reason: '弹回即停');
+  });
+
+  /// 工单 11:示范试听(空闲面板一键整曲扫弦)。
+  group('示范试听', () {
+    DemoPlaybackState demoState(WidgetTester tester) =>
+        ProviderScope.containerOf(
+          tester.element(find.byType(Navigator)), // 弹回后按钮已不在树上
+        ).read(demoPlaybackProvider);
+
+    testWidgets('空闲面板有试听钮:引擎未就绪禁用,就绪可点', (tester) async {
+      engine = FakeAudioEngine()..failInitialization = true;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            audioEngineProvider.overrideWithValue(engine),
+            chordLibraryFixtureOverride(),
+          ],
+          child: MaterialApp(home: PracticePage(chart: practiceFixtureChart)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<OutlinedButton>(find.byKey(const Key('demo-toggle'))).onPressed,
+        isNull,
+        reason: '引擎未就绪不可试听',
+      );
+    });
+
+    testWidgets('点按即整曲发声(下扫长衰减),再点停止:未响弦停净、按钮回', (tester) async {
+      await pumpPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('demo-toggle')));
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump(); // 准备链(假引擎即时完成)+ 重绘
+
+      expect(demoState(tester).status, DemoPlaybackStatus.playing);
+      expect(
+        engine.scheduleLog.where((c) => c.key.startsWith('pluck_')),
+        isNotEmpty,
+        reason: '窗内扫弦事件已预定拨弦',
+      );
+      expect(find.text('停止试听'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump();
+      expect(demoState(tester).status, DemoPlaybackStatus.idle);
+      final nowAtStop = engine.engineTime();
+      expect(
+        engine.scheduleLog.where((c) =>
+            c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtStop),
+        isEmpty,
+        reason: '未响的弦停净,无残留声',
+      );
+      expect(find.text('示范试听'), findsOneWidget);
+    });
+
+    testWidgets('试听走到曲末自动回闲,之后不再有预定', (tester) async {
+      await pumpPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('demo-toggle')));
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump();
+
+      await advanceAndPump(tester, 14000); // 曲长 12s+错峰尾+判定轮询余量
+
+      expect(find.text('示范试听'), findsOneWidget, reason: '曲末自动回闲');
+      final countAtEnd = engine.scheduleLog.length;
+      await advanceAndPump(tester, 2000);
+      expect(engine.scheduleLog, hasLength(countAtEnd), reason: '回闲后冻结');
+    });
+
+    testWidgets('试听中点开始跟练:试听即停,会话起跑不叠声', (tester) async {
+      await pumpPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('demo-toggle')));
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump();
+      expect(demoState(tester).status, DemoPlaybackStatus.playing);
+
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+
+      expect(demoState(tester).status, DemoPlaybackStatus.idle, reason: '试听即停');
+      expect(
+        ProviderScope.containerOf(
+          tester.element(find.byType(Navigator)), // 开跑后空闲面板已下树
+        ).read(playPracticeProvider).running,
+        isTrue,
+      );
+      final nowAtSwitch = engine.engineTime();
+      expect(
+        engine.scheduleLog.where((c) =>
+            c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtSwitch),
+        isEmpty,
+        reason: '跟练起跑前试听未响弦已停',
+      );
+    });
+
+    testWidgets('试听引擎出错:错误文案可见,按钮回示范试听', (tester) async {
+      await pumpPage(tester);
+      engine.failNow = true;
+      await tester.ensureVisible(find.byKey(const Key('demo-toggle')));
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump();
+
+      expect(find.textContaining('试听已停止'), findsOneWidget);
+      expect(find.text('示范试听'), findsOneWidget);
+    });
+
+    testWidgets('试听中弹回:页面卸载即停,无残留调度', (tester) async {
+      await pumpPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('demo-toggle')));
+      await tester.tap(find.byKey(const Key('demo-toggle')));
+      await tester.pump();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(demoState(tester).status, DemoPlaybackStatus.idle);
+      final countAfterPop = engine.scheduleLog.length;
+      await advanceAndPump(tester, 2000);
+      expect(engine.scheduleLog, hasLength(countAfterPop), reason: '弹回即停');
+    });
   });
 }

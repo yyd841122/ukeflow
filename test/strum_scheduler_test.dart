@@ -20,7 +20,8 @@ void main() {
 
   /// 和弦 → 弦音表(4 弦→1 弦序,音源名即弦位):C 的 4 弦闷音、
   /// G 的 1 弦闷音;其余和弦名查不到 → null(降级静默)。
-  List<EngineSound?>? Function(String) resolver() => (chord) =>
+  /// 方向不参与定声(既有形状断言依赖)。
+  List<EngineSound?>? Function(String, StrumDirection) resolver() => (chord, _) =>
       switch (chord) {
         'C' => [null, str3, str2, str1],
         'G' => [str4, str3, str2, null],
@@ -186,13 +187,49 @@ void main() {
       final scheduler = StrumScheduler(
         engine: broken,
         strums: strums(),
-        pickStrings: (_) => [sound],
+        pickStrings: (_, _) => [sound],
         onError: errors.add,
       );
       scheduler.start(t0: Duration.zero);
       expect(errors, hasLength(1), reason: '首过即抛,上报原错误');
       expect(scheduler.running, isFalse, reason: '出错自停');
       expect(scheduler.scheduledCount, 0, reason: '调度状态清干净');
+    });
+  });
+
+  test('定声缝收方向:每事件的扫弦方向原样传入,两方向可定不同音源', () {
+    fakeAsync((async) {
+      final seen = <(String, StrumDirection)>[];
+      EngineSound strumSound(StrumDirection direction) =>
+          direction == StrumDirection.down ? str1 : str2;
+      final scheduler = StrumScheduler(
+        engine: engine,
+        strums: strums(), // t=0 C 下扫、t=500 G 上扫、t=1000 无名(不过缝)
+        pickStrings: (chord, direction) {
+          seen.add((chord, direction));
+          return switch (chord) {
+            'C' => [null, null, null, strumSound(direction)],
+            'G' => [null, null, null, strumSound(direction)],
+            _ => null,
+          };
+        },
+      );
+      scheduler.start(t0: Duration.zero);
+      // t=0 C 下扫立即入窗:单弦发声(4 弦位),1 弦音源@45ms。
+      expect(engine.scheduleLog.map((c) => c.key).toList(), ['string1']);
+      expect(seen, [('C', StrumDirection.down)]);
+
+      for (var i = 0; i < 14; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      // now=560:t=500 的 G 上扫入窗——拿到的是上扫方向与上扫音源。
+      expect(seen, [('C', StrumDirection.down), ('G', StrumDirection.up)]);
+      expect(
+        engine.scheduleLog.where((c) => c.time.inMilliseconds >= 500).map((c) => c.key),
+        ['string2'],
+        reason: '上扫事件定到上扫音源——音色区分经此缝成立',
+      );
     });
   });
 }

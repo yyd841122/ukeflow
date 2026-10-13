@@ -40,10 +40,13 @@ class StrumScheduler {
   /// 时间轴扫弦事件(按时刻升序;调用方从 PlayTimeline.strums 取)。
   final List<PlayStrumEvent> strums;
 
-  /// 和弦名 → 弦音表(4 弦→1 弦序,闷音弦为 null 占时位);和弦查不到
-  /// (和弦库缺位等降级路径)返回 null,该事件静默越过。音源须已预注入
-  /// (PluckPlayer.preloadSounds),过窗调度是同步路径、免 await。
-  final List<EngineSound?>? Function(String chord) pickStrings;
+  /// 和弦名+扫弦方向 → 弦音表(4 弦→1 弦序,闷音弦为 null 占时位)。
+  /// 方向供音源层定声(下/上扫音色区分,工单 11,见 PluckPlayer.strumMs);
+  /// 和弦查不到(和弦库缺位等降级路径)返回 null,该事件静默越过。
+  /// 音源须已预注入(PluckPlayer.preloadStrumSounds),过窗调度是同步
+  /// 路径、免 await。
+  final List<EngineSound?>? Function(String chord, StrumDirection direction)
+      pickStrings;
 
   /// 引擎调用失败上报(调用方据此停机并提示)。
   final void Function(Object error)? onError;
@@ -140,10 +143,13 @@ class StrumScheduler {
   }
 
   /// 预定一次扫弦:弦音表按方向定序(下扫 4 弦→1 弦、上扫反向——拨片
-  /// 物理扫过弦序),逐弦错峰 [PluckPlayer.strumGap] 等价间隔。静默弦位
-  /// 同样占时位(不发声),与和弦示范音同一物理语义。
+  /// 物理扫过弦序)且按方向定声(方向传入定声缝),逐弦错峰
+  /// [PluckPlayer.strumGap] 等价间隔。静默弦位同样占时位(不发声),
+  /// 与和弦示范音同一物理语义。
   void _scheduleStrum(PlayStrumEvent event, Duration time) {
-    final strings = event.chord == null ? null : pickStrings(event.chord!);
+    final strings = event.chord == null
+        ? null
+        : pickStrings(event.chord!, event.direction);
     if (strings == null) return;
     final order =
         event.direction == StrumDirection.down ? strings : strings.reversed;

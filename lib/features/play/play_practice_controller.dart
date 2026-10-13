@@ -12,6 +12,7 @@ import '../../core/practice/play_timeline.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart' show Chord;
 import 'strum_scheduler.dart';
+import 'strum_voicing.dart';
 
 /// 跟练参考音(工单 10,用户故事 24「先跟拍、后脱拍」)。
 enum ReferenceSound {
@@ -249,11 +250,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
 
   Future<void> _preloadStrumSounds() async {
     try {
-      final freqs = <double>{
-        for (final chord in _chords.values)
-          ...chord.primaryFingering.stringFrequencies.whereType<double>(),
-      };
-      await ref.read(pluckPlayerProvider).preloadSounds(freqs);
+      await _voicer.preload();
     } on Object {
       // 静默降级:和弦库缺位/引擎异常时参考音=扫弦无声,页面照跑。
     }
@@ -436,7 +433,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     final scheduler = StrumScheduler(
       engine: ref.read(audioEngineProvider),
       strums: timeline.strums,
-      pickStrings: _stringSounds,
+      pickStrings: _voicer.voice,
       onError: _onEngineError,
     );
     _strumScheduler = scheduler;
@@ -444,17 +441,10 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     if (_strumScheduler != scheduler) _strumScheduler = null;
   }
 
-  /// 和弦名 → 弦音表(4 弦→1 弦序,闷音弦 null 占位)。音源未就绪
-  /// （预注入未完成/失败）按闷音处理——无声降级,不打扰练习。
-  List<EngineSound?>? _stringSounds(String chordName) {
-    final chord = _chords[chordName];
-    if (chord == null) return null;
-    final player = ref.read(pluckPlayerProvider);
-    return [
-      for (final freq in chord.primaryFingering.stringFrequencies)
-        freq == null ? null : player.loadedSound(freq),
-    ];
-  }
+  /// 定声接线(工单 10/11 共用形状,见 [StrumVoicer]):和弦表+播放器
+  /// 组合,voice/preload 都从这里走。
+  StrumVoicer get _voicer =>
+      StrumVoicer(chords: _chords, player: ref.read(pluckPlayerProvider));
 
   /// 节拍声选音:预备拍恒用预备音源（数拍不是参考音,任何模式都响）;
   /// 正曲拍按参考音模式——节拍声给 4/4 强弱,扫弦声模式静默(由扫弦
