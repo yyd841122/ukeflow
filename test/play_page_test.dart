@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/features/play/chart_meta.dart';
 import 'package:ukeflow/features/play/play_page.dart';
 
 import 'helpers/chart_fixtures.dart';
@@ -41,8 +42,7 @@ void main() {
     expect(find.text('测试曲'), findsOneWidget);
     expect(find.text('测试者 · C 调 · 80 BPM'), findsOneWidget);
     expect(find.text('第二首'), findsOneWidget);
-    expect(find.text('96 BPM'), findsOneWidget,
-        reason: '无 artist/key 时只显示速度');
+    expect(find.text('96 BPM'), findsOneWidget, reason: '无 artist/key 时只显示速度');
     expect(find.text('节拍器'), findsOneWidget);
     expect(find.text('节奏型训练'), findsOneWidget);
   });
@@ -65,5 +65,18 @@ void main() {
     addTearDown(tester.view.reset);
     await pumpTab(tester);
     expect(tester.takeException(), isNull);
+  });
+
+  test('chartMetaLine:空白字段剔除,不产孤立分隔符', () {
+    final chart = parseChart(
+      '{title: T}\n{artist: }\n{key: }\n{tempo: 96}\n[C]词\n',
+    );
+    expect(chartMetaLine(chart), '96 BPM');
+
+    expect(
+      chartMetaLine(parseChart('{title: T}\n[C]词\n')),
+      isNull,
+      reason: '全空返回 null 而非空串',
+    );
   });
 }

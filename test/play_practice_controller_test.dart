@@ -54,15 +54,38 @@ void main() {
     await controller().warmup();
     final state = container.read(playPracticeProvider);
     expect(state.engineReady, isTrue);
+    expect(state.error, isNull);
     expect(engine.loadedKeys, containsAll(['tick_strong', 'tick_weak']));
+  });
+
+  test('并发 warmup 共享同一次在途初始化:音源不重复注入', () async {
+    await Future.wait([controller().warmup(), controller().warmup()]);
+    expect(engine.loadedKeys.where((k) => k == 'tick_strong'), hasLength(1));
+    expect(engine.loadedKeys.where((k) => k == 'tick_weak'), hasLength(1));
+  });
+
+  test('初始化失败→重试成功:错误文案清除,不再残留', () async {
+    final c = controller();
+    engine.failInitialization = true;
+    await c.warmup();
+    expect(container.read(playPracticeProvider).error, isNotNull);
+
+    engine.failInitialization = false;
+    await c.warmup();
+    final state = container.read(playPracticeProvider);
+    expect(state.engineReady, isTrue);
+    expect(state.error, isNull, reason: '旧错误不残留到成功之后');
   });
 
   test('未就绪不可启;就绪后 start:编译时间轴并锚定引擎时钟', () async {
     final c = controller();
     c.prepareFor(practiceFixtureChart);
     c.start(chart: practiceFixtureChart);
-    expect(container.read(playPracticeProvider).running, isFalse,
-        reason: '引擎未就绪拒绝启动');
+    expect(
+      container.read(playPracticeProvider).running,
+      isFalse,
+      reason: '引擎未就绪拒绝启动',
+    );
     expect(engine.scheduleLog, isEmpty);
 
     await c.warmup();
@@ -77,11 +100,13 @@ void main() {
     expect(timeline.totalBeats, 16, reason: '4 小节 × 4 拍');
     final anchor = c.visualAnchor;
     expect(anchor, isNotNull);
-    expect(anchor!.t0, const Duration(milliseconds: 700),
-        reason: '锚定引擎当前时刻,不用挂钟');
+    expect(
+      anchor!.t0,
+      const Duration(milliseconds: 700),
+      reason: '锚定引擎当前时刻,不用挂钟',
+    );
     expect(anchor.periodMs, closeTo(60000 / 80, 1e-9));
-    expect(engine.scheduleLog.single.key, 'tick_strong',
-        reason: '第 0 拍立即预定强拍');
+    expect(engine.scheduleLog.single.key, 'tick_strong', reason: '第 0 拍立即预定强拍');
     expect(engine.scheduleLog.single.time, const Duration(milliseconds: 700));
   });
 
@@ -125,11 +150,17 @@ void main() {
     await c.warmup();
     c.start(chart: practiceFixtureChart);
     c.setBpm(120);
-    expect(container.read(playPracticeProvider).bpm, 208,
-        reason: '运行中固定速度(v1),调参被忽略');
+    expect(
+      container.read(playPracticeProvider).bpm,
+      208,
+      reason: '运行中固定速度(v1),调参被忽略',
+    );
     c.setPattern(builtinStrumPatterns.first);
-    expect(container.read(playPracticeProvider).pattern, same(island),
-        reason: '运行中节奏型是编译参数,不可换');
+    expect(
+      container.read(playPracticeProvider).pattern,
+      same(island),
+      reason: '运行中节奏型是编译参数,不可换',
+    );
   });
 
   test('引擎预定出错:自停并进错误状态', () async {

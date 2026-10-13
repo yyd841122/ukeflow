@@ -127,9 +127,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
             Text(
               meta,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           const SizedBox(height: 12),
           _engineStatus(state),
@@ -159,10 +157,22 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 
   Widget _engineStatus(PlayPracticeState state) {
     if (state.error != null) {
-      return Text(
-        state.error!,
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
-        textAlign: TextAlign.center,
+      return Column(
+        children: [
+          Text(
+            state.error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          // 初始化失败可原地重试,不必重进页面(warmup 自带在途合并)。
+          TextButton.icon(
+            key: const Key('warmup-retry'),
+            onPressed: () => _controller.warmup(),
+            icon: const Icon(Icons.refresh),
+            label: const Text('重试'),
+          ),
+        ],
       );
     }
     return Text(
@@ -197,7 +207,10 @@ class _PracticePageState extends ConsumerState<PracticePage> {
               onPressed: () => _controller.setBpm(state.bpm + 1),
               icon: const Icon(Icons.add),
             ),
-            Text('BPM', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+            Text(
+              'BPM',
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
+            ),
           ],
         ),
         Slider(
@@ -256,9 +269,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
             pattern: state.pattern,
             chords: library == null
                 ? const {}
-                : {
-                    for (final chord in library.chords) chord.label: chord,
-                  },
+                : {for (final chord in library.chords) chord.label: chord},
           ),
         ),
         Padding(

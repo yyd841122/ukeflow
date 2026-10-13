@@ -55,23 +55,24 @@ class PracticeView extends StatelessWidget {
             label,
             key: const Key('section-label'),
             textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .labelLarge
-                ?.copyWith(color: scheme.primary),
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.primary),
           ),
         ],
         Expanded(
-          child: _LyricsArea(
-            lyrics: timeline.lyrics,
-            currentIndex: lyricIndex,
-          ),
+          child: _LyricsArea(lyrics: timeline.lyrics, currentIndex: lyricIndex),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [_ChordCard(chord: _currentChord)],
+            children: [
+              _ChordCard(
+                chordName: practice.currentStrum?.chord,
+                chord: _currentChord,
+              ),
+            ],
           ),
         ),
         Padding(
@@ -125,66 +126,73 @@ class _LyricsArea extends StatelessWidget {
       );
     }
     final current = lyrics[currentIndex].line;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (currentIndex > 0)
-            _LyricLine(
-              lyrics[currentIndex - 1].line,
-              base: TextStyle(
-                fontSize: 15,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
-              ),
-              chord: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
-              ),
-            ),
-          const SizedBox(height: 10),
-          Text.rich(
-            TextSpan(
-              children: _lineSpans(
-                current,
-                TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurface,
-                height: 1.5,
-              ),
-            ),
-            key: const Key('lyric-current'),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 14),
-          for (var ahead = 1; ahead <= 2; ahead++) ...[
-            if (currentIndex + ahead < lyrics.length)
+    // 短内容垂直居中;长歌词/大字超出可用高度时可滚(RenderFlex 溢出条纹
+    // 在真机上就是内容被截断)。
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (currentIndex > 0)
               _LyricLine(
-                lyrics[currentIndex + ahead].line,
+                lyrics[currentIndex - 1].line,
                 base: TextStyle(
-                  fontSize: 16,
-                  color: scheme.onSurfaceVariant
-                      .withValues(alpha: ahead == 1 ? 0.75 : 0.45),
+                  fontSize: 15,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
                 chord: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: scheme.onSurfaceVariant
-                      .withValues(alpha: ahead == 1 ? 0.75 : 0.45),
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
               ),
-            if (ahead < 2) const SizedBox(height: 8),
+            const SizedBox(height: 10),
+            Text.rich(
+              TextSpan(
+                children: _lineSpans(
+                  current,
+                  TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.primary.withValues(alpha: 0.9),
+                  ),
+                ),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                  height: 1.5,
+                ),
+              ),
+              key: const Key('lyric-current'),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            for (var ahead = 1; ahead <= 2; ahead++) ...[
+              if (currentIndex + ahead < lyrics.length)
+                _LyricLine(
+                  lyrics[currentIndex + ahead].line,
+                  base: TextStyle(
+                    fontSize: 16,
+                    color: scheme.onSurfaceVariant.withValues(
+                      alpha: ahead == 1 ? 0.75 : 0.45,
+                    ),
+                  ),
+                  chord: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant.withValues(
+                      alpha: ahead == 1 ? 0.75 : 0.45,
+                    ),
+                  ),
+                ),
+              if (ahead < 2) const SizedBox(height: 8),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -229,9 +237,12 @@ List<InlineSpan> _lineSpans(StrumLine line, TextStyle chordStyle) {
 }
 
 /// 当前和弦卡:和弦名 + 指法小图,主色容器突出(练习状态里「此刻按什么」)。
+/// [chordName] 直接来自扫弦事件,不依赖查表;[chord] 查表成功才有指法小图
+/// (和弦库缺位的降级路径下名字照走、小图缺席)。
 class _ChordCard extends StatelessWidget {
-  const _ChordCard({required this.chord});
+  const _ChordCard({required this.chordName, required this.chord});
 
+  final String? chordName;
   final Chord? chord;
 
   @override
@@ -261,7 +272,7 @@ class _ChordCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                chord?.label ?? '—',
+                chordName ?? '—',
                 key: const Key('chord-name'),
                 style: TextStyle(
                   fontSize: 30,
@@ -272,7 +283,10 @@ class _ChordCard extends StatelessWidget {
               ),
               Text(
                 '当前和弦',
-                style: TextStyle(fontSize: 12, color: onCard.withValues(alpha: 0.7)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: onCard.withValues(alpha: 0.7),
+                ),
               ),
             ],
           ),

@@ -21,11 +21,11 @@ class PlayPracticeState {
   });
 
   factory PlayPracticeState.initial() => PlayPracticeState(
-        bpm: PlayPracticeController.defaultBpm,
-        pattern: builtinStrumPatterns.first,
-        engineReady: false,
-        running: false,
-      );
+    bpm: PlayPracticeController.defaultBpm,
+    pattern: builtinStrumPatterns.first,
+    engineReady: false,
+    running: false,
+  );
 
   /// 当前 BPM（进谱默认取谱面 tempo,页内可调;运行中固定——控制与变速在工单 10）。
   final int bpm;
@@ -44,22 +44,21 @@ class PlayPracticeState {
     bool? engineReady,
     bool? running,
     Object? error = _sentinel,
-  }) =>
-      PlayPracticeState(
-        bpm: bpm ?? this.bpm,
-        pattern: pattern ?? this.pattern,
-        engineReady: engineReady ?? this.engineReady,
-        running: running ?? this.running,
-        error: identical(error, _sentinel) ? this.error : error as String?,
-      );
+  }) => PlayPracticeState(
+    bpm: bpm ?? this.bpm,
+    pattern: pattern ?? this.pattern,
+    engineReady: engineReady ?? this.engineReady,
+    running: running ?? this.running,
+    error: identical(error, _sentinel) ? this.error : error as String?,
+  );
 
   static const _sentinel = Object();
 }
 
 final playPracticeProvider =
     NotifierProvider<PlayPracticeController, PlayPracticeState>(
-  PlayPracticeController.new,
-);
+      PlayPracticeController.new,
+    );
 
 /// 跟练控制器:内置弹唱谱 → 按当前 BPM+节奏型编译时间轴 → 节拍声有界调度。
 ///
@@ -78,6 +77,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   EngineSound? _weak;
   BeatScheduler? _scheduler;
   PlayTimeline? _timeline;
+  Future<void>? _warming;
 
   /// 运行中的动作事件时间轴;未运行 null。
   PlayTimeline? get timeline => _timeline;
@@ -92,15 +92,26 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   }
 
   /// 引擎预热 + 注入强弱拍音源;失败进 error 状态,页面上可见。
+  /// 并发调用共享同一次在途初始化(快速重进页不重复注入音源)。
   Future<void> warmup() async {
     if (state.engineReady) return;
+    return _warming ??= _doWarmup().whenComplete(() => _warming = null);
+  }
+
+  Future<void> _doWarmup() async {
     try {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
-      _strong = await engine.loadMem('tick_strong', TickSynth.strong());
-      _weak = await engine.loadMem('tick_weak', TickSynth.weak());
-      state = state.copyWith(engineReady: true);
+      if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
+      final strong = await engine.loadMem('tick_strong', TickSynth.strong());
+      final weak = await engine.loadMem('tick_weak', TickSynth.weak());
+      if (!ref.mounted) return;
+      _strong = strong;
+      _weak = weak;
+      // error: null——上次初始化失败的文案不残留到成功之后。
+      state = state.copyWith(engineReady: true, error: null);
     } catch (error) {
+      if (!ref.mounted) return;
       state = state.copyWith(error: '引擎初始化失败:$error');
     }
   }
@@ -164,10 +175,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
 
   void _onEngineError(Object error) {
     stop();
-    state = state.copyWith(
-      running: false,
-      error: '引擎出错,跟练已停止:$error',
-    );
+    state = state.copyWith(running: false, error: '引擎出错,跟练已停止:$error');
   }
 
   void _teardown() {

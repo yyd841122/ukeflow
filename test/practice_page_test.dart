@@ -27,9 +27,11 @@ void main() {
     // 经路由压栈打开:会话页在产品里是 push 页(带返回钮),与导航一致。
     tester
         .state<NavigatorState>(find.byType(Navigator))
-        .push(MaterialPageRoute<void>(
-          builder: (_) => PracticePage(chart: practiceFixtureChart),
-        ));
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => PracticePage(chart: practiceFixtureChart),
+          ),
+        );
     await tester.pumpAndSettle(); // 空闲页无周期定时器,可安全落定
   }
 
@@ -48,19 +50,23 @@ void main() {
     await pumpPage(tester);
 
     expect(find.text('测试曲'), findsOneWidget, reason: 'AppBar 曲名');
-    expect(find.text('测试者 · C 调 · 80 BPM'), findsOneWidget,
-        reason: '元信息行来自谱面 meta');
+    expect(
+      find.text('测试者 · C 调 · 80 BPM'),
+      findsOneWidget,
+      reason: '元信息行来自谱面 meta',
+    );
     expect(find.text('引擎就绪'), findsOneWidget);
     expect(find.byKey(const Key('pattern-island')), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byKey(const Key('practice-start')))
+      tester
+          .widget<FilledButton>(find.byKey(const Key('practice-start')))
           .onPressed,
       isNotNull,
       reason: '引擎就绪后可启',
     );
   });
 
-  testWidgets('引擎初始化失败:错误可见,开始禁用', (tester) async {
+  testWidgets('引擎初始化失败:错误可见、开始禁用,重试钮原地恢复', (tester) async {
     engine = FakeAudioEngine()..failInitialization = true;
     await tester.pumpWidget(
       ProviderScope(
@@ -75,9 +81,23 @@ void main() {
 
     expect(find.textContaining('引擎初始化失败'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byKey(const Key('practice-start')))
+      tester
+          .widget<FilledButton>(find.byKey(const Key('practice-start')))
           .onPressed,
       isNull,
+    );
+
+    // 原地重试:失败源解除后恢复就绪。
+    engine.failInitialization = false;
+    await tester.tap(find.byKey(const Key('warmup-retry')));
+    await tester.pumpAndSettle();
+    expect(find.text('引擎就绪'), findsOneWidget);
+    expect(find.textContaining('引擎初始化失败'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('practice-start')))
+          .onPressed,
+      isNotNull,
     );
   });
 
@@ -112,10 +132,7 @@ void main() {
           .toPlainText(),
       contains('第二行歌词'),
     );
-    expect(
-      tester.widget<Text>(find.byKey(const Key('chord-name'))).data,
-      'C',
-    );
+    expect(tester.widget<Text>(find.byKey(const Key('chord-name'))).data, 'C');
   });
 
   testWidgets('曲末自动回闲:节拍声恰为全曲拍数(无幻拍),控制面板回归', (tester) async {
@@ -126,10 +143,12 @@ void main() {
     // 全曲 16 拍 × 750ms = 12 秒;多推 1 秒喂完尾拍。
     await advanceAndPump(tester, 13000);
 
-    expect(find.byKey(const Key('practice-start')), findsOneWidget,
-        reason: '曲末自动回闲');
-    expect(engine.scheduleLog, hasLength(16),
-        reason: '节拍声恰为全曲拍数,曲末无幻拍声');
+    expect(
+      find.byKey(const Key('practice-start')),
+      findsOneWidget,
+      reason: '曲末自动回闲',
+    );
+    expect(engine.scheduleLog, hasLength(16), reason: '节拍声恰为全曲拍数,曲末无幻拍声');
     for (final call in engine.scheduleLog) {
       expect(call.time.inMilliseconds, lessThan(12000), reason: '都在曲长内');
     }

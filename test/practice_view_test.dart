@@ -26,8 +26,11 @@ void main() {
       pattern: island,
       bpm: 80,
     );
-    final practice =
-        practiceStateAt(timeline: timeline, t0: t0, now: t0 + elapsed)!;
+    final practice = practiceStateAt(
+      timeline: timeline,
+      t0: t0,
+      now: t0 + elapsed,
+    )!;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -42,15 +45,14 @@ void main() {
     );
   }
 
-  String currentLyricPlain(WidgetTester tester) =>
-      tester
-          .widget<Text>(find.byKey(const Key('lyric-current')))
-          .textSpan!
-          .toPlainText();
+  String currentLyricPlain(WidgetTester tester) => tester
+      .widget<Text>(find.byKey(const Key('lyric-current')))
+      .textSpan!
+      .toPlainText();
 
   Color cellColor(WidgetTester tester, int i) =>
       (tester.widget<Container>(find.byKey(Key('play-slot-$i'))).decoration!
-          as BoxDecoration)
+              as BoxDecoration)
           .color!;
 
   Icon? slotIcon(WidgetTester tester, int i) {
@@ -67,18 +69,21 @@ void main() {
     expect(find.text('主歌'), findsOneWidget, reason: '当前段落标签');
     expect(currentLyricPlain(tester), contains('Am'));
     expect(currentLyricPlain(tester), contains('第一行歌词'));
-    expect(find.textContaining('第一行歌词', findRichText: true), findsOneWidget,
-        reason: '曲首无上一行:该行只作为当前行渲染一次');
-    expect(find.textContaining('第二行歌词', findRichText: true), findsOneWidget,
-        reason: '下一行预告可见');
     expect(
-      tester.widget<Text>(find.byKey(const Key('beat-number'))).data,
-      '1',
+      find.textContaining('第一行歌词', findRichText: true),
+      findsOneWidget,
+      reason: '曲首无上一行:该行只作为当前行渲染一次',
     );
     expect(
-      tester.widget<LinearProgressIndicator>(
-        find.byKey(const Key('progress')),
-      ).value,
+      find.textContaining('第二行歌词', findRichText: true),
+      findsOneWidget,
+      reason: '下一行预告可见',
+    );
+    expect(tester.widget<Text>(find.byKey(const Key('beat-number'))).data, '1');
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byKey(const Key('progress')))
+          .value,
       closeTo(0, 1e-9),
     );
   });
@@ -87,8 +92,11 @@ void main() {
     await pumpView(tester, const Duration(seconds: 3, milliseconds: 100));
 
     expect(currentLyricPlain(tester), contains('第二行歌词'));
-    expect(find.textContaining('第一行歌词', findRichText: true), findsOneWidget,
-        reason: '上一行淡出仍可见');
+    expect(
+      find.textContaining('第一行歌词', findRichText: true),
+      findsOneWidget,
+      reason: '上一行淡出仍可见',
+    );
     expect(currentLyricPlain(tester), contains('C'), reason: '当前行行内和弦');
 
     expect(
@@ -111,9 +119,9 @@ void main() {
       reason: '第三行 [C] 独占一小节',
     );
     expect(
-      tester.widget<LinearProgressIndicator>(
-        find.byKey(const Key('progress')),
-      ).value,
+      tester
+          .widget<LinearProgressIndicator>(find.byKey(const Key('progress')))
+          .value,
       closeTo(8 / 16, 1e-9),
       reason: '第 3 小节起:8/16 拍',
     );
@@ -146,5 +154,71 @@ void main() {
     addTearDown(tester.view.reset);
     await pumpView(tester, const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('和弦库缺位降级:和弦名照走,只有指法小图缺席', (tester) async {
+    final timeline = compileTimeline(
+      chart: practiceFixtureChart,
+      pattern: island,
+      bpm: 80,
+    );
+    final practice = practiceStateAt(
+      timeline: timeline,
+      t0: t0,
+      now: t0 + const Duration(milliseconds: 100),
+    )!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PracticeView(
+            timeline: timeline,
+            practice: practice,
+            pattern: island,
+            chords: const {}, // 和弦库缺位的极端路径
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<Text>(find.byKey(const Key('chord-name'))).data,
+      'Am',
+      reason: '名字来自扫弦事件,不依赖查表',
+    );
+    expect(find.byKey(const Key('chord-diagram')), findsNothing);
+  });
+
+  testWidgets('超长歌词行+矮屏:歌词区可滚,不溢出', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1500); // 360×500 逻辑像素
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    final longLine = '很长的一句歌词' * 12;
+    final chart = parseChart('{title: 长词}\n[C]$longLine\n[Am]第二行\n');
+    final timeline = compileTimeline(chart: chart, pattern: island, bpm: 80);
+    final practice = practiceStateAt(
+      timeline: timeline,
+      t0: t0,
+      now: t0 + const Duration(milliseconds: 100),
+    )!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PracticeView(
+            timeline: timeline,
+            practice: practice,
+            pattern: island,
+            chords: chords,
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull, reason: '溢出条纹即失败');
+    expect(
+      find.byType(SingleChildScrollView),
+      findsOneWidget,
+      reason: '长内容落在可滚容器里',
+    );
   });
 }
