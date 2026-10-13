@@ -8,10 +8,11 @@ import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart' show Chord;
 import '../chords/chord_diagram.dart';
 
-/// 跟练运行视图(GLOSSARY「跟练」的显示层):给定练习状态画全部视觉——
-/// 进度、段落标签、歌词提词(当前行高亮)、当前和弦指法小图、扫弦箭头条、
-/// 拍号。薄渲染(ADR-0005):无时钟无动画,一切信息读 [practice],
-/// 由跟练页以 ~16ms 轮询重灌;本组件自己不产生任何时间。
+/// 跟练运行视图(GLOSSARY「跟练」的显示层):给定练习状态画全部视觉。
+/// 版式:右手要看的在**上**——当前和弦指法卡、扫弦箭头条、拍号;
+/// 唱的在下——段落标签与歌词提词(沉底)。薄渲染(ADR-0005):无时钟
+/// 无动画,一切信息读 [practice],由跟练页以 ~16ms 轮询重灌;
+/// 本组件自己不产生任何时间。
 class PracticeView extends StatelessWidget {
   const PracticeView({
     super.key,
@@ -40,6 +41,7 @@ class PracticeView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ── 上:右手弹奏提示 ──
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: LinearProgressIndicator(
@@ -48,20 +50,6 @@ class PracticeView extends StatelessWidget {
                 ? 0
                 : practice.beat / timeline.totalBeats,
           ),
-        ),
-        if (practice.currentSection?.section.label case final label?) ...[
-          const SizedBox(height: 12),
-          Text(
-            label,
-            key: const Key('section-label'),
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: scheme.primary),
-          ),
-        ],
-        Expanded(
-          child: _LyricsArea(lyrics: timeline.lyrics, currentIndex: lyricIndex),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -79,14 +67,28 @@ class PracticeView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: _ArrowStrip(pattern: pattern, currentSlot: _currentSlot),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 4),
         Text(
           '${practice.beatInBar + 1}',
           key: const Key('beat-number'),
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        const SizedBox(height: 8),
+        // ── 下:唱词 ──
+        if (practice.currentSection?.section.label case final label?) ...[
+          const SizedBox(height: 12),
+          Text(
+            label,
+            key: const Key('section-label'),
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.primary),
+          ),
+        ],
+        Expanded(
+          child: _LyricsArea(lyrics: timeline.lyrics, currentIndex: lyricIndex),
+        ),
       ],
     );
   }
@@ -126,14 +128,14 @@ class _LyricsArea extends StatelessWidget {
       );
     }
     final current = lyrics[currentIndex].line;
-    // 短内容垂直居中;长歌词/大字超出可用高度时可滚(RenderFlex 溢出条纹
-    // 在真机上就是内容被截断)。
-    return Center(
+    // 歌词沉底(版式:弹奏提示在上、唱词在下);长歌词/大字超出可用
+    // 高度时可滚(RenderFlex 溢出条纹在真机上就是内容被截断)。
+    return Align(
+      alignment: Alignment.bottomCenter,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (currentIndex > 0)
