@@ -109,21 +109,23 @@ class _TabChartPainter extends CustomPainter {
       canvas.drawLine(Offset(x, top), Offset(x, bottom), tickPaint);
     }
 
-    // 小节线:每小节一条强竖线(0..barCount 共 barCount+1 条),上方标
-    // 小节号(1 起)。
+    // 小节线:每小节一条强竖线(0..barCount 共 barCount+1 条,末条是
+    // 收束线),上方标小节号(1 起);收束线不是小节头,不标号。
     final barPaint = Paint()
       ..color = scheme.onSurface.withValues(alpha: 0.45)
       ..strokeWidth = 1.4;
     for (var bar = 0; bar <= layout.barCount; bar++) {
       final x = layout.barX(bar);
       canvas.drawLine(Offset(x, top - 6), Offset(x, bottom + 6), barPaint);
-      _text(
-        canvas,
-        '${bar + 1}',
-        Offset(x, top - 11),
-        10,
-        scheme.onSurfaceVariant,
-      );
+      if (bar < layout.barCount) {
+        _text(
+          canvas,
+          '${bar + 1}',
+          Offset(x, top - 11),
+          10,
+          scheme.onSurfaceVariant,
+        );
+      }
     }
 
     // 品位点:落在弦线上的实心圆,数字为品位(0 = 空弦)。
