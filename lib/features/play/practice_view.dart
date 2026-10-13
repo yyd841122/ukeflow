@@ -155,10 +155,6 @@ class PracticeView extends StatelessWidget {
             color: scheme.primary,
           ),
         ),
-        // 随行扫弦(真机反馈,工单 10 验收轮):当前行的每小节在其下
-        // 一组扫弦箭头,当拍槽主色点亮——跟唱时视线不离开歌词就知
-        // 道右手此刻扫哪里。
-        _lyricStrums(scheme),
         const SizedBox(height: 14),
         for (var ahead = 1; ahead <= 2; ahead++) ...[
           if (lyricIndex + ahead < timeline.lyrics.length)
@@ -203,79 +199,6 @@ class PracticeView extends StatelessWidget {
       }
     }
     return null;
-  }
-
-  /// 当前行逐小节的随行扫弦(真机反馈,工单 10 验收轮):每组 = 一小节
-  /// 的节奏型槽位。当拍小节逐槽点亮(已扫淡出/当拍主色/未到待命),
-  /// 已过小节整组淡出、未到小节整组弱化——跟唱时扫弦信息贴着歌词,
-  /// 视线不用跳到顶部条带。
-  Widget _lyricStrums(ColorScheme scheme) {
-    final lyricIndex = timeline.lyrics.indexOf(practice.currentLine!);
-    final barMs = timeline.periodMs * beatsPerBar;
-    final barStart =
-        (timeline.lyrics[lyricIndex].time.inMilliseconds / barMs).round();
-    final barEnd = lyricIndex + 1 < timeline.lyrics.length
-        ? (timeline.lyrics[lyricIndex + 1].time.inMilliseconds / barMs).round()
-        : timeline.totalBeats ~/ beatsPerBar;
-    final currentBar = practice.beat ~/ beatsPerBar;
-    final slotNow = _currentSlot; // 复用条带守卫:仅当拍小节给出槽位
-
-    Color cellColor(int bar, int slot) {
-      if (bar < currentBar) {
-        return scheme.onSurfaceVariant.withValues(alpha: 0.3);
-      }
-      if (bar > currentBar) {
-        return scheme.onSurfaceVariant.withValues(alpha: 0.55);
-      }
-      if (slotNow == null) return scheme.onSurface.withValues(alpha: 0.85);
-      if (slot < slotNow) {
-        return scheme.onSurfaceVariant.withValues(alpha: 0.45);
-      }
-      if (slot == slotNow) return scheme.primary;
-      return scheme.onSurface.withValues(alpha: 0.85);
-    }
-
-    Widget cell(int bar, int slot) {
-      final color = cellColor(bar, slot);
-      final stroke = pattern.slots[slot];
-      if (stroke == null) {
-        return Text(
-          '·',
-          key: Key('lyric-strum-$bar-$slot'),
-          style: TextStyle(color: color, fontSize: 12, height: 1),
-        );
-      }
-      return Icon(
-        key: Key('lyric-strum-$bar-$slot'),
-        stroke == StrumDirection.down
-            ? Icons.arrow_downward
-            : Icons.arrow_upward,
-        size: 14,
-        color: color,
-      );
-    }
-
-    return Padding(
-      key: const Key('lyric-strums'),
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          for (var bar = barStart; bar < barEnd; bar++)
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var slot = 0; slot < eighthsPerBar; slot++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: cell(bar - barStart, slot),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
   }
 
   /// 当前点亮槽位。跨小节空档(下小节首槽是空拍)时上一小节的动作

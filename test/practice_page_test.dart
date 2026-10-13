@@ -207,7 +207,7 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('prep-count'))).data, '4');
   });
 
-  testWidgets('真机反馈轮:右栏预告撤除,扫弦随行贴在当前歌词下', (tester) async {
+  testWidgets('真机反馈轮:右栏预告与随行扫弦均已撤除,版式回全宽', (tester) async {
     await pumpPage(tester);
     await tester.ensureVisible(find.byKey(const Key('practice-start')));
     await tester.tap(find.byKey(const Key('practice-start')));
@@ -216,8 +216,8 @@ void main() {
     expect(find.byKey(const Key('preview-past')), findsNothing,
         reason: '右侧俄罗斯方块栏已撤');
     expect(find.byKey(const Key('preview-upcoming-0')), findsNothing);
-    expect(find.byKey(const Key('lyric-strums')), findsOneWidget,
-        reason: '扫弦随行贴当前行');
+    expect(find.byKey(const Key('lyric-strums')), findsNothing,
+        reason: '随行扫弦已撤(歌词对齐方案暂缓)');
   });
 
   testWidgets('运行面板:参考音可切示范扫弦(拨弦声入窗)、变速滑杆生效', (tester) async {
