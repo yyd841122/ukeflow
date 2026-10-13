@@ -110,11 +110,19 @@ void main() {
     expect(find.byKey(const Key('practice-stop')), findsOneWidget);
     expect(find.byKey(const Key('practice-start')), findsNothing);
     expect(
-      tester
-          .widget<Text>(find.byKey(const Key('lyric-current')))
-          .textSpan!
-          .toPlainText(),
-      contains('第一行歌词'),
+      find.descendant(
+        of: find.byKey(const Key('lyric-current')),
+        matching: find.textContaining('第一行歌词'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('lyric-current')),
+        matching: find.text('Am'),
+      ),
+      findsOneWidget,
+      reason: '和弦行在歌词上方',
     );
     expect(
       tester.widget<Text>(find.byKey(const Key('chord-name'))).data,
@@ -126,11 +134,11 @@ void main() {
     // 这里验证的是轮询把练习状态灌进视图。
     await advanceAndPump(tester, 3100);
     expect(
-      tester
-          .widget<Text>(find.byKey(const Key('lyric-current')))
-          .textSpan!
-          .toPlainText(),
-      contains('第二行歌词'),
+      find.descendant(
+        of: find.byKey(const Key('lyric-current')),
+        matching: find.textContaining('第二行歌词'),
+      ),
+      findsOneWidget,
     );
     expect(tester.widget<Text>(find.byKey(const Key('chord-name'))).data, 'C');
   });

@@ -137,52 +137,47 @@ class _LyricsArea extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (currentIndex > 0)
-              _LyricLine(
+              _ChordLyricLine(
                 lyrics[currentIndex - 1].line,
-                base: TextStyle(
+                lyricStyle: TextStyle(
                   fontSize: 15,
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
-                chord: TextStyle(
-                  fontSize: 15,
+                chordStyle: TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
               ),
             const SizedBox(height: 10),
-            Text.rich(
-              TextSpan(
-                children: _lineSpans(
-                  current,
-                  TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.primary.withValues(alpha: 0.9),
-                  ),
-                ),
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface,
-                  height: 1.5,
-                ),
-              ),
+            _ChordLyricLine(
+              current,
               key: const Key('lyric-current'),
-              textAlign: TextAlign.center,
+              lyricStyle: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
+                height: 1.3,
+              ),
+              chordStyle: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+              ),
             ),
             const SizedBox(height: 14),
             for (var ahead = 1; ahead <= 2; ahead++) ...[
               if (currentIndex + ahead < lyrics.length)
-                _LyricLine(
+                _ChordLyricLine(
                   lyrics[currentIndex + ahead].line,
-                  base: TextStyle(
+                  lyricStyle: TextStyle(
                     fontSize: 16,
                     color: scheme.onSurfaceVariant.withValues(
                       alpha: ahead == 1 ? 0.75 : 0.45,
                     ),
                   ),
-                  chord: TextStyle(
-                    fontSize: 16,
+                  chordStyle: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: scheme.onSurfaceVariant.withValues(
                       alpha: ahead == 1 ? 0.75 : 0.45,
@@ -198,42 +193,61 @@ class _LyricsArea extends StatelessWidget {
   }
 }
 
-/// 一行非当前歌词:纯文本渲染(和弦名混排,弱化色)。
-class _LyricLine extends StatelessWidget {
-  const _LyricLine(this.line, {required this.base, required this.chord});
+/// 一行「和弦在歌词上方」的谱面行(GLOSSARY「文本谱」的可视化):
+/// 和弦名按谱面偏移对齐到其后歌词块的上方,和弦与歌词块成对成列,
+/// 超宽自动折行。和弦行恒占位(无和弦的块以空格占位),各列歌词基线对齐;
+/// 和弦悬空(行尾和弦,如长音延续小节)即和弦名下无词,如实提示换和弦点。
+class _ChordLyricLine extends StatelessWidget {
+  const _ChordLyricLine(
+    this.line, {
+    super.key,
+    required this.lyricStyle,
+    required this.chordStyle,
+  });
 
   final StrumLine line;
-  final TextStyle base;
-  final TextStyle chord;
+  final TextStyle lyricStyle;
+  final TextStyle chordStyle;
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: _lineSpans(line, chord),
-        style: base.copyWith(height: 1.4),
-      ),
-      textAlign: TextAlign.center,
+    // 按和弦偏移切块:(和弦名?, 歌词块);每块歌词自其和弦偏移处起。
+    final chunks = <(String?, String)>[];
+    var cursor = 0;
+    for (var i = 0; i < line.chords.length; i++) {
+      final mark = line.chords[i];
+      if (mark.offset > cursor) {
+        chunks.add((null, line.lyric.substring(cursor, mark.offset)));
+      }
+      final next = i + 1 < line.chords.length
+          ? line.chords[i + 1].offset
+          : line.lyric.length;
+      chunks.add((mark.name, line.lyric.substring(mark.offset, next)));
+      cursor = next;
+    }
+    if (cursor < line.lyric.length) {
+      chunks.add((null, line.lyric.substring(cursor)));
+    }
+    if (chunks.isEmpty) {
+      chunks.add((null, ' '));
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 2,
+      children: [
+        for (final (chord, text) in chunks)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(chord ?? ' ', style: chordStyle),
+              Text(text.isEmpty ? ' ' : text, style: lyricStyle),
+            ],
+          ),
+      ],
     );
   }
-}
-
-/// 行内和弦混排:[和弦] 记号按谱面偏移插回歌词文本(GLOSSARY「文本谱」),
-/// 记号名用 [chordStyle] 与歌词区分。偏移由解析器校验(= 已累积文本长度)。
-List<InlineSpan> _lineSpans(StrumLine line, TextStyle chordStyle) {
-  final spans = <InlineSpan>[];
-  var cursor = 0;
-  for (final mark in line.chords) {
-    if (mark.offset > cursor) {
-      spans.add(TextSpan(text: line.lyric.substring(cursor, mark.offset)));
-    }
-    spans.add(TextSpan(text: mark.name, style: chordStyle));
-    cursor = mark.offset;
-  }
-  if (cursor < line.lyric.length) {
-    spans.add(TextSpan(text: line.lyric.substring(cursor)));
-  }
-  return spans;
 }
 
 /// 当前和弦卡:和弦名 + 指法小图,主色容器突出(练习状态里「此刻按什么」)。

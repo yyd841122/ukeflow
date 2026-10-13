@@ -45,10 +45,7 @@ void main() {
     );
   }
 
-  String currentLyricPlain(WidgetTester tester) => tester
-      .widget<Text>(find.byKey(const Key('lyric-current')))
-      .textSpan!
-      .toPlainText();
+  final currentLine = find.byKey(const Key('lyric-current'));
 
   Color cellColor(WidgetTester tester, int i) =>
       (tester.widget<Container>(find.byKey(Key('play-slot-$i'))).decoration!
@@ -63,22 +60,35 @@ void main() {
     return tester.widgetList<Icon>(cell).firstOrNull;
   }
 
-  testWidgets('曲首:当前段落下、第一行高亮(含行内和弦)、后续行可见、拍号 1', (tester) async {
+  testWidgets('曲首:当前段落下、第一行高亮且和弦在歌词上方、后续行可见、拍号 1', (
+    tester,
+  ) async {
     await pumpView(tester, const Duration(milliseconds: 100));
 
     expect(find.text('主歌'), findsOneWidget, reason: '当前段落标签');
-    expect(currentLyricPlain(tester), contains('Am'));
-    expect(currentLyricPlain(tester), contains('第一行歌词'));
     expect(
-      find.textContaining('第一行歌词', findRichText: true),
+      find.descendant(of: currentLine, matching: find.text('Am')),
+      findsOneWidget,
+      reason: '和弦名在当前行内',
+    );
+    expect(
+      find.descendant(of: currentLine, matching: find.textContaining('第一行歌词')),
+      findsOneWidget,
+    );
+    // 布局契约:和弦行在歌词行上方(不与歌词同行混排)。
+    final chordRect = tester.getRect(
+      find.descendant(of: currentLine, matching: find.text('Am')),
+    );
+    final lyricRect = tester.getRect(
+      find.descendant(of: currentLine, matching: find.textContaining('第一行歌词')),
+    );
+    expect(chordRect.bottom, lessThanOrEqualTo(lyricRect.top));
+    expect(
+      find.textContaining('第一行歌词'),
       findsOneWidget,
       reason: '曲首无上一行:该行只作为当前行渲染一次',
     );
-    expect(
-      find.textContaining('第二行歌词', findRichText: true),
-      findsOneWidget,
-      reason: '下一行预告可见',
-    );
+    expect(find.textContaining('第二行歌词'), findsOneWidget, reason: '下一行预告可见');
     expect(tester.widget<Text>(find.byKey(const Key('beat-number'))).data, '1');
     expect(
       tester
@@ -91,13 +101,16 @@ void main() {
   testWidgets('行进:第二行成为当前行,上一行淡出可见,和弦小图切到 C', (tester) async {
     await pumpView(tester, const Duration(seconds: 3, milliseconds: 100));
 
-    expect(currentLyricPlain(tester), contains('第二行歌词'));
     expect(
-      find.textContaining('第一行歌词', findRichText: true),
+      find.descendant(of: currentLine, matching: find.textContaining('第二行歌词')),
       findsOneWidget,
-      reason: '上一行淡出仍可见',
     );
-    expect(currentLyricPlain(tester), contains('C'), reason: '当前行行内和弦');
+    expect(
+      find.descendant(of: currentLine, matching: find.text('C')),
+      findsOneWidget,
+      reason: '当前行的和弦行显示 C',
+    );
+    expect(find.textContaining('第一行歌词'), findsOneWidget, reason: '上一行淡出仍可见');
 
     expect(
       tester.widget<Text>(find.byKey(const Key('chord-name'))).data,
@@ -108,11 +121,14 @@ void main() {
     expect(diagram.fingering.frets, [0, 0, 0, 3], reason: 'C 主指法指法图');
   });
 
-  testWidgets('段落切换:副歌标签、和弦 G7、进度前移', (tester) async {
+  testWidgets('段落切换:副歌标签、和弦 C、进度前移', (tester) async {
     await pumpView(tester, const Duration(seconds: 6, milliseconds: 100));
 
     expect(find.text('副歌'), findsOneWidget);
-    expect(currentLyricPlain(tester), contains('第三行歌词'));
+    expect(
+      find.descendant(of: currentLine, matching: find.textContaining('第三行歌词')),
+      findsOneWidget,
+    );
     expect(
       tester.widget<Text>(find.byKey(const Key('chord-name'))).data,
       'C',
