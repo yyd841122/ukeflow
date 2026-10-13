@@ -15,7 +15,8 @@
 /// 纯函数、零引擎依赖（spec 测试接缝一），标准 flutter test 覆盖。
 library;
 
-import '../audio/beat_scheduling.dart' show beatsPerBar;
+import '../audio/beat_scheduling.dart'
+    show beatsPerBar, requirePositiveFinite;
 import '../model/strum_chart.dart';
 import '../model/strum_pattern.dart';
 
@@ -80,14 +81,21 @@ class PlayStrumEvent extends PlayEvent {
 
 /// 一首谱编译出的动作事件时间轴。
 class PlayTimeline {
-  const PlayTimeline({
-    required this.events,
-    required this.strums,
-    required this.lyrics,
-    required this.sections,
+  /// 私有构造:分类视图（strums/lyrics/sections）一律从 [events] 单一
+  /// 来源派生（编译顺序保证同刻 section→lyric→strum 定序、各自升序）,
+  /// 外部无法再供给与视图发散/失序的列表。唯一构造入口是
+  /// [compileTimeline]。
+  PlayTimeline._(List<PlayEvent> events, {
     required this.periodMs,
     required this.totalBeats,
-  });
+  })  : events = List.unmodifiable(events),
+        strums = List.unmodifiable(
+            [for (final event in events) if (event is PlayStrumEvent) event]),
+        lyrics = List.unmodifiable(
+            [for (final event in events) if (event is PlayLyricEvent) event]),
+        sections = List.unmodifiable([
+          for (final event in events) if (event is PlaySectionEvent) event
+        ]);
 
   /// 全部事件，按时刻升序；同一时刻按 section→lyric→strum 定序。
   /// 示范试听（工单 11）按序遍历它预定发声。
@@ -126,10 +134,14 @@ PlayTimeline compileTimeline({
   required double bpm,
   double speed = 1.0,
 }) {
-  assert(bpm > 0, 'BPM 必须为正');
-  assert(speed > 0, '变速比必须为正（产品范围 50%–100%）');
-
+  // 入参校验抛 ArgumentError(release 也生效,不靠 assert):非正/非有限
+  // 的 BPM 与变速比会让有效拍长爆炸(负值倒轴、0/NaN 取整炸、溢出塌缩)。
+  requirePositiveFinite(bpm, 'bpm', 'BPM');
+  requirePositiveFinite(speed, 'speed', '变速比（产品范围 50%–100%）');
   final periodMs = 60000 / bpm / speed;
+  if (periodMs.isInfinite) {
+    throw ArgumentError.value(periodMs, 'periodMs', '有效拍长非有限（BPM×变速比过小）');
+  }
   final slotMs = periodMs / 2;
 
   // 逐事件四舍五入，不累加（与本文件头注释的定型语义一致）。
@@ -137,60 +149,50 @@ PlayTimeline compileTimeline({
       Duration(milliseconds: (globalSlot * slotMs).round());
 
   final events = <PlayEvent>[];
-  final strums = <PlayStrumEvent>[];
-  final lyrics = <PlayLyricEvent>[];
-  final sections = <PlaySectionEvent>[];
   final strokes = pattern.strokes;
 
   var bar = 0;
   String? currentChord;
   for (var si = 0; si < chart.sections.length; si++) {
     final section = chart.sections[si];
-    final sectionEvent = PlaySectionEvent(
+    events.add(PlaySectionEvent(
       time: slotTime(bar * eighthsPerBar),
       sectionIndex: si,
       section: section,
-    );
-    events.add(sectionEvent);
-    sections.add(sectionEvent);
+    ));
 
     for (var li = 0; li < section.lines.length; li++) {
       final line = section.lines[li];
-      final lyricEvent = PlayLyricEvent(
+      events.add(PlayLyricEvent(
         time: slotTime(bar * eighthsPerBar),
         sectionIndex: si,
         lineIndex: li,
         line: line,
-      );
-      events.add(lyricEvent);
-      lyrics.add(lyricEvent);
+      ));
 
-      final names = [for (final mark in line.chords) mark.name];
-      final barsInLine = names.isEmpty ? 1 : names.length;
-      for (var k = 0; k < barsInLine; k++) {
-        if (k < names.length) currentChord = names[k];
+      for (final barChord in _lineBarChords(line, currentChord)) {
+        currentChord = barChord;
         for (final (slot, stroke) in strokes) {
-          final event = PlayStrumEvent(
+          events.add(PlayStrumEvent(
             time: slotTime(bar * eighthsPerBar + slot),
             barIndex: bar,
             slotInBar: slot,
             direction: stroke,
             chord: currentChord,
-          );
-          events.add(event);
-          strums.add(event);
+          ));
         }
         bar++;
       }
     }
   }
 
-  return PlayTimeline(
-    events: List.unmodifiable(events),
-    strums: List.unmodifiable(strums),
-    lyrics: List.unmodifiable(lyrics),
-    sections: List.unmodifiable(sections),
-    periodMs: periodMs,
-    totalBeats: bar * beatsPerBar,
-  );
+  return PlayTimeline._(events, periodMs: periodMs, totalBeats: bar * beatsPerBar);
 }
+
+/// 行→小节分配（**编译的唯一裁量处**）：行内 k 个和弦记号独占 k 小节
+/// （第 i 小节生效第 i 个记号的和弦），无和弦记号的行占一小节、延续
+/// [currentChord]。返回本行逐小节的生效和弦（长度即该行小节数）。
+List<String?> _lineBarChords(StrumLine line, String? currentChord) =>
+    line.chords.isEmpty
+        ? [currentChord]
+        : [for (final mark in line.chords) mark.name];

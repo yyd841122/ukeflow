@@ -282,6 +282,42 @@ void main() {
     expect(timeline.totalDuration, Duration.zero);
   });
 
+  group('入参校验:非法 BPM/变速比抛 ArgumentError(release 也生效,不靠 assert)', () {
+    // (bpm, speed) → 时间轴;speed 缺省 1.0。
+    PlayTimeline Function(double bpm, double speed) compiler() {
+      final chart = parseChart('{start_of_verse}\n[C]啦\n{end_of_verse}\n');
+      return (double bpm, double speed) => compileTimeline(
+            chart: chart,
+            pattern: builtinStrumPatterns.first,
+            bpm: bpm,
+            speed: speed,
+          );
+    }
+
+    test('bpm 非正或非有限', () {
+      final compile = compiler();
+      for (final bad in [0.0, -120.0, double.nan, double.infinity]) {
+        expect(() => compile(bad, 1.0), throwsArgumentError, reason: 'bpm=$bad');
+      }
+    });
+
+    test('speed 非正或非有限', () {
+      final compile = compiler();
+      for (final bad in [0.0, -0.5, double.nan, double.infinity]) {
+        expect(() => compile(120, bad), throwsArgumentError, reason: 'speed=$bad');
+      }
+    });
+
+    test('bpm 过小致有效拍长溢出为无穷:ArgumentError', () {
+      final compile = compiler();
+      expect(
+        () => compile(1e-320, 1.0),
+        throwsArgumentError,
+        reason: '60000/1e-320 溢出为 infinity,不能拿去算事件时刻',
+      );
+    });
+  });
+
   group('5 首目标曲冒烟（spec：能解析、能编译成时间轴、和弦全在白名单内）', () {
     late List<BuiltInChart> charts;
     late Set<String> libraryLabels;

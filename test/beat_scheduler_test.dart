@@ -96,6 +96,48 @@ void main() {
     });
   });
 
+  test('大跨度变速 40→208:已排队未响拍按新网格重排,不倒挂', () {
+    fakeAsync((async) {
+      final scheduler = BeatScheduler(
+        engine: engine,
+        pickSound: (beat) => beat % 4 == 0 ? strong : weak,
+      );
+      // 40BPM(1500ms/拍)跑到 now=1120ms:拍 1(1500ms)已排队未响
+      // (1120+400=1520 ≥ 1500),拍 2(3000ms)未到。
+      scheduler.start(bpm: 40);
+      for (var i = 0; i < 28; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      expect(scheduler.scheduledCount, 2);
+
+      // 换 208BPM(288.46ms/拍):elapsed=0.747 拍 → 新 t0 = 1120−215 = 905ms。
+      // 旧拍 1(排队在 1500ms)须停掉并按新网格重排到 905+288=1193ms;
+      // 若不重排,新网格拍 2(1482ms)会先于旧拍 1(1500ms)响——倒挂。
+      scheduler.changeBpm(208);
+      // 旧拍 1 的原预定被取消。
+      final oldBeat1 = engine.scheduleLog
+          .lastWhere((c) => c.time == const Duration(milliseconds: 1500));
+      expect(oldBeat1.stopped, isTrue, reason: '已排队未响的旧拍 1 停掉');
+      // 拍 1 按新网格重排,拍 2 在其后:时刻严格递增,无倒挂。
+      expect(engine.scheduleLog[2].time.inMilliseconds, 1193, reason: 'now+73ms(剩余相位×新周期)');
+      expect(engine.scheduleLog[2].stopped, isFalse);
+      expect(engine.scheduleLog[3].time.inMilliseconds, 1482, reason: '905+round(2×288.46)');
+      final live = engine.scheduleLog.where((c) => !c.stopped).map((c) => c.time).toList();
+      for (var i = 1; i < live.length; i++) {
+        expect(live[i], greaterThan(live[i - 1]), reason: '未停预定时刻单调 $i');
+      }
+      expect(scheduler.scheduledCount, 3);
+
+      // 新网格继续:拍 3(905+round(3×288.46)=1770ms)在其取整时刻照常入窗。
+      for (var i = 0; i < 7; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      expect(engine.scheduleLog.last.time, const Duration(milliseconds: 1770));
+    });
+  });
+
   test('stop:未响拍全部停止,已响拍不动;之后不再调度', () {
     fakeAsync((async) {
       final scheduler = BeatScheduler(
@@ -153,6 +195,59 @@ void main() {
     });
   });
 
+  test('start/changeBpm 非正 BPM:ArgumentError,运行状态不受扰动', () {
+    fakeAsync((async) {
+      final scheduler = BeatScheduler(
+        engine: engine,
+        pickSound: (beat) => beat % 4 == 0 ? strong : weak,
+      );
+      // 未运行也不静默吞掉:非法入参即抛(控制器钳制是它的职责,公共缝
+      // 自守——负值曾使 scheduleDue 死循环)。
+      expect(() => scheduler.start(bpm: 0), throwsArgumentError);
+      expect(() => scheduler.start(bpm: -5), throwsArgumentError);
+      expect(scheduler.running, isFalse);
+
+      scheduler.start(bpm: 120);
+      expect(scheduler.running, isTrue);
+      expect(() => scheduler.changeBpm(0), throwsArgumentError);
+      expect(() => scheduler.changeBpm(-1), throwsArgumentError);
+      expect(scheduler.running, isTrue, reason: '非法变速不扰动运行中的网格');
+      // 网格未被扰动:拍 1 仍按 500ms 网格预定。
+      engine.advance(const Duration(milliseconds: 460));
+      async.elapse(const Duration(milliseconds: 460));
+      expect(engine.scheduleLog[1].time, const Duration(milliseconds: 500));
+      expect(scheduler.scheduledCount, 2);
+    });
+  });
+
+  test('错误恢复:引擎 stop 也失败时不掩盖原错误,onError 照达、状态清干净', () {
+    fakeAsync((async) {
+      final halfBroken = HalfBrokenEngine();
+      final errors = <Object>[];
+      final scheduler = BeatScheduler(
+        engine: halfBroken,
+        pickSound: (beat) => weak,
+        onError: errors.add,
+      );
+      // 208BPM:拍 5(@1442ms)是第 6 次 playClocked,注入失败;此刻拍 4
+      // (@1154ms)仍在途——恢复路径若直接调 stop(),会在它的引擎调用上
+      // 再抛,掩盖原错误且 onError 不达。
+      scheduler.start(bpm: 208);
+      for (var i = 0; i < 27; i++) {
+        halfBroken.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      expect(errors, hasLength(1), reason: '上报的是原错误(预定失败),非 stop 的次生错误');
+      expect(errors.first.toString(), contains('引擎预定失败'));
+      expect(scheduler.running, isFalse, reason: '出错自停,不留半死定时器');
+      expect(scheduler.scheduledCount, 0, reason: '调度状态清干净,无残留');
+      // 定时器已取消:推进时间不再报错。
+      halfBroken.advance(const Duration(milliseconds: 40));
+      async.elapse(const Duration(milliseconds: 40));
+      expect(errors, hasLength(1));
+    });
+  });
+
   test('引擎预定抛错:上报 onError 并自停', () {
     fakeAsync((async) {
       final broken = BrokenPlayEngine();
@@ -177,4 +272,20 @@ class BrokenPlayEngine extends FakeAudioEngine {
   @override
   EngineVoice playClocked(EngineSound sound, Duration when) =>
       throw Exception('引擎预定失败(注入)');
+}
+
+/// 预定前 5 次成功、此后必失败,且 stop 一律失败:制造「失败时有在途
+/// 预定 + 恢复路径引擎调用必抛」的现场。
+class HalfBrokenEngine extends FakeAudioEngine {
+  int _playCalls = 0;
+
+  @override
+  EngineVoice playClocked(EngineSound sound, Duration when) {
+    _playCalls++;
+    if (_playCalls > 5) throw Exception('引擎预定失败(注入)');
+    return super.playClocked(sound, when);
+  }
+
+  @override
+  void stop(EngineVoice voice) => throw Exception('引擎停止失败(注入)');
 }

@@ -55,9 +55,11 @@ class PracticeState {
 /// 引擎时刻 [now] → 跟练练习状态。
 ///
 /// [now] 早于 [t0]（预备期）返回 null；节拍网格走出最后一拍（beat ≥
-/// [PlayTimeline.totalBeats]）即曲末，返回 null——曲末边界认网格而非名义
-/// 曲长 [PlayTimeline.totalDuration]，两者至差一次四舍五入（亚毫秒），
-/// 借此杜绝富余窗内 beat == totalBeats 的幻拍。空时间轴恒为 null。
+/// [PlayTimeline.totalBeats]）即曲末，返回 null——曲末边界认网格：beatAt
+/// 与 [BeatSchedule.beatTime] 同一取整边界后，拍 totalBeats 的翻转时刻
+/// 恰等于名义曲长 [PlayTimeline.totalDuration]（同为 round(totalBeats ×
+/// periodMs)），富余窗归末拍，杜绝 beat == totalBeats 的幻拍。空时间轴
+/// 恒为 null。
 PracticeState? practiceStateAt({
   required PlayTimeline timeline,
   required Duration t0,

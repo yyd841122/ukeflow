@@ -175,9 +175,10 @@ void main() {
     expect(identical(state.currentLine, silent.lyrics.single), isTrue);
   });
 
-  test('曲末四舍五入富余窗内不出现幻拍（拍号走出最后一拍即曲末）', () {
-    // BPM 61 两小节：第 8 拍网格起点 7868.85ms，名义曲长四舍五入为 7869ms；
-    // [7868.85, 7869) 的亚毫秒富余窗内不得给出 beat=8 的状态。
+  test('曲末四舍五入富余窗内不出现幻拍(拍号走出最后一拍即曲末)', () {
+    // BPM 61 两小节:第 8 拍网格起点 7868.85ms,取整边界 7869ms(=名义
+    // 曲长);统一取整后富余窗 [7868.85, 7869) 归末拍,7869ms 即曲末——
+    // 任何时刻都不会给出 beat=8 的状态。
     final timeline = compileTimeline(
       chart: parseChart('{start_of_verse}\n[C]啦 [G]啦\n{end_of_verse}\n'),
       pattern: builtinStrumPatterns.first,
@@ -188,20 +189,42 @@ void main() {
       practiceStateAt(
         timeline: timeline,
         t0: t0,
-        now: t0 + const Duration(milliseconds: 7868),
+        now: t0 + const Duration(milliseconds: 7868, microseconds: 900),
       ),
       isNotNull,
-      reason: '7868ms 仍在末拍（第 8 拍，自 0 数第 7）内',
+      reason: '7868.9ms 仍在末拍(第 8 拍,自 0 数第 7)内',
     );
     expect(
       practiceStateAt(
         timeline: timeline,
         t0: t0,
-        now: t0 + const Duration(milliseconds: 7868, microseconds: 900),
+        now: t0 + const Duration(milliseconds: 7869),
       ),
       isNull,
-      reason: '富余窗内节拍网格已走出最后一拍',
+      reason: '取整边界 7869ms = 名义曲长,走出即曲末',
     );
+  });
+
+  test('拍字段与动作查找同毫秒翻转:条带跨小节无空白帧(61BPM 3934ms)', () {
+    // 61BPM:小节 1 首扫弦取整在 3934ms;拍 4 网格点 3934.43ms 取整同为
+    // 3934ms。beatAt 与事件查找同一取整边界 → 同一毫秒一起翻小节,
+    // 跟练条带的跨小节守卫不再有 ~0.4ms 的空白帧(歌词行跨这两小节,
+    // 同行不翻页)。
+    final timeline = compileTimeline(
+      chart: parseChart('{start_of_verse}\n[C]啦 [G]啦\n{end_of_verse}\n'),
+      pattern: builtinStrumPatterns.first,
+      bpm: 61,
+    );
+    final before = practiceStateAt(timeline: timeline, t0: t0, now: at(3933))!;
+    expect(before.beat, 3);
+    expect(before.currentStrum!.barIndex, 0);
+    expect(identical(before.currentLine, timeline.lyrics.single), isTrue);
+
+    final atBoundary = practiceStateAt(timeline: timeline, t0: t0, now: at(3934))!;
+    expect(atBoundary.beat, 4, reason: '拍 4 与小节 1 首扫弦同毫秒翻转');
+    expect(atBoundary.currentStrum!.barIndex, 1);
+    expect(atBoundary.currentStrum!.time.inMilliseconds, 3934);
+    expect(identical(atBoundary.currentLine, timeline.lyrics.single), isTrue);
   });
 
   test('拍字段与 beatAt 全程一致（奇 BPM 61 逐 37ms 扫描）', () {
