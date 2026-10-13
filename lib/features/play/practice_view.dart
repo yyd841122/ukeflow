@@ -94,9 +94,8 @@ class PracticeView extends StatelessWidget {
                     child: _lyricLines(scheme, lyricIndex),
                   ),
                 ),
-                // 下方余白对半分(版式反馈):一半做歌词与进度条的间隙,
-                // 一半留在进度条之下到停止键。
-                const Spacer(),
+                // 下方余白 2:1(版式反馈):歌词侧更松、进度条下更紧。
+                const Spacer(flex: 2),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: LinearProgressIndicator(
@@ -106,7 +105,7 @@ class PracticeView extends StatelessWidget {
                         : practice.beat / timeline.totalBeats,
                   ),
                 ),
-                const Spacer(),
+                const Spacer(flex: 1),
               ],
             ),
           ),
