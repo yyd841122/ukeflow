@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# pre-commit:tool/check.sh quick(fakeAsync 假绿 grep + flutter analyze,~5s)。
+# 仓库曾三度靠"记得手动跑 analyze"拦编译错,接线后机械拦(工单 13 retro)。
+# 临时绕过:git commit --no-verify。
+exec "$(git rev-parse --show-toplevel)/tool/check.sh" quick
