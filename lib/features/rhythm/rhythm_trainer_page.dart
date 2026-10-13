@@ -45,7 +45,10 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
   @override
   void dispose() {
     _poll?.cancel();
-    _controller.stop();
+    // 弹回即停。Riverpod 3 禁止 widget unmount 期间改 provider 状态
+    // (运行中直接 stop 会抛"tried to modify a provider"),推迟一个微任务:
+    // 调度与节拍声在下一宏任务前即全停,无任何残留。
+    scheduleMicrotask(_controller.stop);
     super.dispose();
   }
 

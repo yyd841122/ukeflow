@@ -131,6 +131,28 @@ void main() {
     });
   });
 
+  test('totalBeats 有界:走出最后一拍不再预定(曲末无幻拍声)', () {
+    fakeAsync((async) {
+      final scheduler = BeatScheduler(
+        engine: engine,
+        pickSound: (beat) => beat % 4 == 0 ? strong : weak,
+      );
+      // 曲长 4 拍(500ms/拍):10 秒远超曲末,窗内也只到拍 3 为止。
+      scheduler.start(bpm: 120, totalBeats: 4);
+      for (var i = 0; i < 250; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      expect(scheduler.scheduledCount, 4, reason: '只预定拍 0..3');
+      expect(engine.scheduleLog.map((c) => c.time).toList(), [
+        Duration.zero,
+        const Duration(milliseconds: 500),
+        const Duration(milliseconds: 1000),
+        const Duration(milliseconds: 1500),
+      ]);
+    });
+  });
+
   test('引擎预定抛错:上报 onError 并自停', () {
     fakeAsync((async) {
       final broken = BrokenPlayEngine();

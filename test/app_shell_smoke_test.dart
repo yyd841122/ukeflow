@@ -7,6 +7,7 @@ import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 
 import 'helpers/chord_fixtures.dart';
+import 'helpers/chart_fixtures.dart';
 
 void main() {
   // 每个用例各建一个 ProviderScope，各自创建并关闭 AppDatabase；关闭是异步的，
@@ -15,8 +16,15 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
-  Widget app() => ProviderScope(
-    overrides: [chordLibraryFixtureOverride()],
+  // 工单 09 起跟练页签加载内置曲库：同为 fixture 谱。传 engine 时一并注入假引擎。
+  Widget app([FakeAudioEngine? engine]) => ProviderScope(
+    overrides: [
+      chordLibraryFixtureOverride(),
+      builtinChartsFixtureOverride([
+        (id: 'test-chart-a', chart: practiceFixtureChart),
+      ]),
+      if (engine != null) audioEngineProvider.overrideWithValue(engine),
+    ],
     child: const UkeFlowApp(),
   );
   Finder navLabel(String label) => find.descendant(
@@ -42,11 +50,12 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // 页面标记 = 各页内独有的文本（占位页标题 / 和弦库分组头，工单 02 起和弦页为真页面）。
+    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 跟练曲库节,
+    // 工单 02 起和弦页、工单 09 起跟练页为真页面)。
     const pageMarkers = {
       '调音器': '此页由后续工单实现',
       '和弦': '常用',
-      '跟练': '此页由后续工单实现',
+      '跟练': '内置曲库',
       '路径': '此页由后续工单实现',
       '曲库': '此页由后续工单实现',
     };
@@ -64,13 +73,7 @@ void main() {
   testWidgets('跟练页的节拍器入口可直达节拍器页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          chordLibraryFixtureOverride(),
-          audioEngineProvider.overrideWithValue(engine),
-        ],
-        child: const UkeFlowApp(),
-      ),
+      app(engine),
     );
     await tester.pumpAndSettle();
 
@@ -91,13 +94,7 @@ void main() {
   testWidgets('跟练页的节奏型训练入口可直达训练页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          chordLibraryFixtureOverride(),
-          audioEngineProvider.overrideWithValue(engine),
-        ],
-        child: const UkeFlowApp(),
-      ),
+      app(engine),
     );
     await tester.pumpAndSettle();
 

@@ -7,12 +7,16 @@
 **Status:** ready-for-agent
 
 - [ ] 真机完整跟练《沧海一声笑》:音画同步目测无漂移(spike B 判据)
-- [ ] 和弦指法小图随当前和弦正确切换
-- [ ] 扫弦箭头与节拍声同源同刻
-- [ ] UI 层无自计时的路径(对照 ADR-0005 评审)
+- [x] 和弦指法小图随当前和弦正确切换
+- [x] 扫弦箭头与节拍声同源同刻
+- [x] UI 层无自计时的路径(对照 ADR-0005 评审)
 - [ ] 真机演示通过(戴耳机/外放自听)
 
 ## Comments
 
 - 2026-10-09 (工单01 会话): 本票是同步引擎心脏。落地并通过 /code-review 后,建议用跨模型审计(xiaolai/cc-suite 的 /cc-suite:audit,需 codex CLI)对本票触及的同步引擎文件做一次范围审计——Codex 与 Claude 盲区不相关,这是全项目风险最集中处,值得第二意见。里程碑级动作,非每票必跑。
 - 2026-10-12 (工单03 会话;06 会话更新): 本票重做 PlayPage 时,须迁移暂挂其上的两个入口——节拍器(`features/rhythm/metronome_page.dart`)与节奏型训练器(`features/rhythm/rhythm_trainer_page.dart`,工单 06 增设),均经 Navigator.push 打开——勿随占位页一起删掉;后续可考虑合并为同一入口。
+- 2026-10-13 (本票会话): **落地,待真机验收后转 done**。曲库点曲(`PlayPage` 页签:内置曲库列表+两入口迁移保留)→ 会话页(`PracticePage`:空闲面板定 BPM[默认谱面 tempo,钳 40–208]与节奏型→开始)→ 运行(16ms 轮询 `practiceStateAt` 薄渲染:段落标签/歌词提词[上一行淡出+当前行大字+后续两行]/当前和弦卡[名+指法小图]/8 槽箭头条/拍号/总进度;节拍声走 BeatScheduler 复用强弱拍管线,`start(totalBeats:)` 新参使节拍声与曲末判定同界,无幻拍声;曲末自动回闲;弹回即停)。新文件:play/{play_page,practice_page,practice_view,play_practice_controller,chart_meta}.dart;测试 5 文件 21 例,全库 209 绿、analyzer 零告警。
+- 2026-10-13 (本票会话): **双轴评审(/code-review Standards+Spec)结果与修复**:硬性标准全过(零挂钟、纯函数+轮询纪律、playClocked 同源、GLOSSARY 用语)。修复:①运行面板和弦库缺位时降级(原名/小图缺席,不再永久转圈)②practice_page 补 360dp 窄屏溢出测试③本票新增重复收拢(谱面元信息行 → chart_meta.dart;冒烟测试覆盖块合并)。Spec 轴确认:两入口迁移✓、无自计时路径✓、扫弦/节拍同刻✓、小图随和弦切换✓。
+- 2026-10-13 (本票会话): **决策记录**:①「歌词随节拍滚动」v1 为阶梯式换行(当前行推进整体上移),平滑滚动需引擎时刻时间插值,归打磨——指针落票 23;②spec 故事 16「谱面和弦位置指法小图」按票面收窄为「当前和弦卡一处小图」,行内和弦为文字混排,如需行内小图另立票;③谱面 tempo 越界静默钳制 40–208(与节拍器/训练器同一量程,内置谱 70–116 不触及);④曲库列表即「选一首内置弹唱谱」的最低实现,与曲库页(工单 15,features/library)无涉;⑤弹回即停用 scheduleMicrotask 推迟(Riverpod 3 禁 unmount 期间改 provider 状态),训练页同模式顺修+`ref.mounted` 守卫。
+- 2026-10-13 (本票会话): **挂起项落票**:箭头槽位条(8 槽视觉状态机)现有两份消费方(训练页/跟练 PracticeView)+BPM 控件/引擎状态行两份重复——提取归票 19 重做调音器页时(其 Comments 已补指针);平滑歌词滚动归票 23。命名:`PlayPage`(页签)/`PracticePage`(会话页)一字差,下次触及 play/ 目录时理顺。跨模型审计:codex CLI(codex-cli 0.160.1)与 cc-suite 插件均在,待用户点头即跑。

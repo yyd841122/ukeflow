@@ -42,12 +42,15 @@ class BeatScheduler {
   }
 
   /// 从引擎当前时刻起跑,并立即过一次窗(第 0 拍即刻可闻)。
-  void start({required int bpm}) {
+  /// [totalBeats] 给定时走出最后一拍不再预定(跟练曲末无幻拍声,
+  /// 与 practiceStateAt 的曲末判定同界);null = 连续(节拍器/训练器)。
+  void start({required int bpm, int? totalBeats}) {
     stop();
     _schedule = BeatSchedule(
       t0: engine.engineTime(),
       nextBeat: 0,
       periodMs: 60000 / bpm,
+      totalBeats: totalBeats,
     );
     // 先建定时器再首过:首过抛错时 catch 里的 stop() 才能取消它。
     _timer = Timer.periodic(pollInterval, (_) => _pass());

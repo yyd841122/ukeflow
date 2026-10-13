@@ -131,8 +131,10 @@ class RhythmTrainerController extends Notifier<RhythmTrainerState> {
   }
 
   void stop() {
+    // 引擎侧停止不依赖 ref:容器已销毁(应用退出竞态)也照停。
     _scheduler?.stop();
     _scheduler = null;
+    if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
     if (state.running) {
       state = state.copyWith(running: false);
     }
