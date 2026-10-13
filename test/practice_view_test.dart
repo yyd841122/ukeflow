@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/model/builtin_strum_patterns.dart';
+import 'package:ukeflow/core/model/strum_chart.dart';
+import 'package:ukeflow/core/model/strum_pattern.dart';
 import 'package:ukeflow/core/practice/play_timeline.dart';
 import 'package:ukeflow/core/practice/practice_state.dart';
 import 'package:ukeflow/features/chords/chord_diagram.dart';
@@ -20,11 +22,17 @@ void main() {
 
   /// 谱与时间轴每次现构造(parseChart 的 expect 须在测试内求值);
   /// 80 BPM:750ms/拍、一拍两槽 375ms、一行(一小节)3 秒、全曲 16 拍。
-  Future<void> pumpView(WidgetTester tester, Duration elapsed) async {
+  Future<void> pumpView(
+    WidgetTester tester,
+    Duration elapsed, {
+    StrumChart? chart,
+    StrumPattern? pattern,
+    double bpm = 80,
+  }) async {
     final timeline = compileTimeline(
-      chart: practiceFixtureChart,
-      pattern: island,
-      bpm: 80,
+      chart: chart ?? practiceFixtureChart,
+      pattern: pattern ?? island,
+      bpm: bpm,
     );
     final practice = practiceStateAt(
       timeline: timeline,
@@ -37,7 +45,7 @@ void main() {
           body: PracticeView(
             timeline: timeline,
             practice: practice,
-            pattern: island,
+            pattern: pattern ?? island,
             chords: chords,
           ),
         ),
@@ -59,6 +67,83 @@ void main() {
     );
     return tester.widgetList<Icon>(cell).firstOrNull;
   }
+
+  Color lyricStrumColor(WidgetTester tester, int bar, int slot) =>
+      tester.widget<Icon>(find.byKey(Key('lyric-strum-$bar-$slot'))).color!;
+
+  ColorScheme schemeOf(WidgetTester tester) => Theme.of(
+    tester.element(find.byKey(const Key('lyric-strums'))),
+  ).colorScheme;
+
+  testWidgets('当前歌词行下方渲染本行小节的扫弦行:当拍槽主色、已扫淡出、未到待命', (
+    tester,
+  ) async {
+    // elapsed 1200ms:第 1 行(bar 0),拍内 1.6 拍;岛国型当前槽 = 3。
+    await pumpView(tester, const Duration(milliseconds: 1200));
+
+    expect(find.byKey(const Key('lyric-strums')), findsOneWidget,
+        reason: '扫弦行贴在当前行下方');
+    expect(find.byKey(const Key('lyric-strums')), findsOneWidget,
+        reason: '只有当前行有扫弦行,上一行/下一行没有');
+
+    final scheme = schemeOf(tester);
+    expect(
+      lyricStrumColor(tester, 0, 3),
+      scheme.primary,
+      reason: '当前槽(岛国型 slot 3 @1125ms)主色',
+    );
+    expect(
+      lyricStrumColor(tester, 0, 0),
+      scheme.onSurfaceVariant.withValues(alpha: 0.45),
+      reason: '已扫过的槽淡出',
+    );
+    expect(
+      lyricStrumColor(tester, 0, 6),
+      scheme.onSurface.withValues(alpha: 0.85),
+      reason: '未到的槽待命',
+    );
+  });
+
+  testWidgets('多和弦行 = 多小节:逐小节一组扫弦,已过小节整组淡出、当拍小节高亮', (
+    tester,
+  ) async {
+    // 两小节行([C]啦 [G]啦啦)@120BPM:小节 2 秒;elapsed 2500 在第 2 小节。
+    const twoBarChart = '{start_of_verse}\n[C]啦 [G]啦啦\n{end_of_verse}\n';
+    await pumpView(
+      tester,
+      const Duration(milliseconds: 2500),
+      chart: parseChart(twoBarChart),
+      pattern: builtinStrumPatterns.first, // 全下扫,无空槽,槽位好认
+      bpm: 120,
+    );
+
+    expect(find.byKey(const Key('lyric-strum-0-0')), findsOneWidget,
+        reason: '第 1 小节组');
+    expect(find.byKey(const Key('lyric-strum-1-0')), findsOneWidget,
+        reason: '第 2 小节组');
+
+    final scheme = schemeOf(tester);
+    expect(
+      lyricStrumColor(tester, 0, 0),
+      scheme.onSurfaceVariant.withValues(alpha: 0.3),
+      reason: '已过小节整组淡出',
+    );
+    expect(
+      lyricStrumColor(tester, 1, 0),
+      scheme.onSurfaceVariant.withValues(alpha: 0.45),
+      reason: '当拍小节内已扫槽淡出(slot0 @2000ms 已过)',
+    );
+    expect(
+      lyricStrumColor(tester, 1, 2),
+      scheme.primary,
+      reason: '当拍槽(slot2 @2500ms,全下扫奇数槽为空拍)主色',
+    );
+    expect(
+      lyricStrumColor(tester, 1, 4),
+      scheme.onSurface.withValues(alpha: 0.85),
+      reason: '当拍小节未到槽(slot4 @3000ms)待命',
+    );
+  });
 
   testWidgets('曲首:当前段落下、第一行高亮且和弦在歌词上方、后续行可见、拍号 1', (
     tester,

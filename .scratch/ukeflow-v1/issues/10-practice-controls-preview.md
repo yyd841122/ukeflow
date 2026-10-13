@@ -30,3 +30,7 @@
   - **规范轴(judgement calls,已收)**:页面 chord-map 字面量 ×3 → `_chordMap` 单源;StrumScheduler 45ms 魔数 → `PluckPlayer.strumGap` 单源(测试早已引常量,生产用字面量的分叉消除);stop/catch 12 行遥拆 → `_clearScheduleState`/`_stopPending`(与 BeatScheduler 同纪律同形状);40/400/40 调度常量改引用 BeatSchedule/BeatScheduler 单源;pluck 音源键 → `_keyFor` 单一来源;`StrumScheduler.start` 先 stop(与 BeatScheduler.start 契约对齐)。**未动**:工单状态标签(真机验收后转 done,仓库无 in-review 标签)、requirePositiveFinite 归属 core/audio(与 play_timeline 既有引用同形,搬移收益低)、prepStateAt 参数束(4 处调用,量小不值得束类型)。
   - spec 轴对 BeatScheduler BPM→periodMs 连带改动的判定:超出本票特性面但为声画同刻所需、已在票内申报,**可辩护,保留**。
 
+- 2026-10-13 (工单10 会话·真机反馈轮): 用户装机试玩后两条反馈,已落地(全库 265 测试绿、analyzer 零告警):
+  - **撤除右侧俄罗斯方块预告栏**,版式回到无右栏(PracticeView 全宽,工单09 迭代定型的版式原样恢复)。`PracticeState.previousStrum` 随之失去消费者一并删除;`upcomingStrums`/`defaultPreviewWindow` 查询保留(工单08 定型的练习状态缝,GLOSSARY「练习状态」仍含预告窗)。GLOSSARY 撤「俄罗斯方块预告」词条(UI 已不存在)。
+  - **扫弦随行贴歌词**:当前歌词行下方按本行小节数逐小节渲染一组节奏型槽位箭头(键 lyric-strums/lyric-strum-<行内小节>-<槽>),当拍小节逐槽点亮(已扫淡出/当拍主色/未到待命)、已过小节整组淡出、未到小节整组弱化——跟唱时视线不离歌词即知右手此刻扫哪里。顶部 8 槽大条带保留(未要求撤)。
+  - 验收状态不变:待用户真机复验(含上一轮未验完的非 80 BPM 项)。

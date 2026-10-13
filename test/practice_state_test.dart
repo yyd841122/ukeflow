@@ -246,20 +246,6 @@ void main() {
 
   // ── 工单 10:控制态查询 ────────────────────────────────────────────
 
-  test('previousStrum:当前动作的上一动作;曲首为 null', () {
-    final timeline = fiveBars();
-
-    // elapsed 600:当前 = 500ms 扫弦,上一 = 0ms 扫弦。
-    final mid = practiceStateAt(timeline: timeline, t0: t0, now: at(600))!;
-    expect(mid.currentStrum!.time, const Duration(milliseconds: 500));
-    expect(mid.previousStrum!.time, Duration.zero);
-
-    // 曲首(elapsed 0):当前 = 首扫弦,无上一动作。
-    final first = practiceStateAt(timeline: timeline, t0: t0, now: at(0))!;
-    expect(first.currentStrum!.time, Duration.zero);
-    expect(first.previousStrum, isNull);
-  });
-
   test('prepStateAt:预备窗内返回剩余倒计,窗前/窗后 null', () {
     // 预备 4 拍 @ 750ms/拍:预备窗 [t0Prep, t0Prep+3000)。
     const t0Prep = Duration(milliseconds: 5000);

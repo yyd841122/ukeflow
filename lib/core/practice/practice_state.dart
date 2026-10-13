@@ -22,7 +22,6 @@ class PracticeState {
     required this.beat,
     required this.beatInBar,
     required this.isStrongBeat,
-    required this.previousStrum,
     required this.currentStrum,
     required this.upcomingStrums,
     required this.currentLine,
@@ -41,10 +40,6 @@ class PracticeState {
   /// 当前扫弦动作＝最后一个时刻 ≤ now 的扫弦事件；持稳到下一动作，
   /// 空拍槽不翻转（手照摆不触弦）。曲首还没有任何动作时为 null。
   final PlayStrumEvent? currentStrum;
-
-  /// 上一扫弦动作（俄罗斯方块预告的「过去动作淡出」位，工单 10）＝
-  /// 倒数第二个时刻 ≤ now 的扫弦事件；曲首不足两个动作时为 null。
-  final PlayStrumEvent? previousStrum;
 
   /// 预告窗口 (now, now+previewWindow] 内的扫弦动作，按时刻升序、
   /// 已完成的绝不回流。当前动作不在其中。
@@ -86,7 +81,6 @@ PracticeState? practiceStateAt({
     beatInBar: beatInBar,
     isStrongBeat: isStrongBeat,
     currentStrum: lastStrum < 0 ? null : strums[lastStrum],
-    previousStrum: lastStrum < 1 ? null : strums[lastStrum - 1],
     upcomingStrums: List.unmodifiable([
       for (var i = lastStrum + 1;
           i < strums.length && strums[i].time <= elapsed + previewWindow;

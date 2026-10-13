@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
-import 'package:ukeflow/core/model/builtin_strum_patterns.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
 
@@ -208,21 +207,17 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('prep-count'))).data, '4');
   });
 
-  testWidgets('俄罗斯方块预告栏:过去淡出、当前突出、未来可读', (tester) async {
+  testWidgets('真机反馈轮:右栏预告撤除,扫弦随行贴在当前歌词下', (tester) async {
     await pumpPage(tester);
     await tester.ensureVisible(find.byKey(const Key('practice-start')));
     await tester.tap(find.byKey(const Key('practice-start')));
-    await advanceAndPump(tester, 4200); // 曲内 1200ms:当前=750ms 扫弦
+    await advanceAndPump(tester, 4200); // 曲内 1200ms:第一行、Am
 
-    expect(find.byKey(const Key('preview-past')), findsOneWidget);
-    expect(find.byKey(const Key('preview-current')), findsOneWidget);
-    expect(find.byKey(const Key('preview-upcoming-0')), findsOneWidget);
-    expect(
-      find.byKey(const Key('preview-upcoming-2')),
-      findsOneWidget,
-      reason: '2 秒预告窗内 3 个未来动作(全下扫 750ms 一发)',
-    );
-    expect(find.byKey(const Key('preview-upcoming-3')), findsNothing);
+    expect(find.byKey(const Key('preview-past')), findsNothing,
+        reason: '右侧俄罗斯方块栏已撤');
+    expect(find.byKey(const Key('preview-upcoming-0')), findsNothing);
+    expect(find.byKey(const Key('lyric-strums')), findsOneWidget,
+        reason: '扫弦随行贴当前行');
   });
 
   testWidgets('运行面板:参考音可切示范扫弦(拨弦声入窗)、变速滑杆生效', (tester) async {
@@ -280,35 +275,6 @@ void main() {
     final countAfterEnd = engine.scheduleLog.length;
     await advanceAndPump(tester, 2000);
     expect(engine.scheduleLog, hasLength(countAfterEnd), reason: '回闲后不再调度');
-  });
-
-  testWidgets('快节奏密集型下预告栏有界:未来动作最多 6 条,余量折叠计数', (tester) async {
-    await pumpPage(tester);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byKey(const Key('practice-start'))),
-    );
-    // 208BPM + 岛国型(每小节 6 扫、最密 144ms 间隔):2 秒窗内动作最多。
-    container.read(playPracticeProvider.notifier)
-      ..setPattern(builtinStrumPatterns.last)
-      ..setBpm(208);
-    await tester.ensureVisible(find.byKey(const Key('practice-start')));
-    await tester.tap(find.byKey(const Key('practice-start')));
-    // 曲头 = round(4×288.46) = 1154ms;推到曲内 900ms。
-    await advanceAndPump(tester, 2054);
-
-    expect(find.byKey(const Key('preview-upcoming-5')), findsOneWidget);
-    expect(
-      find.byKey(const Key('preview-upcoming-6')),
-      findsNothing,
-      reason: '只直排最近 6 个',
-    );
-    expect(find.byKey(const Key('preview-overflow')), findsOneWidget);
-    expect(
-      tester.widget<Text>(find.byKey(const Key('preview-overflow'))).data,
-      '+4',
-      reason: '窗内 10 个未来动作 − 直排 6 = 折叠 4',
-    );
-    expect(tester.takeException(), isNull, reason: '预告栏不溢出');
   });
 
   testWidgets('窄屏(360dp):空闲面板与运行视图都不溢出', (tester) async {

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
-import '../../core/practice/play_timeline.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart';
 import 'chart_meta.dart';
@@ -336,19 +335,11 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     // 和弦名/歌词/箭头照走(视图对查不到的和弦本就兜底显示名字)。
     // Riverpod 3 的 AsyncValue.value 在 error 态返回 null,恰作降级判据。
     final chords = _chordMap(libraryAsync.value);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: PracticeView(
-            timeline: timeline,
-            practice: visual,
-            pattern: pattern,
-            chords: chords,
-          ),
-        ),
-        _PreviewRail(practice: visual, chords: chords),
-      ],
+    return PracticeView(
+      timeline: timeline,
+      practice: visual,
+      pattern: pattern,
+      chords: chords,
     );
   }
 
@@ -467,142 +458,6 @@ class _ReferenceToggle extends StatelessWidget {
       ],
       selected: {reference},
       onSelectionChanged: (selection) => onChanged(selection.first),
-    );
-  }
-}
-
-/// 俄罗斯方块预告栏(工单 10,侧边):上一动作淡出、当前动作突出、
-/// 预告窗内未来动作依次可读。一切信息读 [practice](轮询重灌),
-/// 本组件无时钟无动画。
-class _PreviewRail extends StatelessWidget {
-  const _PreviewRail({required this.practice, required this.chords});
-
-  /// 直排的未来动作上限(超出折叠为计数,见 build 内注释)。
-  static const maxUpcoming = 6;
-
-  final PracticeState practice;
-  final Map<String, Chord> chords;
-
-  @override
-  Widget build(BuildContext context) {
-    final upcoming = practice.upcomingStrums;
-    final shownUpcoming = upcoming.length > maxUpcoming
-        ? upcoming.sublist(0, maxUpcoming)
-        : upcoming;
-    final entries = <Widget>[
-      // 过去动作淡出(俄罗斯方块的「已落定」位)。
-      if (practice.previousStrum case final PlayStrumEvent past)
-        _PreviewTile(
-          key: const Key('preview-past'),
-          event: past,
-          style: _PreviewStyle.past,
-        ),
-      if (practice.currentStrum case final PlayStrumEvent current)
-        _PreviewTile(
-          key: const Key('preview-current'),
-          event: current,
-          style: _PreviewStyle.current,
-        ),
-      for (var i = 0; i < shownUpcoming.length; i++)
-        _PreviewTile(
-          key: Key('preview-upcoming-$i'),
-          event: shownUpcoming[i],
-          style: _PreviewStyle.upcoming,
-        ),
-      // 快节奏(如 208BPM 密集型)下 2 秒窗内动作可多达十来个,整列
-      // 直排会撑爆高度:只收最近的若干个,余量折叠为计数(最近的才
-      // 来得及读,远的本来就是格子里的一团)。
-      if (upcoming.length > maxUpcoming)
-        Text(
-          '+${upcoming.length - maxUpcoming}',
-          key: const Key('preview-overflow'),
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-        ),
-    ];
-    return SizedBox(
-      width: 84,
-      // 短视口兜底:容量上限之外再给滚动,任何屏高不溢出。
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            for (final entry in entries) ...[
-              entry,
-              const SizedBox(height: 6),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-enum _PreviewStyle { past, current, upcoming }
-
-/// 预告栏一格:方向箭头 + 和弦名。三档样式:过去淡出、当前主色突出、
-/// 未来描边待命。
-class _PreviewTile extends StatelessWidget {
-  const _PreviewTile({
-    super.key,
-    required this.event,
-    required this.style,
-  });
-
-  final PlayStrumEvent event;
-  final _PreviewStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final Color fill;
-    final Color content;
-    final Border? border;
-    switch (style) {
-      case _PreviewStyle.past:
-        fill = Colors.transparent;
-        content = scheme.onSurfaceVariant.withValues(alpha: 0.35);
-        border = null;
-      case _PreviewStyle.current:
-        fill = scheme.primaryContainer;
-        content = scheme.onPrimaryContainer;
-        border = null;
-      case _PreviewStyle.upcoming:
-        fill = Colors.transparent;
-        content = scheme.onSurface;
-        border = Border.all(color: scheme.outlineVariant);
-    }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(10),
-        border: border,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            event.direction == StrumDirection.down
-                ? Icons.arrow_downward
-                : Icons.arrow_upward,
-            color: content,
-            size: 20,
-          ),
-          Text(
-            event.chord ?? '—',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: content,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
