@@ -276,6 +276,50 @@ void main() {
     );
   });
 
+  test('prepStateAt 边界扫域(40..208 逐 1):预备期倒计恒在,曲头无缝交正曲', () {
+    // 单点整除 BPM(80/120)测不出 round(4×period) 的取整误差——曾炸出
+    // 208BPM 下 0 时刻被误判预备窗外→页面当曲末停机。全 BPM 扫描锁死
+    // 这一整类,并断言与 practiceStateAt 的同刻交接(预备毕即入正曲)。
+    for (var bpm = 40; bpm <= 208; bpm++) {
+      final periodMs = 60000 / bpm;
+      final t0Prep = const Duration(milliseconds: 977); // 非零锚防偶然对齐
+      final roundPrepMs = (4 * periodMs).round();
+      final songT0 = t0Prep + Duration(milliseconds: roundPrepMs);
+      final samePeriod = compileTimeline(
+        chart: parseChart(fiveBarChart),
+        pattern: builtinStrumPatterns.first,
+        bpm: bpm.toDouble(),
+      );
+      for (var us = 0; us < roundPrepMs * 1000; us += 37000) {
+        expect(
+          prepStateAt(
+            now: t0Prep + Duration(microseconds: us),
+            t0Prep: t0Prep,
+            periodMs: periodMs,
+          ),
+          isNotNull,
+          reason: 'bpm=$bpm us=$us:预备期内倒计不得缺席(缺席即页面误判曲末)',
+        );
+      }
+      final lastPrep = t0Prep + Duration(microseconds: roundPrepMs * 1000 - 1);
+      expect(
+        prepStateAt(now: lastPrep, t0Prep: t0Prep, periodMs: periodMs)!.count,
+        1,
+        reason: 'bpm=$bpm:曲头前 1µs 仍在最后预备拍',
+      );
+      expect(
+        prepStateAt(now: songT0, t0Prep: t0Prep, periodMs: periodMs),
+        isNull,
+        reason: 'bpm=$bpm:曲头起预备结束',
+      );
+      expect(
+        practiceStateAt(timeline: samePeriod, t0: songT0, now: songT0),
+        isNotNull,
+        reason: 'bpm=$bpm:预备毕同刻即入正曲(无缝交接,双 null 才是误判曲末)',
+      );
+    }
+  });
+
   test('prepStateAt:非整除拍周期(208BPM)边界不误判窗外', () {
     // 208BPM:周期 288.46ms,预备跨度 round(4×288.46) = 1154ms。
     // 锚在预备第 0 拍(网格原点)时 0 时刻恒倒数 4;若锚取整后的曲头
