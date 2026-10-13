@@ -174,13 +174,18 @@ class _TabChartPainter extends CustomPainter {
     // 品位点:落在弦线上的实心圆,数字为品位(0 = 空弦)。跟练高亮
     // 三级:当前音主色加大+描边环(「此刻拨这」)、预亮窗内音三级色
     // (「左手提前移」)、已响音淡出;无高亮/未到音 = 静态主色。
+    // 当前**组**按拍位相等取:同拍多音(和弦对)同刻拨响,一齐突出,
+    // 不让先录入的那个从预亮直接跌进已响(工单 13 评审修)。
     final highlight = this.highlight;
+    final currentBeat = (highlight == null || highlight.currentIndex < 0)
+        ? null
+        : layout.notes[highlight.currentIndex].beat;
     for (var i = 0; i < layout.notes.length; i++) {
       final note = layout.notes[i];
-      final isCurrent = highlight != null && i == highlight.currentIndex;
+      final isCurrent = currentBeat != null && note.beat == currentBeat;
       final isUpcoming =
           highlight != null && highlight.upcomingIndexes.contains(i);
-      final isPast = highlight != null && i < highlight.currentIndex;
+      final isPast = currentBeat != null && note.beat < currentBeat;
       final center = Offset(
         layout.noteX(note.beat),
         TabChartLayout.stringY(note.string),
