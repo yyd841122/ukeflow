@@ -86,16 +86,17 @@ class PracticeView extends StatelessWidget {
             builder: (context, box) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 歌词块收缩到内容实际高度(≤可用高度),进度条在其下
-                // 留 16px 呼吸间隙;余下留白全部落到进度条之下。
+                // 歌词块收缩到内容实际高度(≤可用高度,给进度条留底线量)。
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: box.maxHeight - 32),
+                  constraints: BoxConstraints(maxHeight: box.maxHeight - 24),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
                     child: _lyricLines(scheme, lyricIndex),
                   ),
                 ),
-                const SizedBox(height: 16),
+                // 下方余白对半分(版式反馈):一半做歌词与进度条的间隙,
+                // 一半留在进度条之下到停止键。
+                const Spacer(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: LinearProgressIndicator(
@@ -105,6 +106,7 @@ class PracticeView extends StatelessWidget {
                         : practice.beat / timeline.totalBeats,
                   ),
                 ),
+                const Spacer(),
               ],
             ),
           ),
