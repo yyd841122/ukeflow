@@ -51,7 +51,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('渲染:弹唱谱/指弹谱两区即类型标识,内置曲目齐全', (tester) async {
+  testWidgets('渲染:弹唱谱/指弹谱两区即类型标识,内置曲目齐全,工具行在顶', (tester) async {
     await pumpLibrary(tester);
 
     expect(find.text('弹唱谱'), findsOneWidget);
@@ -63,6 +63,9 @@ void main() {
     expect(find.text('小星星'), findsOneWidget);
     expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
     expect(find.text('欢乐颂'), findsOneWidget);
+    // 练琴工具行(工单 15 后续:跟练页签裁撤,工具并入曲库页顶部)。
+    expect(find.text('节拍器'), findsOneWidget);
+    expect(find.text('节奏型训练'), findsOneWidget);
   });
 
   testWidgets('点弹唱谱进跟练页,弹回回曲库', (tester) async {

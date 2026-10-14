@@ -6,10 +6,13 @@ import '../../data/chart_providers.dart';
 import '../play/chart_meta.dart';
 import '../play/practice_page.dart';
 import '../play/tab_chart_page.dart';
+import '../rhythm/metronome_page.dart';
+import '../rhythm/rhythm_trainer_page.dart';
 
-/// 曲库页(工单 15):统一曲目列表,分区即曲谱类型——弹唱谱
-/// (内置+自建,GLOSSARY「自建谱」导入后自动入列)与指弹谱(内置);
-/// 点弹唱谱/指弹谱直达对应跟练。图片谱区归工单 18。
+/// 曲库页(工单 15):练琴入口的唯一家——顶部练琴工具行(节拍器/节奏型
+/// 训练,工单 15 后续自用户决策裁撤跟练页签并入于此),下方统一曲目列表,
+/// 分区即曲谱类型:弹唱谱(内置+自建,GLOSSARY「自建谱」导入后自动入列)
+/// 与指弹谱(内置);点弹唱谱/指弹谱直达对应跟练。图片谱区归工单 18。
 /// 三类曲目合流为一个 provider,加载/错误/空态在一处呈现;
 /// 自建谱坏一条只标记一条,不牵连整库(见 chart_providers.dart)。
 class LibraryPage extends ConsumerWidget {
@@ -21,6 +24,35 @@ class LibraryPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
       children: [
+        // 工具行不依赖曲库数据:加载/错误态也在,练琴不被列表问题挡路。
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const MetronomePage(),
+                  ),
+                ),
+                icon: const Icon(Icons.av_timer),
+                label: const Text('节拍器'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const RhythmTrainerPage(),
+                  ),
+                ),
+                icon: const Icon(Icons.swap_vert),
+                label: const Text('节奏型训练'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
         ...libraryAsync.when(
           loading: () => [
             _sectionHeader(context, '弹唱谱'),

@@ -19,7 +19,7 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
-  // 工单 09 起跟练页签加载内置曲库：同为 fixture 谱。传 engine 时一并注入假引擎。
+  // 工单 09 起加载内置曲库(工单 15 起归曲库页):同为 fixture 谱。传 engine 时一并注入假引擎。
   // 工单 14 起路径页读打卡库：内存库注入（关库纪律见 path_page_test 注释）。
   Widget app([FakeAudioEngine? engine]) {
     final db = AppDatabase(
@@ -47,32 +47,33 @@ void main() {
     matching: find.text(label),
   );
 
-  // 工单 01 验收：App 启动渲染出导航壳。
-  testWidgets('启动渲染五页签导航壳，初始落在调音器', (tester) async {
+  // 工单 01 验收：App 启动渲染出导航壳(工单 15 后续裁撤跟练页签,四页签)。
+  testWidgets('启动渲染四页签导航壳，初始落在调音器', (tester) async {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    for (final label in ['调音器', '和弦', '跟练', '路径', '曲库']) {
+    for (final label in ['调音器', '和弦', '路径', '曲库']) {
       expect(navLabel(label), findsOneWidget, reason: '页签 $label 应存在');
     }
+    // 跟练页签不复存在:跟练是点歌后发生的活动,入口在曲库页与路径页。
+    expect(navLabel('跟练'), findsNothing);
     // 当前页（调音器）= 页签 label + 页面标题各一份；未切到的页只出现在页签上。
     expect(find.text('调音器'), findsNWidgets(2));
     expect(find.text('曲库'), findsOneWidget);
   });
 
-  testWidgets('点击页签可在五个页面间切换', (tester) async {
+  testWidgets('点击页签可在四个页面间切换', (tester) async {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 跟练工具 /
-    // 路径头 / 曲库类型区头,工单 15 起跟练页为工具页、曲库页为真列表页)。
+    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 路径头 /
+    // 曲库工具行,工单 15 起曲库页为真列表页兼练琴工具家)。
     const pageMarkers = {
       '调音器': '此页由后续工单实现',
       '和弦': '常用',
-      '跟练': '节拍器',
       '路径': '总进度',
-      '曲库': '弹唱谱',
+      '曲库': '节拍器',
     };
     for (final entry in pageMarkers.entries) {
       await tester.tap(navLabel(entry.key));
@@ -85,12 +86,12 @@ void main() {
     }
   });
 
-  testWidgets('跟练页的节拍器入口可直达节拍器页(假引擎)', (tester) async {
+  testWidgets('曲库页的节拍器入口可直达节拍器页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
     await tester.pumpWidget(app(engine));
     await tester.pumpAndSettle();
 
-    await tester.tap(navLabel('跟练'));
+    await tester.tap(navLabel('曲库'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('节拍器'));
     await tester.pumpAndSettle();
@@ -104,12 +105,12 @@ void main() {
     expect(find.text('BPM'), findsNothing);
   });
 
-  testWidgets('跟练页的节奏型训练入口可直达训练页(假引擎)', (tester) async {
+  testWidgets('曲库页的节奏型训练入口可直达训练页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
     await tester.pumpWidget(app(engine));
     await tester.pumpAndSettle();
 
-    await tester.tap(navLabel('跟练'));
+    await tester.tap(navLabel('曲库'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('节奏型训练'));
     await tester.pumpAndSettle();
