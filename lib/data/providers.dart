@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'database.dart';
 import 'checkins_dao.dart';
+import 'custom_charts_dao.dart';
 
 /// 全局唯一数据库实例：首次读取时创建，容器销毁时关闭。
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -14,6 +15,11 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 /// 打卡数据访问（打卡/补卡/进度查询，工单 14）。
 final checkInsDaoProvider = Provider<CheckInsDao>(
   (ref) => ref.watch(appDatabaseProvider).checkInsDao,
+);
+
+/// 自建谱数据访问（曲库数据源，工单 15）。
+final customChartsDaoProvider = Provider<CustomChartsDao>(
+  (ref) => ref.watch(appDatabaseProvider).customChartsDao,
 );
 
 /// 打卡流：路径页订阅，打卡写入即刷新（drift watch 响应式）。

@@ -65,14 +65,14 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 跟练曲库节,
-    // 工单 02 起和弦页、工单 09 起跟练页为真页面)。
+    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 跟练工具 /
+    // 路径头 / 曲库类型区头,工单 15 起跟练页为工具页、曲库页为真列表页)。
     const pageMarkers = {
       '调音器': '此页由后续工单实现',
       '和弦': '常用',
-      '跟练': '内置曲库',
+      '跟练': '节拍器',
       '路径': '总进度',
-      '曲库': '此页由后续工单实现',
+      '曲库': '弹唱谱',
     };
     for (final entry in pageMarkers.entries) {
       await tester.tap(navLabel(entry.key));

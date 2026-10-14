@@ -53,9 +53,10 @@ const tabFixtureChart = TabChart(
   ],
 );
 
-/// 跟练页签（工单 09）UI 测试：内置曲库 provider 覆盖为给定测试谱，
-/// 不碰真资产（testWidgets 的 FakeAsync 里 rootBundle 真实文件 I/O 永远
-/// 完不了）。求值发生在 provider 首次被读时（测试 zone 内，expect 合法）。
+/// 曲库/跟练 UI 测试(工单 09 跟练页签起,工单 15 起为曲库页):内置曲库
+/// provider 覆盖为给定测试谱,不碰真资产(testWidgets 的 FakeAsync 里
+/// rootBundle 真实文件 I/O 永远完不了)。求值发生在 provider 首次被读时
+/// (测试 zone 内,expect 合法)。
 // ignore: strict_top_level_inference
 builtinChartsFixtureOverride(List<({String id, StrumChart chart})> charts) =>
     builtinChartsProvider.overrideWith(
