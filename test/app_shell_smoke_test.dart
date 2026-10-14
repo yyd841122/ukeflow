@@ -1,10 +1,13 @@
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/app.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/data/database.dart';
+import 'package:ukeflow/data/providers.dart';
 
 import 'helpers/chord_fixtures.dart';
 import 'helpers/chart_fixtures.dart';
@@ -17,16 +20,28 @@ void main() {
 
   // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
   // 工单 09 起跟练页签加载内置曲库：同为 fixture 谱。传 engine 时一并注入假引擎。
-  Widget app([FakeAudioEngine? engine]) => ProviderScope(
-    overrides: [
-      chordLibraryFixtureOverride(),
-      builtinChartsFixtureOverride([
-        (id: 'test-chart-a', chart: practiceFixtureChart),
-      ]),
-      if (engine != null) audioEngineProvider.overrideWithValue(engine),
-    ],
-    child: const UkeFlowApp(),
-  );
+  // 工单 14 起路径页读打卡库：内存库注入（关库纪律见 path_page_test 注释）。
+  Widget app([FakeAudioEngine? engine]) {
+    final db = AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
+    addTearDown(db.close);
+    return ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        chordLibraryFixtureOverride(),
+        builtinChartsFixtureOverride([
+          (id: 'test-chart-a', chart: practiceFixtureChart),
+        ]),
+        if (engine != null) audioEngineProvider.overrideWithValue(engine),
+      ],
+      child: const UkeFlowApp(),
+    );
+  }
+
   Finder navLabel(String label) => find.descendant(
     of: find.byType(NavigationBar),
     matching: find.text(label),
@@ -56,7 +71,7 @@ void main() {
       '调音器': '此页由后续工单实现',
       '和弦': '常用',
       '跟练': '内置曲库',
-      '路径': '此页由后续工单实现',
+      '路径': '总进度',
       '曲库': '此页由后续工单实现',
     };
     for (final entry in pageMarkers.entries) {
@@ -72,9 +87,7 @@ void main() {
 
   testWidgets('跟练页的节拍器入口可直达节拍器页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
-    await tester.pumpWidget(
-      app(engine),
-    );
+    await tester.pumpWidget(app(engine));
     await tester.pumpAndSettle();
 
     await tester.tap(navLabel('跟练'));
@@ -93,9 +106,7 @@ void main() {
 
   testWidgets('跟练页的节奏型训练入口可直达训练页(假引擎)', (tester) async {
     final engine = FakeAudioEngine();
-    await tester.pumpWidget(
-      app(engine),
-    );
+    await tester.pumpWidget(app(engine));
     await tester.pumpAndSettle();
 
     await tester.tap(navLabel('跟练'));

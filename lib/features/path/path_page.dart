@@ -1,13 +1,410 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/ui/placeholder_page.dart';
+import '../../core/model/builtin_learning_path.dart';
+import '../../core/model/checkin.dart';
+import '../../core/model/learning_path.dart';
+import '../../data/database.dart' show CheckIn;
+import '../../data/providers.dart';
 
-/// 练习路径页（占位）。
-class PathPage extends StatelessWidget {
+/// 路径页：30 天练习路径全貌 + 今日任务 + 打卡（工单 14）。
+/// 路径推进按完成顺序（spec 故事 37）：今日任务 = 第一个未打卡天；
+/// 任务目标以文字呈现，一键直达归工单 22。
+class PathPage extends ConsumerStatefulWidget {
   const PathPage({super.key});
 
   @override
+  ConsumerState<PathPage> createState() => _PathPageState();
+}
+
+class _PathPageState extends ConsumerState<PathPage> {
+  /// 写入进行中:打卡钮禁用。
+  bool _checking = false;
+
+  /// 连击吸收窗:打卡推进页面当天,快速第二击会落在**新一天**的任务卡上,
+  /// 仿佛用户想连打两天——900ms 内的后续打卡静默忽略(无 Timer,fake zone 安全)。
+  static const _tapAbsorbWindow = Duration(milliseconds: 900);
+  DateTime _lastCheckInTap = DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
   Widget build(BuildContext context) {
-    return const PlaceholderPage(title: '路径', icon: Icons.route);
+    final checkInsAsync = ref.watch(checkInsProvider);
+    return checkInsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _ErrorView(error: error),
+      data: (checkIns) => _PathView(
+        checkIns: checkIns,
+        onCheckIn: _checkInToday,
+        checking: _checking,
+      ),
+    );
+  }
+
+  /// 打今日任务：完成顺序推进与种类判定都是 core/model 纯函数，
+  /// 页面只做编排（读现状→定目标→落库），画面刷新由打卡流驱动。
+  Future<void> _checkInToday() async {
+    final now = DateTime.now();
+    if (_checking || now.difference(_lastCheckInTap) < _tapAbsorbWindow) {
+      return;
+    }
+    _lastCheckInTap = now;
+    setState(() => _checking = true);
+    try {
+      final dao = ref.read(checkInsDaoProvider);
+      final rows = await dao.getAll();
+      final today = epochDayOf(DateTime.now());
+      final next = builtinLearningPath.nextTaskDay({
+        for (final row in rows) row.day,
+      });
+      if (next == null) {
+        return;
+      }
+      await dao.checkIn(
+        day: next,
+        kind: checkInKindFor(
+          checkedOnDays: {for (final row in rows) row.checkedOnDay},
+          today: today,
+        ),
+        checkedOnDay: today,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _checking = false);
+      }
+    }
+  }
+}
+
+/// 打卡现状驱动的整页视图。
+class _PathView extends StatelessWidget {
+  const _PathView({
+    required this.checkIns,
+    required this.onCheckIn,
+    required this.checking,
+  });
+
+  final List<CheckIn> checkIns;
+  final VoidCallback onCheckIn;
+
+  /// 写入进行中:打卡钮禁用。
+  final bool checking;
+
+  @override
+  Widget build(BuildContext context) {
+    final checkedDays = {for (final row in checkIns) row.day};
+    final kindByDay = {for (final row in checkIns) row.day: row.kind};
+    final nextDay = builtinLearningPath.nextTaskDay(checkedDays);
+    final streak = streakDays(
+      checkedOnDays: {for (final row in checkIns) row.checkedOnDay},
+      today: epochDayOf(DateTime.now()),
+    );
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+      children: [
+        _ProgressHeader(checked: checkedDays.length, streak: streak),
+        const SizedBox(height: 16),
+        if (nextDay != null)
+          _TodayTaskCard(
+            task: builtinLearningPath.tasks[nextDay - 1],
+            onCheckIn: onCheckIn,
+            checking: checking,
+          )
+        else
+          _GraduatedCard(streak: streak),
+        const SizedBox(height: 24),
+        Text('路径全貌', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (final (index, task)
+                  in builtinLearningPath.tasks.indexed) ...[
+                if (index == 0 ||
+                    task.phase != builtinLearningPath.tasks[index - 1].phase)
+                  _PhaseHeader(task.phase),
+                _DayTile(
+                  task: task,
+                  state: _stateOf(task, checkedDays, nextDay),
+                  kind: kindByDay[task.day],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  _DayState _stateOf(DailyTask task, Set<int> checkedDays, int? nextDay) {
+    if (checkedDays.contains(task.day)) {
+      return _DayState.checked;
+    }
+    if (task.day == nextDay) {
+      return _DayState.today;
+    }
+    return _DayState.upcoming;
+  }
+}
+
+/// 总进度与连续打卡天数（工单 14 验收两项）。
+class _ProgressHeader extends StatelessWidget {
+  const _ProgressHeader({required this.checked, required this.streak});
+
+  final int checked;
+  final int streak;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '总进度',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Icon(Icons.local_fire_department, color: scheme.primary),
+                const SizedBox(width: 4),
+                Text(
+                  '连续 $streak 天',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('$checked/30', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: checked / builtinLearningPath.tasks.length,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 今日任务卡：学什么 + 练什么 + 打卡钮。
+class _TodayTaskCard extends StatelessWidget {
+  const _TodayTaskCard({
+    required this.task,
+    required this.onCheckIn,
+    required this.checking,
+  });
+
+  final DailyTask task;
+  final VoidCallback onCheckIn;
+
+  /// 写入进行中:打卡钮禁用(双击防抖)。
+  final bool checking;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('今日任务', style: Theme.of(context).textTheme.labelLarge),
+                const Spacer(),
+                Text(
+                  '第 ${task.day} 天 · ${task.phase}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(task.title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            _LabeledText(label: '学', text: task.learn),
+            const SizedBox(height: 8),
+            _LabeledText(label: '练', text: task.practice),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const Key('path-checkin'),
+                onPressed: checking ? null : onCheckIn,
+                icon: const Icon(Icons.flag),
+                label: const Text('打卡'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 「学」「练」标签行。
+class _LabeledText extends StatelessWidget {
+  const _LabeledText({required this.label, required this.text});
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 10,
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          child: Text(label, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
+    );
+  }
+}
+
+/// 30 天全部完成的毕业卡。
+class _GraduatedCard extends StatelessWidget {
+  const _GraduatedCard({required this.streak});
+
+  final int streak;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(Icons.celebration, size: 48, color: scheme.primary),
+            const SizedBox(height: 8),
+            Text('30 天路径全部完成！', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              '连续 $streak 天 · 继续练第 29 天开的目标曲',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 全貌分段头（阶段名）。
+class _PhaseHeader extends StatelessWidget {
+  const _PhaseHeader(this.phase);
+
+  final String phase;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Text(phase, style: Theme.of(context).textTheme.labelLarge),
+    );
+  }
+}
+
+/// 全貌里一天的状态。
+enum _DayState { checked, today, upcoming }
+
+/// 全貌的一天：天数圆标 + 主题 + 状态徽章（完成/补卡/今日任务/未到）。
+class _DayTile extends StatelessWidget {
+  const _DayTile({required this.task, required this.state, required this.kind});
+
+  final DailyTask task;
+  final _DayState state;
+  final CheckInKind? kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (circleColor, badgeText, badgeColor) = switch (state) {
+      _DayState.checked when kind == CheckInKind.madeUp => (
+        scheme.tertiary,
+        '补卡',
+        scheme.tertiary,
+      ),
+      _DayState.checked => (scheme.primary, '完成', scheme.primary),
+      _DayState.today => (scheme.secondaryContainer, '今日任务', scheme.secondary),
+      _DayState.upcoming => (
+        scheme.surfaceContainerHighest,
+        '未到',
+        scheme.outline,
+      ),
+    };
+    return ListTile(
+      dense: true,
+      leading: CircleAvatar(
+        radius: 14,
+        backgroundColor: circleColor,
+        foregroundColor: state == _DayState.upcoming
+            ? scheme.onSurfaceVariant
+            : scheme.onPrimary,
+        child: Text('${task.day}', style: const TextStyle(fontSize: 12)),
+      ),
+      title: Text(
+        task.title,
+        style: TextStyle(
+          color: state == _DayState.upcoming ? scheme.onSurfaceVariant : null,
+        ),
+      ),
+      trailing: Text(
+        badgeText,
+        style: Theme.of(
+          context,
+        ).textTheme.labelMedium?.copyWith(color: badgeColor),
+      ),
+    );
+  }
+}
+
+/// 打卡流失败的可见报错：原文直接展示，不带病进路径页。
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: scheme.error),
+            const SizedBox(height: 12),
+            Text('打卡数据加载失败', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text('$error', textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
   }
 }
