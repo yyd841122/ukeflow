@@ -199,6 +199,21 @@ void main() {
     expect(await db.customChartsDao.getAll(), hasLength(1));
   });
 
+  testWidgets('无源名的谱:命名后去跟练,会话页标题=入库名(非「未命名」)', (tester) async {
+    await pumpImport(tester);
+
+    await paste(tester, '[C]hello [G7]world');
+    await tester.enterText(find.byKey(const Key('import-title')), '起的名');
+    await tester.tap(find.byKey(const Key('import-save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import-practice')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('起的名'), findsOneWidget, reason: '会话页标题=入库名');
+    expect(find.text('未命名'), findsNothing);
+    expect(find.text('开始跟练'), findsOneWidget);
+  });
+
   testWidgets('窄屏(360dp)不溢出', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3.0;

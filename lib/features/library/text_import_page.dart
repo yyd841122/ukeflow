@@ -118,6 +118,9 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
         await dao.add(title: title, source: _source.text);
       }
       if (!mounted) return;
+      // 命名合并(票 15④→16):展示名以入库名为准,成功页「去跟练」
+      // 与曲库卡片、跟练会话页标题同源一字不差。
+      _chart = _chart!.withTitle(title);
       setState(() => _phase = _Phase.saved);
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -6,14 +6,24 @@ import 'package:ukeflow/core/chart/custom_charts.dart';
 /// 不信任存储的最后一道闸——坏谱当场抛错(带曲名可定位),
 /// 与内置谱「不带病进曲库页」同一哲学。
 void main() {
-  test('合法源文本解析成弹唱谱', () {
+  test('合法源文本解析成弹唱谱,展示名以入库名为准', () {
     final chart = parseCustomChart(
       source: '{title: 内嵌名}\n{tempo: 90}\n[C]歌词',
       title: '我的歌',
       allowedChords: {'C'},
     );
-    expect(chart.title, '内嵌名', reason: '谱面内容以源文本为准');
-    expect(chart.tempo, 90);
+    expect(chart.title, '我的歌', reason: '票15④命名合并策略:展示名=入库名,'
+        '跟练会话页标题与曲库卡片一字不差');
+    expect(chart.tempo, 90, reason: '其余元数据仍取自源文本');
+  });
+
+  test('源文本无名字的谱,入库名同样落到展示名', () {
+    final chart = parseCustomChart(
+      source: '[C]歌词',
+      title: '起的名',
+      allowedChords: {'C'},
+    );
+    expect(chart.title, '起的名');
   });
 
   test('段落未闭合的坏谱抛错,错误信息带曲名可定位', () {

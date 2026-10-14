@@ -77,4 +77,16 @@ class StrumChart {
   final int? tempo;
 
   final List<StrumSection> sections;
+
+  /// 展示名替换(自建谱命名合并策略,票 16 落地):展示名一律以入库名
+  /// 为准——曲库卡片与跟练会话页标题同源。名字相同则原样返回。
+  StrumChart withTitle(String title) => title == this.title
+      ? this
+      : StrumChart(
+          title: title,
+          artist: artist,
+          key: key,
+          tempo: tempo,
+          sections: sections,
+        );
 }
