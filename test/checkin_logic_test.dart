@@ -19,6 +19,14 @@ void main() {
       );
       expect(epochDayOf(DateTime(2026, 10, 15)), 20741);
     });
+
+    test('epochDayToDate 与 epochDayOf 往返一致', () {
+      final date = DateTime(2026, 10, 14);
+      final back = epochDayToDate(epochDayOf(date));
+      expect(back.year, 2026);
+      expect(back.month, 10);
+      expect(back.day, 14);
+    });
   });
 
   group('streakDays(连续打卡天数)', () {

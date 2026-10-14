@@ -93,6 +93,9 @@ class _PathView extends StatelessWidget {
   Widget build(BuildContext context) {
     final checkedDays = {for (final row in checkIns) row.day};
     final kindByDay = {for (final row in checkIns) row.day: row.kind};
+    final checkedOnDayByDay = {
+      for (final row in checkIns) row.day: row.checkedOnDay,
+    };
     final nextDay = builtinLearningPath.nextTaskDay(checkedDays);
     final streak = streakDays(
       checkedOnDays: {for (final row in checkIns) row.checkedOnDay},
@@ -129,6 +132,7 @@ class _PathView extends StatelessWidget {
                   task: task,
                   state: _stateOf(task, checkedDays, nextDay),
                   kind: kindByDay[task.day],
+                  checkedOnDay: checkedOnDayByDay[task.day],
                 ),
               ],
             ],
@@ -332,12 +336,21 @@ class _PhaseHeader extends StatelessWidget {
 enum _DayState { checked, today, upcoming }
 
 /// 全貌的一天：天数圆标 + 主题 + 状态徽章（完成/补卡/今日任务/未到）。
+/// 已打卡的天可点进详情回看内容（打卡只打一次,回看不限次）。
 class _DayTile extends StatelessWidget {
-  const _DayTile({required this.task, required this.state, required this.kind});
+  const _DayTile({
+    required this.task,
+    required this.state,
+    required this.kind,
+    required this.checkedOnDay,
+  });
 
   final DailyTask task;
   final _DayState state;
   final CheckInKind? kind;
+
+  /// 打卡发生的日历日(epoch 天数),仅已打卡天非空,进详情显示。
+  final int? checkedOnDay;
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +369,7 @@ class _DayTile extends StatelessWidget {
         scheme.outline,
       ),
     };
-    return ListTile(
+    final tile = ListTile(
       dense: true,
       leading: CircleAvatar(
         radius: 14,
@@ -377,6 +390,108 @@ class _DayTile extends StatelessWidget {
         style: Theme.of(
           context,
         ).textTheme.labelMedium?.copyWith(color: badgeColor),
+      ),
+    );
+    if (state != _DayState.checked || kind == null || checkedOnDay == null) {
+      return tile;
+    }
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => _DayDetailPage(
+            task: task,
+            kind: kind!,
+            checkedOnDay: checkedOnDay!,
+          ),
+        ),
+      ),
+      child: tile,
+    );
+  }
+}
+
+/// 已打卡天的内容回看页:学/练全文 + 已打卡标记与打卡日期。
+class _DayDetailPage extends StatelessWidget {
+  const _DayDetailPage({
+    required this.task,
+    required this.kind,
+    required this.checkedOnDay,
+  });
+
+  final DailyTask task;
+  final CheckInKind kind;
+  final int checkedOnDay;
+
+  String get _dateLabel {
+    final date = epochDayToDate(checkedOnDay);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${date.year}-${two(date.month)}-${two(date.day)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final kindLabel = kind == CheckInKind.madeUp ? '补卡' : '完成';
+    return Scaffold(
+      appBar: AppBar(title: Text('第 ${task.day} 天')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            color: scheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 18, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      // Expanded:窄屏放不下时标记换行,不横向溢出。
+                      Expanded(
+                        child: Text(
+                          '已打卡 · $kindLabel',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: scheme.primary),
+                        ),
+                      ),
+                      Text(
+                        '打卡日期 $_dateLabel',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: scheme.onPrimaryContainer),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    task.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '学什么',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(task.learn),
+          const SizedBox(height: 16),
+          Text(
+            '练什么',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(task.practice),
+        ],
       ),
     );
   }

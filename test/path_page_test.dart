@@ -99,6 +99,29 @@ void main() {
     expect(find.text('连续 1 天'), findsOneWidget); // 今天打了,从今天重数
   });
 
+  testWidgets('回看:点已打卡的天进详情页看内容,显示已打卡与打卡日期', (tester) async {
+    await db.checkInsDao.checkIn(
+      day: 1,
+      kind: CheckInKind.completed,
+      checkedOnDay: 20740, // 独立锚点:= 2026-10-14(见 checkin_logic_test)
+    );
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    // 今日任务卡已是第 2 天,「持琴与调音」只在全貌列表出现——点它进详情。
+    await tester.tap(find.text('持琴与调音'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 天'), findsOneWidget); // 详情页 AppBar
+    expect(find.text('学什么'), findsOneWidget);
+    expect(find.text('练什么'), findsOneWidget);
+    expect(find.textContaining('已打卡 · 完成'), findsOneWidget);
+    expect(find.text('打卡日期 2026-10-14'), findsOneWidget);
+  });
+
   testWidgets('30 天全打卡:毕业卡替掉今日任务,不再有打卡钮', (tester) async {
     final today = epochDayOf(DateTime.now());
     for (var day = 1; day <= 30; day++) {

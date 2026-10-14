@@ -12,6 +12,11 @@ int epochDayOf(DateTime local) {
   return day.difference(DateTime.utc(1970, 1, 1)).inDays;
 }
 
+/// epoch 天数 → 日历日(UTC 午夜,年月日即打卡当天的本地日期)。
+/// [epochDayOf] 的逆运算,供回看页显示打卡日期。
+DateTime epochDayToDate(int epochDay) =>
+    DateTime.utc(1970, 1, 1).add(Duration(days: epochDay));
+
 /// 本次打卡的种类:与最近一次打卡同日或紧邻日 = 完成;
 /// 首次打卡 = 完成(没有「落后」可言);隔日以上才回来 = 补卡。
 CheckInKind checkInKindFor({
