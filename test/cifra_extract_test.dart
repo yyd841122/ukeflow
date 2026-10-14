@@ -262,6 +262,31 @@ void main() {
       expect(buildChordPro(payload, allowedChords: {'G', 'Em'}), '[G]Dont be blue, my dear Em\n');
     });
 
+    test('单词/两词歌词行不作二记谱行丢弃:丢词=静默数据损失,fail-closed', () {
+      // 葡语歌词常见形态:悬空行后跟整行一词("Amor"、"Eu")。
+      // 首字母 A-G 的词在「吸收任意后缀」的和弦样判定下必命中——
+      // 短行(词数<2)与严格过半(半数边缘)都不够丢的证据。
+      final one = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>[
+            {'c': 'Am', 's': 'Am'},
+          ],
+          ['Amor'],
+        ],
+      })!;
+      expect(buildChordPro(one, allowedChords: {'Am'}), '[Am]Amor\n');
+
+      final two = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>[
+            {'c': 'C', 's': 'C'},
+          ],
+          ['Baby blue'],
+        ],
+      })!;
+      expect(buildChordPro(two, allowedChords: {'C'}), '[C]Baby blue\n');
+    });
+
     test('混排行+元数据:{title}/{artist} 置顶,行内和弦按 DOM 序精确插入', () {
       final payload = decodeCifraPayload({
         'title': 'Gravity',

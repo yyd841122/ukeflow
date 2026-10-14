@@ -46,11 +46,9 @@ class CifraPayload {
   final List<List<CifraSeg>> lines;
 }
 
-/// JS 返回值 → [CifraPayload]。容错纪律:页面结构变化/脚本被拦时
-/// 返回 null(上层给可读失败态),绝不抛异常。
-/// [input] 接受已解码的 Map,或 JSON 字符串(Android 桥可能给返回值
-/// 再包一层 JSON 引号,剥两层都试)。
-CifraPayload? decodeCifraPayload(Object? input) {
+/// 桥返回值解码公共前导:字符串先解 JSON,Android 桥对字符串返回值再包
+/// 一层 JSON 引号就再剥一层;非 Map 形状返回 null(调用方各自处置)。
+Map? _decodeBridgeValue(Object? input) {
   Object? value = input;
   if (value is String) {
     try {
@@ -59,7 +57,6 @@ CifraPayload? decodeCifraPayload(Object? input) {
       return null;
     }
     if (value is String) {
-      // Android WebView 桥对字符串返回值再包一层 JSON 编码。
       try {
         value = jsonDecode(value);
       } catch (_) {
@@ -67,7 +64,16 @@ CifraPayload? decodeCifraPayload(Object? input) {
       }
     }
   }
-  if (value is! Map) return null;
+  return value is Map ? value : null;
+}
+
+/// JS 返回值 → [CifraPayload]。容错纪律:页面结构变化/脚本被拦时
+/// 返回 null(上层给可读失败态),绝不抛异常。
+/// [input] 接受已解码的 Map,或 JSON 字符串(Android 桥可能给返回值
+/// 再包一层 JSON 引号,剥两层都试)。
+CifraPayload? decodeCifraPayload(Object? input) {
+  final value = _decodeBridgeValue(input);
+  if (value == null) return null;
   final rawLines = value['lines'];
   if (rawLines is! List) return null;
   final lines = <List<CifraSeg>>[];
@@ -99,22 +105,8 @@ CifraPayload? decodeCifraPayload(Object? input) {
 /// 提取失败码:JS 侧返回 `{error: <code>}`(页面结构变化/拦截/没和弦)
 /// 时给出代码字符串,供上层映射可读文案;不是失败形状则 null。
 String? cifraExtractError(Object? input) {
-  Object? value = input;
-  if (value is String) {
-    try {
-      value = jsonDecode(value);
-    } catch (_) {
-      return null;
-    }
-    if (value is String) {
-      try {
-        value = jsonDecode(value);
-      } catch (_) {
-        return null;
-      }
-    }
-  }
-  if (value is! Map) return null;
+  final value = _decodeBridgeValue(input);
+  if (value == null) return null;
   final error = value['error'];
   return error is String ? error : null;
 }
@@ -201,14 +193,14 @@ String buildChordPro(
 /// 行内化:把 (列位, 和弦名) 记号按列位织进歌词(同列位保持和弦先后,
 /// 紧邻书写;dart List.sort 非稳定,以数组序为次键)。
 String _interleave(String lyric, List<(int, String)> marks) {
-  final ordererd = List.generate(marks.length, (i) => i);
-  ordererd.sort((a, b) {
+  final order = List.generate(marks.length, (i) => i);
+  order.sort((a, b) {
     final cmp = marks[a].$1.compareTo(marks[b].$1);
     return cmp != 0 ? cmp : a.compareTo(b);
   });
   final buf = StringBuffer();
   var last = 0;
-  for (final i in ordererd) {
+  for (final i in order) {
     final (pos, name) = marks[i];
     final p = pos.clamp(0, lyric.length);
     buf.write(lyric.substring(last, p));
@@ -305,13 +297,17 @@ class _LyricLine extends _CifraLine {
 
   int get _indent => rawText.length - rawText.trimLeft().length;
 
-  /// 疑似二记谱行(capo 变体):空白分词后过半数像和弦记号。
-  /// 只在「紧跟悬空和弦行」语境下使用(见 buildChordPro),防误杀普通歌词。
+  /// 疑似二记谱行(capo 变体):空白分词后**严格过半**像和弦记号,且至
+  /// 少两个词。只紧跟悬空和弦行时才使用(见 buildChordPro)。
+  /// 收得这么紧是因为丢行=静默数据损失(fail-closed):单词歌词行
+  /// (葡语歌词常见,"Amor"/"Eu")在「吸收任意后缀」的和弦样判定下
+  /// 必命中,词数<2 或恰好半数(如两词含一词)都留给歌词。
   bool get chordalish {
-    final tokens = rawText.trim().split(RegExp(r'\s+'))..removeWhere((t) => t.isEmpty);
-    if (tokens.isEmpty) return false;
+    final tokens =
+        rawText.trim().split(RegExp(r'\s+'))..removeWhere((t) => t.isEmpty);
+    if (tokens.length < 2) return false;
     final chordLike = tokens.where(_chordTokenRe.hasMatch).length;
-    return chordLike > 0 && chordLike * 2 >= tokens.length;
+    return chordLike * 2 > tokens.length;
   }
 
   /// 票 16 原型语义①②:首和弦吸行首;行中词中回退词首。
@@ -386,6 +382,8 @@ String _lyricish(String text) {
 final RegExp _markerRe = RegExp(r'^\[([^\[\]]+)\]$');
 
 /// 和弦样 token:大写根音开头(A-G,可带升降号),后接任意和弦记号字符。
+/// (JS 侧的同类判定见 features/library/cifraclub_extract_js.dart 的
+/// CHORD_SHAPE——两处判的是同一个问题,改动请两边对齐。)
 final RegExp _chordTokenRe = RegExp(r'^[A-G][#b♯♭]?[a-zA-Z0-9()#b/+\-]*$');
 
 /// 标签进指令参数:去花括号与换行(会破坏 {directive: label} 语法)。

@@ -94,7 +94,10 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       );
     } catch (error) {
       if (mounted) {
-        setState(() => _failure = '提取出错:$error');
+        setState(
+          () => _failure = '提取失败,请重试;若反复出现请回曲库用文本导入。'
+              '(技术细节:$error)',
+        );
       }
     } finally {
       if (mounted) setState(() => _importing = false);

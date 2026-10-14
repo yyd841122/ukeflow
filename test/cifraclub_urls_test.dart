@@ -47,6 +47,9 @@ void main() {
         song('https://www.cifraclub.com.br/embrace/gravity.jpg'),
         isFalse,
       );
+      // 仿冒域:x-cifraclub.com.br 也是 endsWith 命中——必须整段等值或
+      // 点分后缀,否则非 Cifra Club 页面能跑同一提取管线(ADR-0002)。
+      expect(song('https://x-cifraclub.com.br/embrace/gravity/'), isFalse);
     });
 
     test('曲谱页变体:versao 备选版与乐器子路径仍在,未知三段路径不出', () {

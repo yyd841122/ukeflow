@@ -21,9 +21,20 @@ const cifraExtractScript = '''
         || el.getAttribute('data-chord-original-text')
         || el.textContent || '').trim();
     }
+    // 和弦名形状:根音(A-G 可带升降号)+ quality 字符表。
+    // 「Baby」「Be」这类加粗歌词词首字母也是 A-G,形状对不上即拒。
+    // (Dart 侧的同类判定见 core/chart/cifra_extract.dart 的
+    // _chordTokenRe——两处判的是同一个问题,改动请两边对齐。)
+    var CHORD_SHAPE = /^[A-G][#b]?(m|maj|min|dim|aug|sus|add|M)?[0-9()#b+-]*(\\/[A-G][0-9()#b+-]*)?\$/;
     function looksChord(el) {
+      if (el.getAttribute('data-chord-name')
+        || el.getAttribute('data-chord-original-text')) {
+        // data-* 属性是站点自己标的(调研:类名混淆只有 data-* 稳定),直接信。
+        var d = chordNameOf(el);
+        return d.length > 0 && d.length <= 24;
+      }
       var n = chordNameOf(el);
-      return n.length > 0 && n.length <= 24 && /^[A-G]/.test(n);
+      return n.length > 0 && n.length <= 24 && CHORD_SHAPE.test(n);
     }
     var pre = document.querySelector('pre[data-chord-content]');
     if (!pre) {

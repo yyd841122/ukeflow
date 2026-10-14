@@ -36,7 +36,10 @@ class CifraClubUrls {
   /// 是否曲谱页(显示「导入此谱」的页面):cifraclub 域名下路径至少
   /// 「艺人/歌曲」两段,首两段不撞站务词,无文件名段。
   static bool isSongPage(Uri url) {
-    if (!url.host.endsWith(_host)) return false;
+    // 整段等值或点分后缀——endsWith 裸判定会放行 x-cifraclub.com.br
+    // 这类仿冒域(ADR-0002:仅 Cifra Club,无通用网页导入)。
+    final host = url.host.toLowerCase();
+    if (host != _host && !host.endsWith('.$_host')) return false;
     final segments = url.pathSegments.where((s) => s.isNotEmpty).toList();
     if (segments.length < 2) return false;
     if (segments.any((s) => s.contains('.'))) return false;
@@ -45,9 +48,9 @@ class CifraClubUrls {
     if (_reservedTop.contains(segments[1].toLowerCase())) return false;
     if (segments.length == 2) return true;
     return segments.skip(2).every(
-      (s) => _songSuffixes.contains(s.toLowerCase()) ||
-          (s.toLowerCase() == 'versao') ||
-          int.tryParse(s) != null,
+      (s) =>
+          _songSuffixes.contains(s.toLowerCase()) ||
+          int.tryParse(s) != null, // versao/versao 后的数字 id 均已在表/整型判定内。
     );
   }
 }
