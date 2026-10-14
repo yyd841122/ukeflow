@@ -10,7 +10,8 @@ import '../play/tab_chart_page.dart';
 /// 曲库页(工单 15):统一曲目列表,分区即曲谱类型——弹唱谱
 /// (内置+自建,GLOSSARY「自建谱」导入后自动入列)与指弹谱(内置);
 /// 点弹唱谱/指弹谱直达对应跟练。图片谱区归工单 18。
-/// 三类曲目合流为一个 provider,加载/错误/空态在一处呈现。
+/// 三类曲目合流为一个 provider,加载/错误/空态在一处呈现;
+/// 自建谱坏一条只标记一条,不牵连整库(见 chart_providers.dart)。
 class LibraryPage extends ConsumerWidget {
   const LibraryPage({super.key});
 
@@ -24,36 +25,60 @@ class LibraryPage extends ConsumerWidget {
           loading: () => [
             _sectionHeader(context, '弹唱谱'),
             const _SectionLoading(),
-            _sectionHeader(context, '指弹谱'),
           ],
           error: (error, _) => [
             _sectionHeader(context, '弹唱谱'),
             _LibraryErrorView(error: error),
-            _sectionHeader(context, '指弹谱'),
           ],
           data: (library) => [
             _sectionHeader(context, '弹唱谱'),
             const SizedBox(height: 8),
             for (final entry in library.builtinStrum)
-              _StrumChartCard(
+              _ChartCard(
                 cardKey: 'chart-${entry.id}',
                 title: entry.chart.title,
-                chart: entry.chart,
+                subtitle: chartMetaLine(entry.chart),
+                onTap: () => _openStrumPractice(context, entry.chart),
               ),
             for (final entry in library.customStrum)
-              _StrumChartCard(
-                cardKey: 'custom-chart-${entry.id}',
-                title: entry.title,
-                chart: entry.chart,
-              ),
+              switch (entry) {
+                ReadyCustomStrum() => _ChartCard(
+                  cardKey: 'custom-chart-${entry.id}',
+                  title: entry.title,
+                  subtitle: chartMetaLine(entry.chart),
+                  onTap: () => _openStrumPractice(context, entry.chart),
+                ),
+                BrokenCustomStrum() => _ChartCard(
+                  cardKey: 'custom-chart-${entry.id}',
+                  title: entry.title,
+                  subtitle: '谱面读不出,暂不可跟练',
+                  enabled: false,
+                ),
+              },
             if (library.customStrum.isEmpty) const _CustomEmptyHint(),
             const SizedBox(height: 24),
             _sectionHeader(context, '指弹谱'),
             const SizedBox(height: 8),
-            for (final entry in library.tab) _TabChartCard(entry: entry),
+            for (final entry in library.tab)
+              _ChartCard(
+                cardKey: 'tab-chart-${entry.id}',
+                title: entry.chart.title,
+                subtitle: tabChartMetaLine(entry.chart),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TabChartPage(chart: entry.chart),
+                  ),
+                ),
+              ),
           ],
         ),
       ],
+    );
+  }
+
+  void _openStrumPractice(BuildContext context, StrumChart chart) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => PracticePage(chart: chart)),
     );
   }
 }
@@ -62,57 +87,39 @@ Widget _sectionHeader(BuildContext context, String text) {
   return Text(text, style: Theme.of(context).textTheme.titleMedium);
 }
 
-/// 弹唱谱卡片:曲名 + 元信息行,点按进入跟练会话页。内置与自建同一待遇
-/// (数据源接通后「同一列表」);自建的展示名来自入库命名,元信息取自源文本。
-class _StrumChartCard extends StatelessWidget {
-  const _StrumChartCard({
+/// 曲目卡片骨架:曲名 + 元信息行 + 尾标,弹唱/指弹/损坏降级三处共用。
+/// [enabled] false = 坏谱条目:可见、标记、不可点(ListTile 无 onTap)。
+class _ChartCard extends StatelessWidget {
+  const _ChartCard({
     required this.cardKey,
     required this.title,
-    required this.chart,
+    this.subtitle,
+    this.enabled = true,
+    this.onTap,
   });
 
   final String cardKey;
   final String title;
-  final StrumChart chart;
+  final String? subtitle;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final meta = chartMetaLine(chart);
     return Card(
       key: Key(cardKey),
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Text(title),
-        subtitle: meta != null ? Text(meta) : null,
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => PracticePage(chart: chart)),
-        ),
-      ),
-    );
-  }
-}
-
-/// 指弹谱卡片:曲名 + 元信息行,点按进入指弹跟练会话页。
-class _TabChartCard extends StatelessWidget {
-  const _TabChartCard({required this.entry});
-
-  final BuiltInTabChart entry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      key: Key('tab-chart-${entry.id}'),
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(entry.chart.title),
-        subtitle: Text(tabChartMetaLine(entry.chart)),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => TabChartPage(chart: entry.chart),
-          ),
-        ),
+        subtitle: subtitle != null ? Text(subtitle!) : null,
+        trailing:
+            enabled
+                ? const Icon(Icons.chevron_right)
+                : Icon(
+                  Icons.error_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+        onTap: onTap,
       ),
     );
   }

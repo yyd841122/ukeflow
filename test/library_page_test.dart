@@ -118,6 +118,29 @@ void main() {
     expect(find.text('开始跟练'), findsOneWidget);
   });
 
+  testWidgets('坏谱降级:单条自建谱读不出只标记自身,整库不株连', (tester) async {
+    await pumpLibrary(tester);
+
+    // 绕过导入管线直写坏谱(DAO 层不校验,读出层才校验)——
+    // 模拟存储损坏/白名单漂移后的存量坏行。
+    await db.customChartsDao.add(title: '坏谱歌', source: '{start_of_verse}\n[C]词');
+    await tester.pumpAndSettle();
+
+    // 坏条目:保留在列(不静默缺曲目)、标记不可跟练。
+    expect(find.text('坏谱歌'), findsOneWidget);
+    expect(find.text('谱面读不出,暂不可跟练'), findsOneWidget);
+    expect(find.textContaining('还没有自建谱'), findsNothing);
+    await tester.tap(find.byKey(const Key('custom-chart-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('开始跟练'), findsNothing, reason: '坏谱条目不可点进跟练');
+
+    // 整库不株连:内置谱照常在列、照常可进跟练。
+    expect(find.text('测试曲'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chart-test-chart-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('开始跟练'), findsOneWidget);
+  });
+
   testWidgets('加载失败:可见报错,不带病进列表', (tester) async {
     db = AppDatabase(
       DatabaseConnection(
