@@ -39,6 +39,17 @@ class ChartSectionSummary {
   final int lineCount;
 }
 
+/// 两行式谱防线（工单 16 机检补，App 内直转归工单 26）：解析通过但全谱
+/// 零和弦——网上最常见的「和弦悬在歌词上方」两行式排版直接粘贴就是
+/// 这个解析结果（和弦行变歌词行），新手拿到的是能入库但不能跟练的
+/// 空谱且看不出错在哪。返回给用户的可读指引；有和弦则 null。
+String? chordlessGuidance(StrumChart chart) =>
+    chart.sections.any((s) => s.lines.any((l) => l.chords.isNotEmpty))
+        ? null
+        : '谱里没有认出任何和弦记号。网上最常见的「和弦悬在歌词上方」'
+            '两行式谱,直接粘贴认不出来——请先转换成 [C]歌词 行内格式再粘'
+            '（转换工具或把和弦挪进歌词行,如 [Em]They told him...）';
+
 String _kindName(StrumSectionKind kind) => switch (kind) {
   StrumSectionKind.verse => '主歌',
   StrumSectionKind.chorus => '副歌',

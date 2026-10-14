@@ -75,6 +75,13 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
     if (!mounted) return;
     setState(() {
       if (result.ok) {
+        // 两行式谱防线(工单 26 直转落地前的闸):解析「成功」但零和弦
+        // = 两行式排版原样粘进来,拦下给可读指引,不给空谱入库。
+        final guidance = chordlessGuidance(result.chart!);
+        if (guidance != null) {
+          _errors = [guidance];
+          return;
+        }
         _chart = result.chart!;
         _report = ChartImportReport.of(result.chart!);
         // 曲名按源文本 {title} 预填;谱内无名字时留空逼用户命名。

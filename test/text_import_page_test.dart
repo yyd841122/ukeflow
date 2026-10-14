@@ -214,6 +214,17 @@ void main() {
     expect(find.text('开始跟练'), findsOneWidget);
   });
 
+  testWidgets('两行式谱被拦:零和弦给可读指引,不给入库', (tester) async {
+    await pumpImport(tester);
+
+    // 网上最常见的两行式排版原样粘贴(和弦悬在歌词上方)。
+    await paste(tester, "Em\nThey told him, don't you ever come around here\n");
+
+    expect(find.textContaining('两行式'), findsOneWidget);
+    expect(find.byKey(const Key('import-save')), findsNothing,
+        reason: '零和弦空谱不入库');
+  });
+
   testWidgets('窄屏(360dp)不溢出', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3.0;
