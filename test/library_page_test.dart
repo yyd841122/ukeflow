@@ -81,6 +81,14 @@ void main() {
     );
   });
 
+  testWidgets('弹唱谱区有 Cifra Club 搜索源入口(工单 17)', (tester) async {
+    await pumpLibrary(tester);
+
+    // 只验入口在:点进会构造 WebView(真平台件),widget 测试环境没有,
+    // 页面本身由真机验收(票 17 验收①)。
+    expect(find.text('Cifra Club'), findsOneWidget);
+  });
+
   testWidgets('点弹唱谱进跟练页,弹回回曲库', (tester) async {
     await pumpLibrary(tester);
 

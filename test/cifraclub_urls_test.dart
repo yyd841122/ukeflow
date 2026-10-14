@@ -1,0 +1,69 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:ukeflow/features/library/cifraclub_urls.dart';
+
+void main() {
+  group('CifraClubUrls', () {
+    test('站内搜索 URL:q 参数编码', () {
+      expect(
+        CifraClubUrls.search('beat it').toString(),
+        'https://www.cifraclub.com.br/busca/?q=beat+it',
+      );
+    });
+
+    test('曲谱页判定:艺人/歌曲两段路径', () {
+      expect(
+        CifraClubUrls.isSongPage(
+          Uri.parse('https://www.cifraclub.com.br/embrace/gravity/'),
+        ),
+        isTrue,
+      );
+      expect(
+        CifraClubUrls.isSongPage(
+          Uri.parse('https://www.cifraclub.com.br/michael-jackson/beat-it/'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('非曲谱页:首页/艺人页/搜索/站务路径/外站', () {
+      bool song(String url) =>
+          CifraClubUrls.isSongPage(Uri.parse(url));
+      expect(song('https://www.cifraclub.com.br/'), isFalse);
+      expect(song('https://www.cifraclub.com.br/embrace/'), isFalse);
+      expect(
+        song('https://www.cifraclub.com.br/busca/?q=beat+it'),
+        isFalse,
+      );
+      expect(
+        song('https://www.cifraclub.com.br/assine/'),
+        isFalse,
+      );
+      expect(
+        song('https://www.cifraclub.com.br/mais-acessadas/'),
+        isFalse,
+      );
+      expect(song('https://example.com/embrace/gravity/'), isFalse);
+      expect(
+        song('https://www.cifraclub.com.br/embrace/gravity.jpg'),
+        isFalse,
+      );
+    });
+
+    test('曲谱页变体:versao 备选版与乐器子路径仍在,未知三段路径不出', () {
+      bool song(String url) =>
+          CifraClubUrls.isSongPage(Uri.parse(url));
+      expect(
+        song('https://www.cifraclub.com.br/embrace/gravity/versao/12345/'),
+        isTrue,
+      );
+      expect(
+        song('https://www.cifraclub.com.br/embrace/gravity/ukulele/'),
+        isTrue,
+      );
+      expect(
+        song('https://www.cifraclub.com.br/embrace/gravity/whatever/'),
+        isFalse,
+      );
+    });
+  });
+}

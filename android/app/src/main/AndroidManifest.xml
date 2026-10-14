@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cifra Club 搜索源(工单 17):WebView 加载站点与提取,一切联网都在
+         用户可见的 WebView 里发生(ADR-0002:禁止服务端直连爬取)。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="UkeFlow"
         android:name="${applicationName}"

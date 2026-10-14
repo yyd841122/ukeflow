@@ -19,7 +19,10 @@ void main() {
   late AppDatabase db;
   late FakeAudioEngine engine;
 
-  Future<void> pumpImport(WidgetTester tester) async {
+  Future<void> pumpImport(
+    WidgetTester tester, {
+    String? initialSource,
+  }) async {
     db = AppDatabase(
       DatabaseConnection(
         NativeDatabase.memory(),
@@ -35,7 +38,9 @@ void main() {
           audioEngineProvider.overrideWithValue(engine),
           chordLibraryFixtureOverride(),
         ],
-        child: const MaterialApp(home: TextImportPage()),
+        child: MaterialApp(
+          home: TextImportPage(initialSource: initialSource),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -231,5 +236,46 @@ void main() {
     addTearDown(tester.view.reset);
     await pumpImport(tester);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('预填直达校验(搜索源导入路径):进页即报告,{title} 预填曲名', (
+    tester,
+  ) async {
+    await pumpImport(
+      tester,
+      initialSource: practiceFixtureChartText,
+    );
+
+    expect(find.byKey(const Key('import-validate')), findsNothing,
+        reason: '不落粘贴态');
+    expect(find.byKey(const Key('import-save')), findsOneWidget);
+    expect(find.text('测试曲'), findsOneWidget,
+        reason: '曲名按源文本 {title} 预填');
+  });
+
+  testWidgets('预填坏谱:落回粘贴态给可读错误,原文可改可重校', (tester) async {
+    await pumpImport(
+      tester,
+      initialSource: '{start_of_verse: 主歌}\n[Am]没闭合\n',
+    );
+
+    expect(find.byKey(const Key('import-validate')), findsOneWidget);
+    expect(find.byKey(const Key('import-save')), findsNothing);
+    expect(find.textContaining('没有闭合'), findsOneWidget);
+    // 原文预填在粘贴框里,改完可原地重校。
+    expect(
+      find.byKey(const Key('import-source')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('预填后改名入库:曲库名=用户输入名(非源 {title})', (tester) async {
+    await pumpImport(tester, initialSource: practiceFixtureChartText);
+
+    await tester.enterText(find.byKey(const Key('import-title')), '新名字');
+    await tester.tap(find.byKey(const Key('import-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入成功'), findsOneWidget);
   });
 }

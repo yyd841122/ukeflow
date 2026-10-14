@@ -14,8 +14,14 @@ import '../play/practice_page.dart';
 /// 改完原地重试）→ 报告（和弦清单+段落结构过目、命名入库；曲库已有同名
 /// 弹明确处置，不静默重复）→ 成功（校验报告再呈，一键直达跟练会话页）。
 /// 新谱落库即随曲库流自动入列（工单 15 数据源）。
+///
+/// [initialSource] 预填源文本（工单 17 搜索源导入：WebView 提取转换的
+/// 文本谱从这进来），进页即自动校验——过了直落报告，不过落回粘贴态给
+/// 可读错误。与粘贴路径同一校验层，别无旁门。
 class TextImportPage extends ConsumerStatefulWidget {
-  const TextImportPage({super.key});
+  const TextImportPage({super.key, this.initialSource});
+
+  final String? initialSource;
 
   @override
   ConsumerState<TextImportPage> createState() => _TextImportPageState();
@@ -40,6 +46,17 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
   StrumChart? _chart;
 
   String? _titleError;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialSource;
+    if (initial != null) {
+      _source.text = initial;
+      // 进页即校验(异步,见 _validate 的 mounted 防)；失败落回粘贴态。
+      _validate();
+    }
+  }
 
   /// 入库写入期间禁用存入钮（双击防抖，打卡钮同款）。
   var _saving = false;
