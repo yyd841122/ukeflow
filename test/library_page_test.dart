@@ -68,6 +68,19 @@ void main() {
     expect(find.text('节奏型训练'), findsOneWidget);
   });
 
+  testWidgets('弹唱谱区有文本导入入口,点进导入页', (tester) async {
+    await pumpLibrary(tester);
+
+    await tester.tap(find.text('导入'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('import-source')),
+      findsOneWidget,
+      reason: '进入文本导入页',
+    );
+  });
+
   testWidgets('点弹唱谱进跟练页,弹回回曲库', (tester) async {
     await pumpLibrary(tester);
 

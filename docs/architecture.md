@@ -34,7 +34,7 @@ lib/
 │   │                 # tab_practice_state.dart 逐音练习状态((时间轴,引擎时刻)→当前音/预亮窗/拍,工单 13)
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
-├── data/             # drift 表：checkins、charts(自建)、settings；assets/：内置谱、chords-db、采样
+├── data/             # drift 表：checkins、custom_charts(自建谱;设置表归工单 20)；assets/：内置谱、chords-db、采样
 ├── features/
 │   ├── tuner/        # 调音器（spike A 代码升级迁入）
 │   ├── chords/       # 和弦库：指法图+按法要点+示范音
@@ -42,8 +42,8 @@ lib/
 │   ├── play/         # 跟练引擎（核心）：同步视图+俄罗斯方块预告+扫弦箭头/四线谱高亮
 │   ├── demo/         # 示范试听：弹唱谱按节奏型扫弦、指弹谱逐音
 │   ├── path/         # 30 天练习路径+打卡
-│   └── library/      # 曲库列表+导入(粘贴文本/链接/Cifra Club WebView)+图片谱查看
-└── import/           # CifraClubParser(WebView DOM)、PasteParser(粘贴文本→ChordPro)
+│   └── library/      # 曲库列表+文本导入(text_import_page,粘贴→校验→命名入库)+图片谱查看;
+│                     # 链接/Cifra Club 导入归工单 17,同落此处
 ```
 
 ## 同步引擎设计（产品核心，ADR-0005 约束）

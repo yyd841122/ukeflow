@@ -62,7 +62,11 @@ class StrumChart {
     required this.sections,
   });
 
-  /// 歌名（`{title}`），缺省时为「未命名」。
+  /// 谱内无 {title} 时的缺省名(解析层赋值)。
+  /// 判断「谱内有无显式曲名」须比对本常量,不得各处自写字面串。
+  static const untitled = '未命名';
+
+  /// 歌名（`{title}`），缺省时为 [untitled]。
   final String title;
   final String? artist;
 

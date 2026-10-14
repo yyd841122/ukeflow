@@ -269,7 +269,7 @@ class StrumChartParser {
     }
     final meta = song.metadata;
     return StrumChart(
-      title: meta.titles.isEmpty ? '未命名' : meta.titles.first,
+      title: meta.titles.isEmpty ? StrumChart.untitled : meta.titles.first,
       artist: meta.artists.isEmpty ? null : meta.artists.first,
       key: meta.keys.isEmpty ? null : meta.keys.first,
       tempo: meta.tempo,

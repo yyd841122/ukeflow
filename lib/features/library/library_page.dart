@@ -8,6 +8,7 @@ import '../play/practice_page.dart';
 import '../play/tab_chart_page.dart';
 import '../rhythm/metronome_page.dart';
 import '../rhythm/rhythm_trainer_page.dart';
+import 'text_import_page.dart';
 
 /// 曲库页(工单 15):练琴入口的唯一家——顶部练琴工具行(节拍器/节奏型
 /// 训练,工单 15 后续自用户决策裁撤跟练页签并入于此),下方统一曲目列表,
@@ -55,15 +56,15 @@ class LibraryPage extends ConsumerWidget {
         const SizedBox(height: 24),
         ...libraryAsync.when(
           loading: () => [
-            _sectionHeader(context, '弹唱谱'),
+            _strumSectionHeader(context),
             const _SectionLoading(),
           ],
           error: (error, _) => [
-            _sectionHeader(context, '弹唱谱'),
+            _strumSectionHeader(context),
             _LibraryErrorView(error: error),
           ],
           data: (library) => [
-            _sectionHeader(context, '弹唱谱'),
+            _strumSectionHeader(context),
             const SizedBox(height: 8),
             for (final entry in library.builtinStrum)
               _ChartCard(
@@ -117,6 +118,25 @@ class LibraryPage extends ConsumerWidget {
 
 Widget _sectionHeader(BuildContext context, String text) {
   return Text(text, style: Theme.of(context).textTheme.titleMedium);
+}
+
+/// 弹唱谱区头:区名 + 文本导入入口(工单 16)。入口不依赖曲库数据,
+/// 加载/错误态也在——导入只需和弦库,不被列表问题挡路。
+Widget _strumSectionHeader(BuildContext context) {
+  return Row(
+    children: [
+      _sectionHeader(context, '弹唱谱'),
+      const Spacer(),
+      TextButton.icon(
+        onPressed:
+            () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const TextImportPage()),
+            ),
+        icon: const Icon(Icons.post_add),
+        label: const Text('导入'),
+      ),
+    ],
+  );
 }
 
 /// 曲目卡片骨架:曲名 + 元信息行 + 尾标,弹唱/指弹/损坏降级三处共用。

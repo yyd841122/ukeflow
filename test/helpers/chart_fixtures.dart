@@ -39,6 +39,18 @@ const practiceFixtureChartText = '''
 /// 每次取用现解析（parseChart 里有 expect，须在测试内求值）。
 StrumChart get practiceFixtureChart => parseChart(practiceFixtureChartText);
 
+/// 文本导入（工单 16）测试用真实网上谱形态：无段落指令的散行+空行，
+/// 和弦全部在 ui_fixture.json 库面标签内（Am/A7/C/G7/Bm）。
+const importFixtureSource = '''
+{title: 网上找的谱}
+{tempo: 88}
+[C]门前大桥下游过一群鸭
+[C]快来快来数一数 [G7]二四六七八
+
+[Am]嘎嘎嘎嘎 [Bm]真呀真多呀
+[Am]数不清到底多少鸭
+''';
+
 /// 指弹跟练（工单 13）测试用小谱:80 BPM = 750ms/拍,半拍音钉非整除
 /// 边界;事件时刻 0 / 750 / 1875 / 2250ms,全曲 4 拍(1 小节) = 3000ms。
 const tabFixtureChart = TabChart(

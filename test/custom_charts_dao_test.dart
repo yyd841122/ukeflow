@@ -5,6 +5,8 @@ import 'package:ukeflow/data/database.dart';
 
 /// 工单 15 曲库数据源:自建谱 DAO 内存库测试(入库、响应式流)。
 /// 「导入即自动入列」的数据面在这验证;UI 呈现在 library_page_test。
+/// 工单 16 追加:重名查询(同名重复导入的判定面)与覆盖写(重复导入的
+/// 「覆盖原谱」处置)。
 void main() {
   late AppDatabase db;
   late CustomChartsDao dao;
@@ -46,5 +48,47 @@ void main() {
     );
     await dao.add(title: '第一首', source: '[Am]词\n');
     await expectation;
+  });
+
+  test('getByTitle:命中返回该行,未命中返回 null(重名判定面)', () async {
+    await dao.add(title: '已有的歌', source: '[C]词\n');
+
+    final hit = await dao.getByTitle('已有的歌');
+    expect(hit, isNotNull);
+    expect(hit!.source, '[C]词\n');
+
+    expect(await dao.getByTitle('别的歌'), isNull);
+  });
+
+  test('getByTitle:同名多行(两个都保留的产物)不抛,返回最早入库行', () async {
+    await dao.add(title: '重名歌', source: '[C]第一份\n');
+    await dao.add(title: '重名歌', source: '[Am]第二份\n');
+
+    final hit = await dao.getByTitle('重名歌');
+    expect(hit, isNotNull);
+    expect(hit!.source, '[C]第一份\n', reason: '覆盖原谱覆盖的是最早那份');
+  });
+
+  test('overwrite:按 id 覆盖曲名与源文本,其余行不动', () async {
+    final keepId = await dao.add(title: '保留的歌', source: '[C]旧词\n');
+    final replacedId = await dao.add(title: '被覆盖的歌', source: '[C]旧词\n');
+
+    await dao.overwrite(
+      id: replacedId,
+      title: '被覆盖的歌',
+      source: '[Am]新词\n',
+    );
+
+    final rows = await dao.getAll();
+    expect(rows, hasLength(2));
+    expect(
+      rows.firstWhere((row) => row.id == replacedId).source,
+      '[Am]新词\n',
+    );
+    expect(
+      rows.firstWhere((row) => row.id == keepId).source,
+      '[C]旧词\n',
+      reason: '覆盖只动目标行',
+    );
   });
 }
