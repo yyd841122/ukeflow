@@ -156,7 +156,7 @@ String buildChordPro(
     hanging = null;
   }
 
-  for (final line in payload.lines.map(_CifraLine.of)) {
+  for (final line in _classifyLines(payload.lines)) {
     switch (line) {
       case _BlankLine():
         flushHangingStandalone(); // 空行断开配对:悬空行就地独立落盘。
@@ -242,6 +242,63 @@ String _mapPartToFlat(String part) {
 // 行分类:预内容里的一行分五类
 // (空行/段落标记行/悬空和弦行/纯歌词行/混排行),分类只看本行。
 // ---------------------------------------------------------------------------
+
+/// 行首标记前缀:真站(2026-10-14 真机机检,Let It Be 页)把
+/// 「[Intro] C G」「[Solo] …」的标记与和弦放同一行——不剥的话标记文本
+/// 混进歌词,校验层把 [Intro] 当和弦记号拦下。
+final RegExp _leadingMarkerRe = RegExp(r'^\s*\[([^\[\]]+)\]\s*');
+
+/// 行分类入口:行首带标记前缀的行拆成「标记行 + 剩余行」两条
+/// (剩余行的和弦列位前移),其余原样单行分类。
+List<_CifraLine> _classifyLines(List<List<CifraSeg>> lines) {
+  final out = <_CifraLine>[];
+  for (final segs in lines) {
+    final text = [
+      for (final seg in segs)
+        if (seg is CifraTextSeg) seg.text,
+    ].join();
+    final leading = _leadingMarkerRe.firstMatch(text);
+    if (leading == null) {
+      out.add(_CifraLine.of(segs));
+      continue;
+    }
+    final label = leading.group(1)!.trim();
+    out.add(_MarkerLine(slug: _markerSlug(label), label: _cleanLabel(label)));
+    out.add(_CifraLine.of(_stripLeadingText(segs, leading.end)));
+  }
+  return out;
+}
+
+/// 把行内文本剥掉前 [charCount] 个字符(和弦段列位同步前移)。
+List<CifraSeg> _stripLeadingText(List<CifraSeg> segs, int charCount) {
+  final stripped = <CifraSeg>[];
+  var removed = 0;
+  for (final seg in segs) {
+    switch (seg) {
+      case CifraTextSeg(:final text):
+        if (removed >= charCount) {
+          stripped.add(seg);
+        } else if (removed + text.length <= charCount) {
+          removed += text.length; // 整段落在前缀里,不产出。
+        } else {
+          final rest = text.substring(charCount - removed);
+          removed = charCount;
+          if (rest.isNotEmpty) stripped.add(CifraTextSeg(rest));
+        }
+      case CifraChordSeg():
+        // 前缀全是行首文本,和弦段必然整体在后:列位一律前移。
+        final column = seg.column - charCount;
+        stripped.add(
+          CifraChordSeg(
+            name: seg.name,
+            raw: seg.raw,
+            column: column < 0 ? 0 : column,
+          ),
+        );
+    }
+  }
+  return stripped;
+}
 
 sealed class _CifraLine {
   static _CifraLine of(List<CifraSeg> segs) {

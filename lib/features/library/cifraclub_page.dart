@@ -56,10 +56,13 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
     return url != null && CifraClubUrls.isSongPage(url);
   }
 
+  /// 搜索框提交:像链接的直接加载(粘贴链接导入,含 /ukulele/ 乐器版),
+  /// 关键词走站内搜索。导入钮仍由 isSongPage 把关,只在曲谱页出现。
   Future<void> _search(String query) async {
     final q = query.trim();
     if (q.isEmpty) return;
-    await _controller.loadRequest(CifraClubUrls.search(q));
+    final link = CifraClubUrls.linkOrNull(q);
+    await _controller.loadRequest(link ?? CifraClubUrls.search(q));
   }
 
   /// 提取 → 转文本谱 → 进 16 的校验入库管线(预填直达报告)。

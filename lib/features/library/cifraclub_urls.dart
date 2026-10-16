@@ -17,6 +17,18 @@ class CifraClubUrls {
     'https://www.cifraclub.com.br/busca/',
   ).replace(queryParameters: {'q': query});
 
+  /// 搜索框输入解析(工单 17「链接导入」半边):像 http(s) 链接的输入
+  /// 原样返回供 WebView 加载(粘 Cifra Club 链接直达曲谱页,含
+  /// /ukulele/ 乐器版本);其余(关键词、非 http(s) scheme)返回 null
+  /// 走站内搜索——scheme 白名单挡掉 javascript:/file: 之类注入面。
+  static Uri? linkOrNull(String input) {
+    final uri = Uri.tryParse(input.trim());
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    if (uri.host.isEmpty) return null;
+    return uri;
+  }
+
   /// 顶层站务/功能路径:这些开头的两段路径不是「艺人/歌曲」。
   static const _reservedTop = {
     'busca', 'assine', 'pro', 'academy', 'afinador', 'metronomo', 'blog',

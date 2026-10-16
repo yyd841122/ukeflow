@@ -68,5 +68,24 @@ void main() {
         isFalse,
       );
     });
+
+    group('linkOrNull(搜索框输入解析:粘贴链接导入路径)', () {
+      test('http(s) 链接原样返回,其余(关键词/危险 scheme)归搜索', () {
+        expect(
+          CifraClubUrls.linkOrNull(
+            'https://www.cifraclub.com.br/michael-jackson/beat-it/ukulele/',
+          ).toString(),
+          'https://www.cifraclub.com.br/michael-jackson/beat-it/ukulele/',
+        );
+        expect(
+          CifraClubUrls.linkOrNull('http://www.cifraclub.com.br/')!.host,
+          'www.cifraclub.com.br',
+        );
+        expect(CifraClubUrls.linkOrNull('beat it'), isNull);
+        expect(CifraClubUrls.linkOrNull('javascript:alert(1)'), isNull,
+            reason: '非 http(s) scheme 一律当关键词,防 WebView scheme 注入');
+        expect(CifraClubUrls.linkOrNull('file:///etc/hosts'), isNull);
+      });
+    });
   });
 }

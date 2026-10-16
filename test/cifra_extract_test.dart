@@ -249,6 +249,31 @@ void main() {
       );
     });
 
+    test('标记与和弦同行(真站形态):[Intro] 剥为段落行,和弦照常行内化', () {
+      // 2026-10-14 真机机检(Let It Be 页):站点把 [Intro]/[Solo] 与和弦
+      // 放同一行——纯文本段 "[Intro] " 在前,b 和弦段跟后。
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>[
+            '[Intro] ',
+            {'c': 'C', 's': 'C'},
+            ' ',
+            {'c': 'G', 's': 'G'},
+          ],
+          <Object>[],
+          ['When I find myself in times of trouble'],
+        ],
+      })!;
+
+      final text = buildChordPro(payload, allowedChords: {'C', 'G', 'Am', 'F'});
+      // 标记不再混进歌词当和弦记号;Intro 段落指令对;悬空和弦行独立落盘。
+      expect(text, contains('{start_of_intro: Intro}'));
+      expect(text, contains('{end_of_intro}'));
+      expect(text, contains('[C] [G]'));
+      expect(text, isNot(contains('[Intro]')));
+      expect(text, contains('When I find myself in times of trouble'));
+    });
+
     test('歌词行不以和弦行替身被误杀:普通句子照常配和弦', () {
       final payload = decodeCifraPayload({
         'lines': <List<Object>>[
