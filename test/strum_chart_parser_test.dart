@@ -269,4 +269,27 @@ void main() {
     });
   });
 
+
+  test('移调/拍号的变体形态同样拒:非整数值、行内指令(verify 复核 #17)', () {
+    const allowed = {'C', 'G', 'Am'};
+    final weird = StrumChartParser.parse(
+      '{transpose: 2s}\n[C]词\n',
+      allowedChords: allowed,
+    );
+    expect(
+      weird.issues.any((i) => i.code == ChartIssueCode.unsupportedDirective),
+      isTrue,
+      reason: '非整数值的移调指令不得静默忽略',
+    );
+    final inline = StrumChartParser.parse(
+      '{start_of_verse}\n[C]词 {transpose: 2}\n{end_of_verse}\n',
+      allowedChords: allowed,
+    );
+    expect(
+      inline.issues.any((i) => i.code == ChartIssueCode.unsupportedDirective),
+      isTrue,
+      reason: '行内移调指令不得静默忽略',
+    );
+  });
+
 }

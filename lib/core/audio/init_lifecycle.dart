@@ -23,11 +23,16 @@ class InitLifecycle {
   /// 是否已 dispose(dispose 后初始化一律拒绝)。
   bool get disposed => _disposed;
 
-  /// 幂等初始化;并发调用合并为同一次;dispose 后抛 [StateError]。
+  /// 幂等初始化;并发调用合并为同一次;**已完成初始化后重复调用直接
+  /// 返回**(isLive 幂等闸——flutter_soloud 对已初始化引擎再 init 会
+  /// 清空音源登记并 deinit/reinit,verify 复核 #9 时抓出的回归:缺此闸
+  /// 则 loadMem 每次都重启引擎、此前加载的音源全部失效);dispose 后
+  /// 抛 [StateError]。
   Future<void> ensureInitialized(Future<void> Function() init) {
     if (_disposed) {
       return Future.error(StateError('引擎已关闭,不能再次初始化'));
     }
+    if (isLive()) return Future.value();
     return _pending ??= init().whenComplete(() => _pending = null);
   }
 

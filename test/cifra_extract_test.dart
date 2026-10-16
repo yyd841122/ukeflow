@@ -609,4 +609,40 @@ void main() {
     });
   });
 
+
+  test('「Dama Amiga」是歌词不是和弦行:不再误判二记谱(verify 复核 #14)', () {
+    final payload = decodeCifraPayload({
+      'lines': <List<Object>>[
+        [
+          {'c': 'C', 's': 'C'},
+          '  ',
+          {'c': 'G', 's': 'G'},
+        ],
+        ['Dama Amiga'],
+      ],
+    })!;
+    expect(
+      buildChordPro(payload, allowedChords: {'C', 'G'}),
+      '[C][G]Dama Amiga\n',
+      reason: '行保留为歌词(G 按词首回退吸到行首);'
+          '两词全由 quality 字母构成也曾过词形闸——结构形状闸必须拦下',
+    );
+  });
+
+  test('标题含换行:折叠成空格,不破坏指令行结构(verify 复核 #11)', () {
+    final payload = decodeCifraPayload({
+      'title': 'Song\nOther',
+      'lines': <List<Object>>[
+        [
+          {'c': 'C', 's': 'C'},
+          '词\n',
+        ],
+      ],
+    })!;
+    final chordpro = buildChordPro(payload, allowedChords: {'C'});
+    final result = StrumChartParser.parse(chordpro, allowedChords: {'C'});
+    expect(result.issues, isEmpty, reason: '实际输出:$chordpro');
+    expect(result.chart!.title, 'Song Other');
+  });
+
 }

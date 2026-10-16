@@ -219,7 +219,8 @@ String _escapeLyricText(String text) => text
 /// 编码——剥除(内容保留:「Song {Live}」→「Song Live」),反斜杠
 /// 一并剥(它是行内转义符,留在值里只会以字面出现)。剥除是结构降噪:
 /// 不剥则值被首个 } 截断、尾巴漏成杂歌词(审计 2026-10-16 #11)。
-String _directiveArg(String text) => text.replaceAll(RegExp(r'[{}\\]'), '');
+String _directiveArg(String text) =>
+    text.replaceAll(RegExp(r'[{}\\]'), '').replaceAll(RegExp(r'[\r\n]+'), ' ');
 
 /// 行内化:把 (列位, 和弦名) 记号按列位织进歌词(同列位保持和弦先后,
 /// 紧邻书写;dart List.sort 非稳定,以数组序为次键)。歌词侧文本经
@@ -515,14 +516,13 @@ String _lyricish(String text) {
 /// 段落标记行:整行一个方括号词。
 final RegExp _markerRe = RegExp(r'^\[([^\[\]]+)\]$');
 
-/// 和弦样 token:大写根音开头(A-G,可带升降号),后接 quality 字符集
-/// (m/a/j/i/n/d/u/g/M + 数字与和弦记号)。不再吸收任意后缀:词形单词
-/// (「Amor」= A+mor 的 o、「Deus」= D+e 的 e)不再判成和弦样——残余
-/// 风险由「词数≥2 + 严格过半」门槛兜底(审计 2026-10-16 #14)。
-/// (JS 侧的同类判定见 features/library/cifraclub_extract_js.dart 的
-/// CHORD_SHAPE——那边判「粗体元素是不是和弦」用结构性 quality 词表,
-/// 这边判「纯文本行是不是和弦样」用字符集,各自取各自的最紧形状。)
-final RegExp _chordTokenRe = RegExp(r'^[A-G][#b♯♭]?[majindugsM0-9()#b♯♭/+\-]*$');
+/// 和弦样 token:大写根音开头(A-G,可带升降号),quality 与 JS 侧
+/// CHORD_SHAPE 同一**结构形状**(7? + 词表 + 记号类,verify 复核 #14
+/// 抓出字符集形状仍放行「Dama Amiga」这类全由 quality 字母构成的
+/// 词)。词形单词(Amor/Deus/Dama/Caged)不再判成和弦样;漏网余量由
+/// 「词数≥2 + 严格过半」门槛兜底(漏判方向安全:留作歌词不丢行)。
+final RegExp _chordTokenRe = RegExp(
+    r'^[A-G][#b♯♭]?(7?(M|maj|min|dim|aug|sus|add|m))?[0-9()#b♯♭+-]*(/[A-G][#b]?[0-9()#b+-]*)?$');
 
 /// 标签进指令参数:去花括号与换行(会破坏 {directive: label} 语法)。
 String _cleanLabel(String label) =>

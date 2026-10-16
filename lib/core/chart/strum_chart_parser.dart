@@ -201,18 +201,20 @@ class StrumChartParser {
     List<String> sourceLines,
   ) {
     final issues = <ChartIssue>[];
-    for (final d in song.directives) {
+    void check(Directive d) {
       final value = (d.value ?? '').trim();
       switch (d.name) {
         case 'transpose':
+          // 非整数值(「2s」等)同样拒绝:任何形式的移调指令被静默忽略
+          // 都是音高错播(verify 复核 #17)。
           final semitones = int.tryParse(value);
-          if (semitones != null && semitones != 0) {
+          if (semitones == null || semitones != 0) {
             issues.add(
               ChartIssue(
                 code: ChartIssueCode.unsupportedDirective,
                 line: d.span.line,
                 column: d.span.column,
-                message: '${_at(d.span)}:{transpose: $semitones} 要求移调，'
+                message: '${_at(d.span)}:{transpose: $value} 要求移调，'
                     '本 App 不支持移调;请把谱面转回原调后再导入',
               ),
             );
@@ -229,6 +231,19 @@ class StrumChartParser {
               ),
             );
           }
+      }
+    }
+
+    for (final d in song.directives) {
+      check(d);
+    }
+    // 行内指令({transpose:2} 夹在歌词行里)同样查——只查顶层会漏
+    // (verify 复核 #17)。
+    for (final section in song.activeSections) {
+      for (final line in section.lines) {
+        for (final token in line.tokens) {
+          if (token is InlineDirectiveToken) check(token.directive);
+        }
       }
     }
     return issues;

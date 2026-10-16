@@ -84,14 +84,16 @@ void main() {
   test('并发初始化合并为同一次(既有语义保持)', () async {
     var inits = 0;
     final gate = Completer<void>();
-    final lc = InitLifecycle(isLive: () => true, shutdown: () {});
+    // 完成前引擎不 live(gate 放行才置位):并发合并在未完成窗口内生效。
+    final lc = InitLifecycle(isLive: () => inits > 0, shutdown: () {});
+    // 真实时序:引擎在初始化**完成时**才 live——闭包先等闸、后置位。
     final f1 = lc.ensureInitialized(() async {
-      inits++;
       await gate.future;
+      inits++;
     });
     final f2 = lc.ensureInitialized(() async {
-      inits++;
       await gate.future;
+      inits++;
     });
     expect(identical(f1, f2), isTrue, reason: '并发复用同一 Future');
     gate.complete();
@@ -99,4 +101,30 @@ void main() {
     await f2;
     expect(inits, 1);
   });
+
+  test('初始化完成后重复调用:闭包不重跑,幂等返回(verify 复核 #9 回归)', () async {
+    var inits = 0;
+    final lc = InitLifecycle(isLive: () => inits > 0, shutdown: () {});
+    await lc.ensureInitialized(() async => inits++);
+    await lc.ensureInitialized(() async => inits++);
+    await lc.ensureInitialized(() async => inits++);
+    expect(inits, 1, reason: '已完成初始化后重复调用不得重跑闭包'
+        '(真引擎再 init = 清音源登记 + deinit/reinit)');
+  });
+
+  test('连续注入两个音源的顺序加载路径:初始化只执行一次(verify 复核场景)', () async {
+    var inits = 0;
+    final lc = InitLifecycle(isLive: () => inits > 0, shutdown: () {});
+    // 模拟 loadMem×2:每个都先 await ensureInitialized 再干活。
+    Future<String> load(String key) async {
+      await lc.ensureInitialized(() async => inits++);
+      return key;
+    }
+
+    await Future.wait([load('a'), load('b')]);
+    expect(inits, 1, reason: '并发合并');
+    await load('c');
+    expect(inits, 1, reason: '顺序跟进也不再初始化');
+  });
+
 }
