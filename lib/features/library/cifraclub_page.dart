@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -53,6 +55,9 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
                 final url = change.url;
                 if (url != null) _currentUrl = Uri.tryParse(url);
                 _failure = null;
+                // 机检时「WebView 现在在哪页」从截图/树里都看不见——
+                // debug 构建留痕,release 零输出。
+                if (kDebugMode) debugPrint('CifraClub url: ${url ?? '<null>'}');
               }),
           onProgress:
               (value) => setState(() {
