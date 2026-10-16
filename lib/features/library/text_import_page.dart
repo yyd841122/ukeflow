@@ -18,10 +18,13 @@ import '../play/practice_page.dart';
 /// [initialSource] 预填源文本（工单 17 搜索源导入：WebView 提取转换的
 /// 文本谱从这进来），进页即自动校验——过了直落报告，不过落回粘贴态给
 /// 可读错误。与粘贴路径同一校验层，别无旁门。
+/// [notice] 顶部告知行（如「此歌没有 Ukulele 版，已按原版导入」），
+/// 报告与成功页都可见——版本回退这类来源事实要让用户在中文界面里看到。
 class TextImportPage extends ConsumerStatefulWidget {
-  const TextImportPage({super.key, this.initialSource});
+  const TextImportPage({super.key, this.initialSource, this.notice});
 
   final String? initialSource;
+  final String? notice;
 
   @override
   ConsumerState<TextImportPage> createState() => _TextImportPageState();
@@ -261,10 +264,40 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
     );
   }
 
+  /// 顶部告知行(notice 非 null 时):来源事实(如 ukulele 版缺失回退)
+  /// 在中文界面可见。
+  Widget _buildNotice(BuildContext context) {
+    final notice = widget.notice!;
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              notice,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReport(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (widget.notice != null) _buildNotice(context),
         TextField(
           key: const Key('import-title'),
           controller: _title,
@@ -290,6 +323,7 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        if (widget.notice != null) _buildNotice(context),
         Icon(
           Icons.check_circle,
           size: 48,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -30,6 +32,9 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
   /// 提取失败的可读原因(null = 没失败)。换页即清。
   String? _failure;
 
+  /// 页面加载完成的一次性等待点(_navigateAndExtract 用)。
+  Completer<void>? _pageWaiter;
+
   var _importing = false;
 
   @override
@@ -46,6 +51,11 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
                 if (url != null) _currentUrl = Uri.tryParse(url);
                 _failure = null;
               }),
+          onPageFinished: (_) {
+            final waiter = _pageWaiter;
+            _pageWaiter = null;
+            waiter?.complete();
+          },
         ),
       )
       ..loadRequest(CifraClubUrls.home);
@@ -65,7 +75,10 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
     await _controller.loadRequest(link ?? CifraClubUrls.search(q));
   }
 
-  /// 提取 → 转文本谱 → 进 16 的校验入库管线(预填直达报告)。
+  /// 导入此谱(**ukulele 优先**,用户反馈:版本管理不该甩给用户):
+  /// 当前是两段标准曲谱页时先载 `/ukulele/` 变体提取;没有该版
+  /// (站点 404 壳/无和弦)自动回退原版,并在导入页中文告知「已按
+  /// 原版导入」。提取→转文本谱→进 16 的校验入库管线(预填直达报告)。
   Future<void> _import() async {
     if (_importing) return;
     setState(() {
@@ -73,9 +86,25 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       _failure = null;
     });
     try {
-      final raw = await _controller.runJavaScriptReturningResult(
-        cifraExtractScript,
-      );
+      final current = _currentUrl;
+      final uke = current == null ? null : CifraClubUrls.ukuleleVariant(current);
+      String? notice;
+      var raw = uke == null
+          ? await _controller.runJavaScriptReturningResult(cifraExtractScript)
+          : null;
+      if (uke != null) {
+        final ukeRaw = await _navigateAndExtract(uke);
+        if (_readableFailure(ukeRaw) == null &&
+            decodeCifraPayload(ukeRaw) != null) {
+          raw = ukeRaw;
+        } else {
+          // 没有 ukulele 版(404 壳/页面无谱):回退原版,告知用户。
+          notice = '此歌没有 Ukulele 版,已按原版导入——可能是吉他谱,'
+              '吉他特有和弦会被校验拦下。';
+          raw = await _navigateAndExtract(current!);
+        }
+      }
+
       final failureText = _readableFailure(raw);
       if (failureText != null) {
         setState(() => _failure = failureText);
@@ -92,7 +121,8 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       // 同一校验层(ADR-0006):预填进文本导入页,过了校验才谈入库。
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => TextImportPage(initialSource: source),
+          builder: (_) =>
+              TextImportPage(initialSource: source, notice: notice),
         ),
       );
     } catch (error) {
@@ -105,6 +135,35 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
     } finally {
       if (mounted) setState(() => _importing = false);
     }
+  }
+
+  /// 载入 [url] 等页面完成(15s 兜底),然后就绪重试提取。
+  Future<Object?> _navigateAndExtract(Uri url) async {
+    final waiter = Completer<void>();
+    _pageWaiter = waiter;
+    await _controller.loadRequest(url);
+    await waiter.future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () {},
+    );
+    return _extractWhenReady();
+  }
+
+  /// 就绪重试:onPageFinished 可能早于 DOM 可用(真机实证——导航后
+  /// 0.5s 即触发,提取落空拿到错误 JSON)。pre 是服务端渲染,页面就位
+  /// 即可取,提取失败按 1.5s 间隔重取,总窗约 10s。
+  Future<Object?> _extractWhenReady() async {
+    Object? raw;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      raw = await _controller.runJavaScriptReturningResult(
+        cifraExtractScript,
+      );
+      final ready =
+          _readableFailure(raw) == null && decodeCifraPayload(raw) != null;
+      if (ready) return raw;
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+    }
+    return raw;
   }
 
   /// JS 返回值里的失败码 → 可读文案;不是失败形状则 null。

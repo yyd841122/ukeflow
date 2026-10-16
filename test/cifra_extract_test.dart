@@ -342,6 +342,52 @@ void main() {
       );
     });
 
+    test('巴西记谱映射(真站形态):7M→maj7、(9) 顶替七、X4→sus4、(b5) 拼接', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>[
+            {'c': 'F7M', 's': 'F7M'},
+            ' ',
+            {'c': 'Dm7(9)', 's': 'Dm7(9)'},
+            ' ',
+            {'c': 'G4', 's': 'G4'},
+            ' ',
+            {'c': 'B7(b9)', 's': 'B7(b9)'},
+            ' ',
+            {'c': 'D#7M', 's': 'D#7M'},
+          ],
+        ],
+      })!;
+
+      expect(
+        buildChordPro(
+          payload,
+          allowedChords: {
+            'Fmaj7', 'Dm9', 'Gsus4', 'B7b9', 'Ebmaj7',
+          },
+        ),
+        '[Fmaj7] [Dm9] [Gsus4] [B7b9] [Ebmaj7]\n',
+      );
+    });
+
+    test('映射不越白名单:库没有的和弦保留原样交校验报错', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>[
+            {'c': 'F7M', 's': 'F7M'},
+            ' ',
+            {'c': 'E5', 's': 'E5'},
+          ],
+        ],
+      })!;
+
+      // F7M 没有可落库的映射时保留原样;E5(power chord)库没有,原样保留。
+      expect(
+        buildChordPro(payload, allowedChords: {'E5'}),
+        '[F7M] [E5]\n',
+      );
+    });
+
     test('全管线:真实存档 Gravity 行结构 → 生成文本过真实和弦库白名单校验', () async {
       final lib = ChordLibrary.parse(
         await rootBundle.loadString('assets/chords/ukulele.json'),

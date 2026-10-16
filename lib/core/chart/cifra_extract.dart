@@ -215,11 +215,54 @@ String _interleave(String lyric, List<(int, String)> marks) {
 String _normalizeChord(String name, Set<String> allowedChords) {
   final cleaned = name.trim().replaceAll('♯', '#').replaceAll('♭', 'b');
   if (allowedChords.contains(cleaned)) return cleaned;
-  final mapped = cleaned.split('/').map(_mapPartToFlat).join('/');
-  return allowedChords.contains(mapped) ? mapped : cleaned;
+  // 候选按序:原样 / 升转降 / 巴西记谱 / 升转降+巴西记谱。
+  // 每个候选都必须命中白名单才采用——映射永不引入库里没有的和弦。
+  final parts = cleaned.split('/');
+  final candidates = [
+    parts.join('/'),
+    parts.map(_mapPartToFlat).join('/'),
+    parts.map(_brazilianQuality).join('/'),
+    parts.map((p) => _brazilianQuality(_mapPartToFlat(p))).join('/'),
+  ];
+  for (final candidate in candidates) {
+    if (allowedChords.contains(candidate)) return candidate;
+  }
+  return cleaned;
 }
 
 final RegExp _chordPartRe = RegExp(r'^([A-G])([#b]?)(.*)$');
+
+/// 巴西记谱 → 和弦库标准后缀(真站形态:7M=maj7、(9) 顶替七=m9/9/maj9、
+/// X4=sus4、(b5) 类升降扩展直接拼接)。只动 quality,根音不动;
+/// 结果是否可用由白名单把关(见 _normalizeChord)。
+String _brazilianQuality(String part) {
+  final m = _chordPartRe.firstMatch(part);
+  if (m == null) return part;
+  final rootAcc = '${m.group(1)}${m.group(2) ?? ''}';
+  var quality = (m.group(3) ?? '').replaceAll('7M', 'maj7');
+  final paren = RegExp(r'\((b|##|#)?(\d+)\)$').firstMatch(quality);
+  if (paren != null) {
+    final accidental = paren.group(1) ?? '';
+    final number = paren.group(2)!;
+    final base = quality.substring(0, paren.start);
+    if (accidental.isEmpty && (number == '9' || number == '11' || number == '13')) {
+      // 7(9)/m7(9)/maj7(9):扩展数字顶替七和弦的「7」→ 9/m9/maj9。
+      final stem = base == 'maj7'
+          ? 'maj'
+          : base.endsWith('7')
+          ? base.substring(0, base.length - 1)
+          : base;
+      quality = '$stem$number';
+    } else if (accidental.isEmpty && number == '4') {
+      quality = base.endsWith('7') ? '${base}sus4' : 'sus4'; // 7(4)/X(4)
+    } else {
+      quality = '$base$accidental$number'; // m7(b5)→m7b5、7(b9)→7b9 类。
+    }
+  } else if (quality == '4') {
+    quality = 'sus4'; // 巴西 G4 = Gsus4。
+  }
+  return '$rootAcc$quality';
+}
 
 /// C#→Db D#→Eb F#→Gb G#→Ab A#→Bb;E#/B#→F/C。升号不在白名单才走到这,
 /// 降号拼法/无记号原样返回。

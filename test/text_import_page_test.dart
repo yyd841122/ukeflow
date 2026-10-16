@@ -22,6 +22,7 @@ void main() {
   Future<void> pumpImport(
     WidgetTester tester, {
     String? initialSource,
+    String? notice,
   }) async {
     db = AppDatabase(
       DatabaseConnection(
@@ -39,7 +40,10 @@ void main() {
           chordLibraryFixtureOverride(),
         ],
         child: MaterialApp(
-          home: TextImportPage(initialSource: initialSource),
+          home: TextImportPage(
+            initialSource: initialSource,
+            notice: notice,
+          ),
         ),
       ),
     );
@@ -277,5 +281,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('导入成功'), findsOneWidget);
+  });
+
+  testWidgets('带 notice(ukulele 版缺失回退告知):报告页顶部可见', (tester) async {
+    await pumpImport(
+      tester,
+      initialSource: practiceFixtureChartText,
+      notice: '此歌没有 Ukulele 版,已按原版导入。',
+    );
+
+    expect(find.textContaining('没有 Ukulele 版'), findsOneWidget);
+    expect(find.byKey(const Key('import-save')), findsOneWidget);
   });
 }

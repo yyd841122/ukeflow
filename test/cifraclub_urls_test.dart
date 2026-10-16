@@ -87,5 +87,39 @@ void main() {
         expect(CifraClubUrls.linkOrNull('file:///etc/hosts'), isNull);
       });
     });
+
+    group('ukuleleVariant(导入优先取 ukulele 版)', () {
+      test('标准两段曲谱页 → 拼 /ukulele/ 后缀,查询串不带过去', () {
+        expect(
+          CifraClubUrls.ukuleleVariant(
+            Uri.parse('https://www.cifraclub.com.br/abba/dancing-queen/'),
+          ).toString(),
+          'https://www.cifraclub.com.br/abba/dancing-queen/ukulele/',
+        );
+        expect(
+          CifraClubUrls.ukuleleVariant(
+            Uri.parse(
+              'https://www.cifraclub.com.br/abba/dancing-queen?x=1',
+            ),
+          ).toString(),
+          'https://www.cifraclub.com.br/abba/dancing-queen/ukulele/',
+        );
+      });
+
+      test('已是 ukulele 页 / versao 变体页 / 非两段页 → null(不猜变体)', () {
+        Uri? v(String url) =>
+            CifraClubUrls.ukuleleVariant(Uri.parse(url));
+        expect(
+          v('https://www.cifraclub.com.br/abba/dancing-queen/ukulele/'),
+          isNull,
+        );
+        expect(
+          v('https://www.cifraclub.com.br/embrace/gravity/versao/123/'),
+          isNull,
+        );
+        expect(v('https://www.cifraclub.com.br/abba/'), isNull);
+        expect(v('https://www.cifraclub.com.br/'), isNull);
+      });
+    });
   });
 }
