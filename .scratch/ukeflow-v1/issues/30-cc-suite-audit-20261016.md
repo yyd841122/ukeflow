@@ -11,12 +11,13 @@
 
 **Status:** needs-triage
 
-- [ ] WP-A 音频与调度(9 条,含 2 High;#7 先对照 ADR-0005 核实)
-- [ ] WP-B 跟练/节拍控制器(17 条,同型模式抽共享修透)
-- [ ] WP-C 导入链路(10 条;#26 CHORD_SHAPE 拒 7M 优先)
-- [ ] WP-D 数据与内容(13 条;#10 小星星音高错建议先修)
-- [ ] 全部修复后 `/cc-suite:verify` 复核,findings 状态翻 fixed
+- [x] WP-A 音频与调度(9 条,含 2 High;#7 先对照 ADR-0005 核实)
+- [x] WP-B 跟练/节拍控制器(17 条,同型模式抽共享修透)
+- [x] WP-C 导入链路(10 条;#26 CHORD_SHAPE 拒 7M 优先)
+- [x] WP-D 数据与内容(13 条;#10 小星星音高错建议先修)
+- [ ] 全部修复后 `/cc-suite:verify` 复核,findings 状态翻 fixed(状态已翻;verify 命令本会话不可用,留用户侧执行)
 
 ## Comments
 
 - 2026-10-16 (立票): 工单 01 预约的「16+17 落地后全库跨模型审计」执行完毕。cc-suite 插件(xiaolai/claude-plugin-marketplace,v2.0.0)本项目级安装,Codex CLI(gpt-6.1-sol,effort high,read-only 沙箱)8 批串行审 71 个 Dart 文件(lib+test,排除 .g.dart),全部批次 completed。51 条发现:2 High(均在音频调度区)、36 Medium、13 Low、0 Critical;38 文件 CLEAN。审计原始输出线程 ID 与逐条线索见 findings 文件。**分票建议**:WP-D 的小星星音高错是内容级错误可立即小修;WP-B 的四组同型问题适合一次抽共享修透;WP-A 的 #7 必须先对照 ADR-0005 核实再动手——审计模型不了解「引擎时钟唯一权威」是 spike 锁定的架构决策。上轮审计(2026-10-13,mini,9 文件)的消化先例即票 24。
+- 2026-10-16 (工单30 会话): **四工作包全部消化完毕**。51 条处置:36 fixed / 5 partial(#28/#29 WebView 壳不可替身待真机补验、#46 mounted 守卫落地微任务推迟不取、#32 当日值刷新落地单测缺位)/ 4 skipped 带核实结论(#1/#8 取消失败无现实「声仍在」路径、#2 目标平台不成立——soloud_miniaudio_pause 在 Android 是空操作,iOS 启动时随 #7 一并重评、#7 对照 ADR-0005 核实为锁定设计,playScheduled 迁移留未来 spike)。**核实改写审计前提两处**:#2 的 500ms 空闲冻结是 4.0.10 引入的真实特性但 Android 平台分支为 no-op(包内 soloud_miniaudio.cpp 明言);#7 的「独立锚点」恰是 playClocked 契约本身(绝对引擎时钟=单一 physics 时基)。五个 WP 提交(WP-A..WP-D),逐包全库测试+analyzer 收口:测试 439→488 全绿,新增 49 个回归。微妙项均做红验证(旧实现跑新测试确认失败);WP-A #5 音准修复经环内实测标定「整环延迟=N−0.5+a/2」经验律(261–1397Hz 误差<0.02 样本),880Hz 由 +21 音分修到 ±0.02。同型三纪律评估过抽共享基类:两控制器状态形各异需回调管道,以同注释+双回归锁定替代(票面「考虑抽共享」的判断落地为不抽,理由见 WP-B 纪要)。票面 WP-C 写 10 条列了 9 条编号:发现 15-17(strum_chart_parser)不在任何包清单里,已并入 WP-C(导入解析链路),51 条全覆盖。`/cc-suite:verify` 本会话不可用(插件命令不在本会话技能表),留用户侧执行;findings 状态已全数翻毕。
