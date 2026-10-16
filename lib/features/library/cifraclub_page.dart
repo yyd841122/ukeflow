@@ -35,6 +35,9 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
   /// 页面加载完成的一次性等待点(_navigateAndExtract 用)。
   Completer<void>? _pageWaiter;
 
+  /// 站点页面加载进度(0-100,中文状态条的数据源)。
+  var _progress = 100;
+
   var _importing = false;
 
   @override
@@ -50,6 +53,10 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
                 final url = change.url;
                 if (url != null) _currentUrl = Uri.tryParse(url);
                 _failure = null;
+              }),
+          onProgress:
+              (value) => setState(() {
+                _progress = value;
               }),
           onPageFinished: (_) {
             final waiter = _pageWaiter;
@@ -198,6 +205,7 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
               onSubmitted: _search,
             ),
           ),
+          _StatusLine(progress: _progress, onSongPage: _onSongPage),
           Expanded(child: WebViewWidget(controller: _controller)),
           if (_failure != null) _FailureBanner(message: _failure!),
           if (_onSongPage || _importing)
@@ -250,6 +258,65 @@ class _FailureBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 中文状态条(用户反馈:站点是葡语,「无法确定是不是完成了」)——
+/// 加载进度 + 三态提示,让「做到哪一步」不依赖读站点语言:
+/// 加载中→进度条+「正在加载」;非曲谱页→教下一步(点歌名);
+/// 曲谱页→「就是这页,点下方导入」。
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.progress, required this.onSongPage});
+
+  final int progress;
+  final bool onSongPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final loading = progress < 100;
+    final hint = loading
+        ? '正在加载…'
+        : onSongPage
+        ? '这页就是曲谱,点下方「导入此谱」'
+        : '在页面里点开一首歌(点大字歌名),再点下方「导入此谱」';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 2,
+          child:
+              loading
+                  ? LinearProgressIndicator(value: progress / 100)
+                  : const SizedBox.shrink(),
+        ),
+        Container(
+          width: double.infinity,
+          color: scheme.surfaceContainerHighest,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Icon(
+                loading
+                    ? Icons.hourglass_top
+                    : onSongPage
+                    ? Icons.check_circle_outline
+                    : Icons.touch_app_outlined,
+                size: 14,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  hint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
