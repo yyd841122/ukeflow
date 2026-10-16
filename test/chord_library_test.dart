@@ -56,6 +56,10 @@ void main() {
       ('bad_no_positions.json', 'positions'),
       ('bad_fretsonchord.json', '品位窗'),
       ('bad_midi_length.json', 'midi'),
+      // 空 positions 数组过校验会在 primaryFingering 崩(审计30 #21);
+      // midi 越界会进合成算音高(审计30 #22)。
+      ('bad_empty_positions.json', '至少要有一个指法'),
+      ('bad_midi_range.json', 'midi 越界'),
     ];
     for (final (name, keyword) in cases) {
       test('$name 抛 ChordDataException 且报错含上下文（$keyword）', () {

@@ -32,7 +32,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     day: 3,
     phase: '认识和弦',
     title: '第二个和弦 Am',
-    learn: 'Am 只按④G弦2品(中指),其余全空;和 C 共用一根手指。',
+    learn: 'Am 只按④G弦2品(中指),其余全空;和 C 一样是单指和弦:抬起 C 的无名指,换中指按④弦。',
     practice: '「和弦库」查 Am 按响,再练 C↔Am 慢切:手指贴弦滑换,一分钟十次不算慢。',
   ),
   DailyTask(

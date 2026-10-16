@@ -60,6 +60,11 @@ class ChordLibrary {
     final suffix = _string(_field(json, 'suffix', '和弦 $key'), 'suffix');
     final ctx = '和弦 $key$suffix';
     final positions = _list(_field(json, 'positions', ctx), '$ctx positions');
+    if (positions.isEmpty) {
+      // 空指法过校验会在 primaryFingering 的 fingerings.first 崩(UI 渲染
+      // 期)——加载期当场拒,不带病入库(审计 2026-10-16 #21)。
+      throw ChordDataError('$ctx positions:至少要有一个指法(实际 0 个)');
+    }
     final fingerings = <ChordFingering>[];
     for (var i = 0; i < positions.length; i++) {
       fingerings.add(
@@ -104,8 +109,18 @@ class ChordLibrary {
     }
     final midiJson = _opt(json, 'midi');
     final midi = midiJson == null ? null : _ints(midiJson, '$ctx midi');
-    if (midi != null && midi.length != frets.length) {
-      throw ChordDataError('$ctx：midi 应有 ${frets.length} 根弦的数据（实际 ${midi.length}）');
+    if (midi != null) {
+      if (midi.length != frets.length) {
+        throw ChordDataError(
+            '$ctx：midi 应有 ${frets.length} 根弦的数据（实际 ${midi.length}）');
+      }
+      // MIDI 值域 0..127:越界值会进合成算音高,产出无效/超大缓冲
+      // (审计 2026-10-16 #22)。
+      for (final value in midi) {
+        if (value < 0 || value > 127) {
+          throw ChordDataError('$ctx：midi 越界 $value（允许 0..127）');
+        }
+      }
     }
     return ChordFingering(
       frets: frets,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,14 +19,58 @@ class PathPage extends ConsumerStatefulWidget {
   ConsumerState<PathPage> createState() => _PathPageState();
 }
 
-class _PathPageState extends ConsumerState<PathPage> {
+class _PathPageState extends ConsumerState<PathPage>
+    with WidgetsBindingObserver {
   /// 写入进行中:打卡钮禁用。
   bool _checking = false;
 
   /// 连击吸收窗:打卡推进页面当天,快速第二击会落在**新一天**的任务卡上,
-  /// 仿佛用户想连打两天——900ms 内的后续打卡静默忽略(无 Timer,fake zone 安全)。
+  /// 仿佛用户连打两天——900ms 内的后续打卡静默忽略(无 Timer,fake zone 安全)。
   static const _tapAbsorbWindow = Duration(milliseconds: 900);
   DateTime _lastCheckInTap = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 连击/今日任务是「当日值」,只在重建时算——常驻页跨午夜、或隔日
+  /// 从后台恢复会显示过期连击(审计 2026-10-16 #32)。定时到下个本地
+  /// 午夜重算一次,应用从后台回前台也重算。
+  Timer? _midnightTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _armMidnightRefresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshDayBoundValues();
+      _armMidnightRefresh();
+    }
+  }
+
+  /// 挂一个到下个本地午夜的定时器,到点重算当日值并重挂。
+  void _armMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      _refreshDayBoundValues();
+      _armMidnightRefresh();
+    });
+  }
+
+  void _refreshDayBoundValues() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {

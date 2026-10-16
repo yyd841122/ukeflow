@@ -64,4 +64,12 @@ void main() {
       );
     }
   });
+
+  test('Am 课程的衔接文案与 C/Am 真实指法一致(审计30 #18)', () {
+    final day3 = builtinLearningPath.tasks.singleWhere((t) => t.day == 3);
+    expect(day3.learn, contains('中指'), reason: 'Am 用中指');
+    expect(day3.learn, isNot(contains('共用一根手指')),
+        reason: 'C 无名指、Am 中指,不同弦不同指——「共用」是事实错误');
+  });
+
 }

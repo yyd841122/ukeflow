@@ -24,13 +24,18 @@ void main() {
     expect(song.notes, hasLength(42));
     expect(song.tempo, 90);
 
-    // 「一闪一闪亮晶晶」:C5 C5 G4 G4 = ①3 ①3 ②3 ②3。
+    // 「一闪一闪亮晶晶」:C4 C4 G4 G4 = ③0 ③0 ②3 ②3(C 与 G 同八度,
+    // 旋律上行五度;审计 2026-10-16 #10 修:旧数据 ①3=C5 垮八度)。
     expect(song.notes.take(4).map((n) => (n.string, n.fret)), [
-      (1, 3),
-      (1, 3),
+      (3, 0),
+      (3, 0),
       (2, 3),
       (2, 3),
     ]);
+    expect(song.notes.take(2).map((n) => n.frequency),
+        everyElement(closeTo(261.6255653005986, 1e-9)));
+    expect(song.notes[28].frequency, closeTo(261.6255653005986, 1e-9),
+        reason: '再现段开头同修:C4');
     // 「满天都是小星星」句尾:C4 = ③0 @拍14(二拍长音)。
     final bar4 = song.notes.where((n) => n.beat >= 12 && n.beat < 16).toList();
     expect(bar4.last.string, 3);

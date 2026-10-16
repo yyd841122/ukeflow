@@ -258,5 +258,9 @@ void _text(
     ),
     textDirection: TextDirection.ltr,
   )..layout();
-  tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  try {
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  } finally {
+    tp.dispose(); // 播放期逐帧绘制,原生段落即时释放不给 GC 添压(审计 #38)。
+  }
 }

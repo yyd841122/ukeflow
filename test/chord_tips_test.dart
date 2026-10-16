@@ -92,4 +92,42 @@ void main() {
       expect(saidOpens, dataOpens, reason: '$label 要点的空弦声明与数据不符');
     }
   });
+
+  group('genericChordTips 横按手指派生(审计30 #24)', () {
+    ChordFingering fingering(List<int> frets, List<int> fingers,
+            {List<int> barres = const [], int baseFret = 1}) =>
+        ChordFingering(
+          frets: frets,
+          fingers: fingers,
+          baseFret: baseFret,
+          barres: barres,
+        );
+
+    test('横按手指从指法数据派生,不再永远写食指', () {
+      // 横按品位(窗口内 1)上的手指标是 2(中指):文案必须说中指
+      // (④弦 2 品由无名指按、①②③弦 1 品中指横按的形状)。
+      final tip = genericChordTips(fingering(
+        [2, 1, 1, 1],
+        [3, 2, 2, 2],
+        barres: [1],
+      ));
+      expect(tip, contains('中指横按'));
+      expect(tip, isNot(contains('食指横按')));
+    });
+
+    test('食指横按仍是食指(既有文案不回退)', () {
+      final tip = genericChordTips(fingering(
+        [3, 1, 1, 1],
+        [3, 1, 1, 1],
+        barres: [1],
+      ));
+      expect(tip, contains('食指横按'));
+    });
+
+    test('无横按不提横按', () {
+      final tip = genericChordTips(fingering([0, 2, 3, 0], [0, 2, 4, 0]));
+      expect(tip, isNot(contains('横按')));
+    });
+  });
+
 }

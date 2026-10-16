@@ -156,7 +156,11 @@ class _ChordDiagramPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+    try {
+      tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+    } finally {
+      tp.dispose(); // 原生段落资源即时释放,不靠 GC 迟释放(审计 #23)。
+    }
   }
 
   @override

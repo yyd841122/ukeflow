@@ -131,7 +131,18 @@ String genericChordTips(ChordFingering f) {
   final muted = f.frets.where((x) => x == -1).length;
   final parts = <String>[];
   if (f.barres.isNotEmpty) {
-    parts.add('食指横按第 ${f.baseFret + f.barres.first - 1} 品标出的几根弦，用食指侧面压弦更省力。');
+    // 横按手指从指法数据派生:横按品位上按弦的手指标记(审计
+    // 2026-10-16 #24——旧文案永远写食指,与 Am7 2433 用中指类按法矛盾)。
+    final barre = f.barres.first;
+    var finger = 1;
+    for (var i = 0; i < f.frets.length; i++) {
+      if (f.frets[i] == barre && f.fingers[i] > 0) {
+        finger = f.fingers[i];
+        break;
+      }
+    }
+    final fingerName = const ['食指', '中指', '无名指', '小指'][finger - 1];
+    parts.add('$fingerName横按第 ${f.baseFret + barre - 1} 品标出的几根弦，用$fingerName侧面压弦更省力。');
   }
   if (f.baseFret > 1) {
     parts.add('此按法从第 ${f.baseFret} 品起，图上的品位数字是窗口内位置。');
