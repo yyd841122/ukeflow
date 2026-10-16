@@ -184,4 +184,89 @@ void main() {
           'Am');
     });
   });
+
+  group('审计30(#15/#16/#17)', () {
+    const allowed = {'C', 'G', 'Am'};
+
+    test('选择器抑制段不参与校验也不进谱(#15)', () {
+      final result = StrumChartParser.parse(
+        '{start_of_verse}\n[C]词\n{end_of_verse}\n'
+        '{start_of_verse-guitar}\n[F#]guitar only\n{end_of_verse-guitar}\n',
+        allowedChords: allowed,
+      );
+      expect(result.issues, isEmpty, reason: '抑制段里的 F# 不得误拒导入');
+      expect(result.chart!.sections, hasLength(1));
+      expect(result.chart!.sections.single.lines.single.chords.single.name,
+          'C');
+    });
+
+    test('{chorus} 回唤展开为最近副歌拷贝;[^] 回唤展开为最近和弦(#16)', () {
+      final result = StrumChartParser.parse(
+        '{start_of_chorus}\n[C]副歌\n{end_of_chorus}\n'
+        '{start_of_verse}\n[Am]主歌 [^]词\n{end_of_verse}\n'
+        '{chorus}\n',
+        allowedChords: allowed,
+      );
+      expect(result.issues, isEmpty);
+      final sections = result.chart!.sections;
+      expect(sections, hasLength(3));
+      expect(sections[0].kind, StrumSectionKind.chorus);
+      // 回唤段 = 副歌拷贝:同和弦同词。
+      expect(sections[2].kind, StrumSectionKind.chorus);
+      expect(sections[2].lines.single.chords.single.name, 'C');
+      expect(sections[2].lines.single.lyric, sections[0].lines.single.lyric);
+      // [^] = 最近和弦 Am。
+      expect(sections[1].lines.single.chords.map((c) => c.name).toList(),
+          ['Am', 'Am']);
+    });
+
+    test('悬空回唤显式拒:{chorus} 无副歌、[^] 无和弦(#16)', () {
+      final noChorus = StrumChartParser.parse(
+        '{start_of_verse}\n[C]词\n{end_of_verse}\n{chorus}\n',
+        allowedChords: allowed,
+      );
+      expect(
+        noChorus.issues.any((i) => i.code == ChartIssueCode.danglingRecall),
+        isTrue,
+      );
+      final noChord = StrumChartParser.parse(
+        '{start_of_verse}\n[^]词\n{end_of_verse}\n',
+        allowedChords: allowed,
+      );
+      expect(
+        noChord.issues.any((i) => i.code == ChartIssueCode.danglingRecall),
+        isTrue,
+      );
+    });
+
+    test('{transpose} 与非 4/4 拍号显式拒,不再静默按原调 4/4 播(#17)', () {
+      final transposed = StrumChartParser.parse(
+        '{transpose: 2}\n[C]词\n',
+        allowedChords: allowed,
+      );
+      expect(
+        transposed.issues
+            .any((i) => i.code == ChartIssueCode.unsupportedDirective),
+        isTrue,
+      );
+      expect(transposed.chart, isNull);
+      final waltz = StrumChartParser.parse(
+        '{time: 3/4}\n[C]词\n',
+        allowedChords: allowed,
+      );
+      expect(
+        waltz.issues.any((i) => i.code == ChartIssueCode.unsupportedDirective),
+        isTrue,
+      );
+      expect(waltz.chart, isNull);
+      // 4/4 与 transpose 0 照常放行。
+      final ok = StrumChartParser.parse(
+        '{time: 4/4}\n{transpose: 0}\n[C]词\n',
+        allowedChords: allowed,
+      );
+      expect(ok.issues, isEmpty);
+      expect(ok.chart, isNotNull);
+    });
+  });
+
 }

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/data/database.dart';
+import 'package:ukeflow/data/custom_charts_dao.dart';
 import 'package:ukeflow/data/providers.dart';
 import 'package:ukeflow/features/library/text_import_page.dart';
 
@@ -293,4 +294,47 @@ void main() {
     expect(find.textContaining('没有 Ukulele 版'), findsOneWidget);
     expect(find.byKey(const Key('import-save')), findsOneWidget);
   });
+
+  testWidgets('保存失败(库写错误):可读错误就地可见,报告与原文保留可重试(审计30 #30)', (tester) async {
+    db = AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
+    addTearDown(db.close);
+    engine = FakeAudioEngine();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          audioEngineProvider.overrideWithValue(engine),
+          chordLibraryFixtureOverride(),
+          customChartsDaoProvider.overrideWith((ref) => ExplodingDao(db)),
+        ],
+        child: const MaterialApp(home: TextImportPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await paste(tester, '[C]门前大桥下游过一群鸭\n');
+    await tester.enterText(find.byKey(const Key('import-title')), '测试谱');
+    await tester.tap(find.byKey(const Key('import-save')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull, reason: '库错误不得逃逸成未处理异常');
+    expect(find.textContaining('保存失败'), findsOneWidget);
+    expect(find.byKey(const Key('import-save')), findsOneWidget,
+        reason: '仍在报告页,可重试');
+  });
+}
+
+/// add 必炸的 DAO:制造库写失败现场。
+class ExplodingDao extends CustomChartsDao {
+  ExplodingDao(super.db);
+
+  @override
+  Future<int> add({required String title, required String source}) =>
+      throw Exception('库写失败(注入)');
+
 }

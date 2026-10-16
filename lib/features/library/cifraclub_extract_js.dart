@@ -21,11 +21,14 @@ const cifraExtractScript = '''
         || el.getAttribute('data-chord-original-text')
         || el.textContent || '').trim();
     }
-    // 和弦名形状:根音(A-G 可带升降号)+ quality 字符表。
-    // 「Baby」「Be」这类加粗歌词词首字母也是 A-G,形状对不上即拒。
-    // (Dart 侧的同类判定见 core/chart/cifra_extract.dart 的
-    // _chordTokenRe——两处判的是同一个问题,改动请两边对齐。)
-    var CHORD_SHAPE = /^[A-G][#b]?(m|maj|min|dim|aug|sus|add|M)?[0-9()#b+-]*(\\/[A-G][0-9()#b+-]*)?\$/;
+    // 和弦名形状:根音(A-G 可带升降号)+ 结构性 quality 词表(含巴西
+    // 7M 写法)+ 数字/记号尾。裸粗体「F7M」「C7sus4」必须收——站点
+    // 巴西记谱 7M=maj7(审计 2026-10-16 #26,旧表拒之会整段漏提);
+    // 「Baby」「Be」这类加粗歌词词首字母形状对不上即拒。
+    // (Dart 侧同类判定 core/chart/cifra_extract.dart 的 _chordTokenRe
+    // 判的是「纯文本行是否和弦样」,用 quality 字符集,两者各自取各自
+    // 的最紧形状。)
+    var CHORD_SHAPE = /^[A-G][#b]?(7?(M|maj|min|dim|aug|sus|add|m))?[0-9()#b+-]*(\\/[A-G][#b]?[0-9()#b+-]*)?\$/;
     function looksChord(el) {
       if (el.getAttribute('data-chord-name')
         || el.getAttribute('data-chord-original-text')) {
@@ -66,7 +69,11 @@ const cifraExtractScript = '''
             break;
           }
           if (tag === 'SCRIPT' || tag === 'STYLE') break;
-          if (tag === 'DIV') { flush(); }
+          // div 行边界:进入 div 时只在有内容时切(前后各无条件 flush 会在
+          // 相邻 div 行之间插假空行,和弦行与歌词行配对被拆散——假空行
+          // 全部来自 start 侧的空 flush,审计 2026-10-16 #27);离开 div
+          // 无条件收行,空 div 行(有意空行)照常产出空行。
+          if (tag === 'DIV' && cur.length) { flush(); }
           for (var c = node.firstChild; c; c = c.nextSibling) walk(c);
           if (tag === 'DIV') { flush(); }
           break;

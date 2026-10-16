@@ -21,6 +21,13 @@ enum ChartIssueCode {
   /// 带选择器的段落未闭合（冷门语法，一并拦截）。
   unterminatedSuppressedSection,
 
+  /// 回唤语法没有可回唤的目标（{chorus} 前没有副歌段；[^] 前没有和弦）。
+  danglingRecall,
+
+  /// 谱面用了本 App 不支持的指令（{transpose} 移调、非 4/4 拍号）——
+  /// 显式拒绝而非静默按原调/4/4 播放(审计 2026-10-16 #17)。
+  unsupportedDirective,
+
   /// 和弦名不在白名单（和弦库数据）里。
   unknownChord,
 
@@ -97,7 +104,9 @@ class StrumChartParser {
       );
     }
 
-    issues.addAll(_chordIssues(result.songs.first, allowedChords));
+    final song = result.songs.first;
+    issues.addAll(_unsupportedDirectiveIssues(song, sourceLines));
+    issues.addAll(_chordIssues(song, allowedChords));
 
     if (issues.isNotEmpty) {
       return ChartParseResult(chart: null, issues: List.unmodifiable(issues));
@@ -184,16 +193,82 @@ class StrumChartParser {
   static String _at(SourceSpan span) =>
       '第 ${span.line} 行第 ${span.column} 列';
 
-  /// 和弦白名单检查：所有和弦记号必须能解析、且谱面写法（去首尾空白）
-  /// 就是和弦库的显示名——保证查指法/示范音时必然命中。
+  /// 不支持指令检查:{transpose} 与非 4/4 拍号此前被静默丢弃(谱照过、
+  /// 播放按原调/4/4 走,音全错)——显式拒绝,给可读消息(审计
+  /// 2026-10-16 #17)。
+  static List<ChartIssue> _unsupportedDirectiveIssues(
+    Song song,
+    List<String> sourceLines,
+  ) {
+    final issues = <ChartIssue>[];
+    final meta = song.metadata;
+    final transpose = meta.transpose;
+    if (transpose != null && transpose != 0) {
+      issues.add(
+        ChartIssue(
+          code: ChartIssueCode.unsupportedDirective,
+          line: 1,
+          column: 1,
+          message: '谱面要求移调 {transpose: $transpose}，本 App 不支持移调;'
+              '请把谱面转回原调后再导入',
+        ),
+      );
+    }
+    for (final time in meta.times) {
+      if (time.trim() == '4/4') continue;
+      issues.add(
+        ChartIssue(
+          code: ChartIssueCode.unsupportedDirective,
+          line: 1,
+          column: 1,
+          message: '谱面拍号 {$time} 不是 4/4，本 App 仅支持 4/4 节拍网格',
+        ),
+      );
+    }
+    return issues;
+  }
+
+  /// 和弦白名单 + 回唤目标检查(遍历**活跃段**——选择器抑制段是别乐器
+  /// 的内容,参与校验会把不支持和弦误拒成导入失败,审计 2026-10-16 #15)。
+  /// 回唤:{chorus} 前须有原版副歌段、[^] 前须有和弦,否则转换会静默
+  /// 丢内容(审计 2026-10-16 #16)。
   static List<ChartIssue> _chordIssues(
     Song song,
     Set<String> allowedChords,
   ) {
     final issues = <ChartIssue>[];
-    for (final section in song.sections) {
+    Section? lastChorus;
+    String? lastChordName;
+    for (final section in song.activeSections) {
+      if (section.isChorusRecall) {
+        if (lastChorus == null) {
+          issues.add(
+            ChartIssue(
+              code: ChartIssueCode.danglingRecall,
+              line: section.span.line,
+              column: section.span.column,
+              message: '${_at(section.span)}:{chorus} 回唤之前没有副歌段可回唤',
+            ),
+          );
+        }
+        continue;
+      }
+      if (section.kind == SectionKind.chorus) lastChorus = section;
       for (final line in section.lines) {
         for (final token in line.tokens) {
+          if (token is ChordRecallToken) {
+            if (lastChordName == null) {
+              issues.add(
+                ChartIssue(
+                  code: ChartIssueCode.danglingRecall,
+                  line: token.span.line,
+                  column: token.span.column,
+                  message: '${_at(token.span)}:[^] 回唤之前没有和弦可回唤',
+                ),
+              );
+            }
+            continue;
+          }
           if (token is! ChordToken) continue;
           final name = token.raw.trim();
           if (token.chord == null) {
@@ -216,6 +291,8 @@ class StrumChartParser {
                     '和弦 [$name] 不在和弦库中',
               ),
             );
+          } else {
+            lastChordName = name;
           }
         }
       }
@@ -234,11 +311,17 @@ class StrumChartParser {
   }
 
   /// AST → 弹唱谱模型。丢弃与弹唱无关的行（注释/图片/换版式）与
-  /// 逐字环境段落（tab 等），空行不产出 [StrumLine]。
+  /// 逐字环境段落（tab 等），空行不产出 [StrumLine]。只遍历**活跃段**
+  /// (选择器抑制段是别乐器的变奏,不进播放,审计 2026-10-16 #15);
+  /// {chorus} 回唤展开为最近原版副歌的拷贝、[^] 回唤展开为最近和弦
+  /// (目标存在性已由校验层保证,审计 2026-10-16 #16)。
   static StrumChart _toChart(Song song) {
     final sections = <StrumSection>[];
-    for (final section in song.sections) {
-      if (_isVerbatimKind(section.kind)) continue;
+    Section? lastChorus;
+    String? lastChordName;
+
+    StrumSection? convert(Section section) {
+      if (_isVerbatimKind(section.kind)) return null;
       final lines = <StrumLine>[];
       for (final line in section.lines) {
         if (line.kind != LineKind.structured) continue;
@@ -249,8 +332,15 @@ class StrumChartParser {
             case TextToken(:final text):
               buf.write(text);
             case ChordToken(:final raw):
-              chords.add(ChordMark(name: raw.trim(), offset: buf.length));
-            case AnnotationToken() || ChordRecallToken() || InlineDirectiveToken():
+              final name = raw.trim();
+              chords.add(ChordMark(name: name, offset: buf.length));
+              lastChordName = name;
+            case ChordRecallToken():
+              // 校验层保证此前必有和弦:回唤展开为最近和弦。
+              chords.add(
+                ChordMark(name: lastChordName!, offset: buf.length),
+              );
+            case AnnotationToken() || InlineDirectiveToken():
               break; // 与弹唱谱无关的记号，忽略
           }
         }
@@ -258,14 +348,23 @@ class StrumChartParser {
         if (lyric.isEmpty && chords.isEmpty) continue;
         lines.add(StrumLine(lyric: lyric, chords: List.unmodifiable(chords)));
       }
-      if (lines.isEmpty) continue;
-      sections.add(
-        StrumSection(
-          kind: _sectionKind(section.kind),
-          label: section.label,
-          lines: List.unmodifiable(lines),
-        ),
+      if (lines.isEmpty) return null;
+      return StrumSection(
+        kind: _sectionKind(section.kind),
+        label: section.label,
+        lines: List.unmodifiable(lines),
       );
+    }
+
+    for (final section in song.activeSections) {
+      if (section.isChorusRecall) {
+        final recall = lastChorus == null ? null : convert(lastChorus);
+        if (recall != null) sections.add(recall);
+        continue;
+      }
+      final converted = convert(section);
+      if (converted != null) sections.add(converted);
+      if (section.kind == SectionKind.chorus) lastChorus = section;
     }
     final meta = song.metadata;
     return StrumChart(

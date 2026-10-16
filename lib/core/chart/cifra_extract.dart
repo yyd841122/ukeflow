@@ -127,10 +127,10 @@ String buildChordPro(
 }) {
   final out = StringBuffer();
   if (payload.title != null && payload.title!.trim().isNotEmpty) {
-    out.writeln('{title: ${payload.title!.trim()}}');
+    out.writeln('{title: ${_directiveArg(payload.title!.trim())}}');
   }
   if (payload.artist != null && payload.artist!.trim().isNotEmpty) {
-    out.writeln('{artist: ${payload.artist!.trim()}}');
+    out.writeln('{artist: ${_directiveArg(payload.artist!.trim())}}');
   }
 
   String? openSection;
@@ -141,23 +141,24 @@ String buildChordPro(
     }
   }
 
-  /// 悬空和弦行游标:连续和弦行攒着,等歌词行来配对(只取首条),
-  /// 等不到(空行/段落标记/谱尾)就按独立和弦行落盘。
-  _ChordLine? hanging;
+  /// 悬空和弦行攒列:连续和弦行先攒着,等歌词行来配对——首条配对、
+  /// 其余按站点双记谱(原调+capo)丢弃;等不到歌词(空行/段落标记/谱尾)
+  /// 时**全部**独立落盘——纯器乐进行(C-G/Am-F 相邻两行)不丢行
+  /// (审计 2026-10-16 #12)。
+  final hanging = <_ChordLine>[];
 
   /// 站点「[Tab - X]」段 = 吉他六线谱(真机实证),对尤克里里跟练是
   /// 纯噪声——进入这类段后所有行丢弃,直到下一个非 Tab 标记。
   var skippingTabSection = false;
 
   void flushHangingStandalone() {
-    final line = hanging;
-    if (line != null) {
+    for (final line in hanging) {
       final names = [
         for (final seg in line.chords) _normalizeChord(seg.name, allowedChords),
       ];
       out.writeln('[${names.join('] [')}]');
     }
-    hanging = null;
+    hanging.clear();
   }
 
   for (final line in _classifyLines(payload.lines)) {
@@ -174,20 +175,20 @@ String buildChordPro(
         }
         skippingTabSection = false;
         openSection = slug;
-        out.writeln('{start_of_$slug: $label}');
+        out.writeln('{start_of_$slug: ${_directiveArg(label)}}');
       case _ChordLine():
         if (skippingTabSection) break;
-        // 双记谱行(原调+capo 两行悬空):只收首条配歌词,后续行丢弃。
-        hanging ??= line;
+        hanging.add(line);
       case _LyricLine():
         if (skippingTabSection) break;
         // 站点双记谱的 capo 行渲染为纯文本(无 b 元素):紧跟悬空和弦行、
-        // 内容大半是和弦样的行是二记谱行,丢弃——真歌词不在这。
-        if (hanging != null && line.chordalish) {
+        // 内容大半是和弦样的行是二记谱行,丢弃——真歌词不在这;悬空列
+        // 原样保留,等下一个真歌词行配对。
+        if (hanging.isNotEmpty && line.chordalish) {
           break;
         }
-        final host = hanging;
-        hanging = null;
+        final host = hanging.isEmpty ? null : hanging.first;
+        hanging.clear(); // 首条配歌词,其余(双记谱)按既有语义丢弃。
         final marks = host == null
             ? <(int, String)>[]
             : line.pairedMarks(host, allowedChords: allowedChords);
@@ -195,7 +196,7 @@ String buildChordPro(
       case _MixedLine():
         if (skippingTabSection) break;
         flushHangingStandalone();
-        out.writeln(_interleave(line.lyricText, line.exactMarks));
+        out.writeln(_interleave(line.lyricText, line.exactMarks(allowedChords)));
     }
   }
   flushHangingStandalone();
@@ -203,8 +204,26 @@ String buildChordPro(
   return out.toString();
 }
 
+/// 文本进歌词行:ChordPro 行内特殊字符转义——chord_pro 内联词法在
+/// TextToken 里解 `\[ \] \{ \} \\`,转义可往返:「Song {Live}」不再碎成
+/// 杂指令、「Love [forever]」不再被当未知和弦拦(审计 2026-10-16 #11)。
+String _escapeLyricText(String text) => text
+    .replaceAll(r'\', r'\\')
+    .replaceAll('[', r'\[')
+    .replaceAll(']', r'\]')
+    .replaceAll('{', r'\{')
+    .replaceAll('}', r'\}');
+
+/// 文本进指令参数(标题/艺人/段落标签)。chord_pro 的指令值是「raw
+/// 文本到首个 } 为止」(不解引号、不解转义),花括号在值内无法无损
+/// 编码——剥除(内容保留:「Song {Live}」→「Song Live」),反斜杠
+/// 一并剥(它是行内转义符,留在值里只会以字面出现)。剥除是结构降噪:
+/// 不剥则值被首个 } 截断、尾巴漏成杂歌词(审计 2026-10-16 #11)。
+String _directiveArg(String text) => text.replaceAll(RegExp(r'[{}\\]'), '');
+
 /// 行内化:把 (列位, 和弦名) 记号按列位织进歌词(同列位保持和弦先后,
-/// 紧邻书写;dart List.sort 非稳定,以数组序为次键)。
+/// 紧邻书写;dart List.sort 非稳定,以数组序为次键)。歌词侧文本经
+/// [_escapeLyricText] 转义。
 String _interleave(String lyric, List<(int, String)> marks) {
   final order = List.generate(marks.length, (i) => i);
   order.sort((a, b) {
@@ -216,11 +235,11 @@ String _interleave(String lyric, List<(int, String)> marks) {
   for (final i in order) {
     final (pos, name) = marks[i];
     final p = pos.clamp(0, lyric.length);
-    buf.write(lyric.substring(last, p));
+    buf.write(_escapeLyricText(lyric.substring(last, p)));
     buf.write('[$name]');
     last = p;
   }
-  buf.write(lyric.substring(last));
+  buf.write(_escapeLyricText(lyric.substring(last)));
   return buf.toString();
 }
 
@@ -466,13 +485,15 @@ class _MixedLine extends _CifraLine {
 
   String get lyricText => rawText.trimRight();
 
-  List<(int, String)> get exactMarks {
+  List<(int, String)> exactMarks(Set<String> allowedChords) {
     final marks = <(int, String)>[];
     var chordRawBefore = 0;
     for (final seg in chords) {
       // 插入点 = 和弦列位里属于「文本」的部分
-      // (= 原始列位 − 之前各和弦段自身原始长度)。
-      marks.add((seg.column - chordRawBefore, seg.name));
+      // (= 原始列位 − 之前各和弦段自身原始长度)。和弦名同样过归一:
+      // 混排行绕过归一会让升号/巴西记谱写法(「Intro: D# live」)被
+      // 白名单拦下,与悬空行路径不同待遇(审计 2026-10-16 #13)。
+      marks.add((seg.column - chordRawBefore, _normalizeChord(seg.name, allowedChords)));
       chordRawBefore += seg.raw.length;
     }
     return marks;
@@ -494,10 +515,14 @@ String _lyricish(String text) {
 /// 段落标记行:整行一个方括号词。
 final RegExp _markerRe = RegExp(r'^\[([^\[\]]+)\]$');
 
-/// 和弦样 token:大写根音开头(A-G,可带升降号),后接任意和弦记号字符。
+/// 和弦样 token:大写根音开头(A-G,可带升降号),后接 quality 字符集
+/// (m/a/j/i/n/d/u/g/M + 数字与和弦记号)。不再吸收任意后缀:词形单词
+/// (「Amor」= A+mor 的 o、「Deus」= D+e 的 e)不再判成和弦样——残余
+/// 风险由「词数≥2 + 严格过半」门槛兜底(审计 2026-10-16 #14)。
 /// (JS 侧的同类判定见 features/library/cifraclub_extract_js.dart 的
-/// CHORD_SHAPE——两处判的是同一个问题,改动请两边对齐。)
-final RegExp _chordTokenRe = RegExp(r'^[A-G][#b♯♭]?[a-zA-Z0-9()#b/+\-]*$');
+/// CHORD_SHAPE——那边判「粗体元素是不是和弦」用结构性 quality 词表,
+/// 这边判「纯文本行是不是和弦样」用字符集,各自取各自的最紧形状。)
+final RegExp _chordTokenRe = RegExp(r'^[A-G][#b♯♭]?[majindugsM0-9()#b♯♭/+\-]*$');
 
 /// 标签进指令参数:去花括号与换行(会破坏 {directive: label} 语法)。
 String _cleanLabel(String label) =>

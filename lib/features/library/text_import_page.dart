@@ -149,6 +149,13 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
       // 与曲库卡片、跟练会话页标题同源一字不差。
       _chart = _chart!.withTitle(title);
       setState(() => _phase = _Phase.saved);
+    } on Object catch (error) {
+      // 数据库查重/写入失败不得逃逸异步按钮回调:用户会看到按钮恢复
+      // 可用却毫无说明(审计 2026-10-16 #30)。保留报告与原文,就地给
+      // 可重试的失败说明。
+      if (mounted) {
+        setState(() => _errors = ['保存失败,请重试:$error']);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -294,6 +301,7 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
   }
 
   Widget _buildReport(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -308,6 +316,28 @@ class _TextImportPageState extends ConsumerState<TextImportPage> {
         ),
         const SizedBox(height: 16),
         _ReportPanel(report: _report!),
+        // 保存失败(数据库错误等)就地可读展示,报告与原文保留可重试
+        // (审计 2026-10-16 #30)。
+        if (_errors != null) ...[
+          const SizedBox(height: 12),
+          for (final error in _errors!)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline, size: 16, color: scheme.error),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      error,
+                      style: TextStyle(color: scheme.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
         const SizedBox(height: 24),
         FilledButton.icon(
           key: const Key('import-save'),

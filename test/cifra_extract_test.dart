@@ -505,4 +505,108 @@ void main() {
       expect(text, isNot(contains('capo')));
     });
   });
+
+  group('审计30(#11/#12/#13/#14)', () {
+    test('含 ChordPro 特殊字符的文本安全转义,经解析器往返不失真(#11)', () {
+      final payload = decodeCifraPayload({
+        'title': 'Song {Live}',
+        'artist': 'DJ Drop',
+        'lines': <List<Object>>[
+          [
+            {'c': 'C', 's': 'C'},
+            ' Love [forever] {comment: x}\n',
+          ],
+        ],
+      })!;
+      final chordpro = buildChordPro(payload, allowedChords: {'C'});
+      // 直接经同一校验层:转义后不再被当未知和弦/杂指令拦。
+      final result = StrumChartParser.parse(chordpro, allowedChords: {'C'});
+      expect(result.issues, isEmpty, reason: '实际输出:$chordpro');
+      final chart = result.chart!;
+      // 花括号在指令值里无法无损编码:剥除降级,内容保留。
+      expect(chart.title, 'Song Live');
+      expect(chart.artist, 'DJ Drop');
+      expect(chart.sections.single.lines.single.lyric,
+          contains('Love [forever]'));
+      expect(chart.sections.single.lines.single.lyric,
+          contains('{comment: x}'));
+    });
+
+    test('纯器乐连续和弦行:等不到歌词时全部独立落盘,不丢行(#12)', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          [
+            {'c': 'C', 's': 'C'},
+            '  ',
+            {'c': 'G', 's': 'G'},
+          ],
+          [
+            {'c': 'Am', 's': 'Am'},
+            '  ',
+            {'c': 'F', 's': 'F'},
+          ],
+          [''], // 空行:断开配对
+        ],
+      })!;
+      expect(
+        buildChordPro(payload, allowedChords: {'C', 'G', 'Am', 'F'}),
+        '[C] [G]\n[Am] [F]\n',
+      );
+    });
+
+    test('歌词到达时连续和弦行仍按双记谱只取首条(既有语义不回退)(#12)', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          [
+            {'c': 'Gm', 's': 'Gm'},
+            '   ',
+            {'c': 'Cm', 's': 'Cm'},
+          ],
+          [
+            {'c': 'A#m', 's': 'A#m'},
+          ],
+          ['Some people wait'],
+        ],
+      })!;
+      expect(
+        buildChordPro(payload, allowedChords: {'Gm', 'Cm', 'Bbm'}),
+        '[Gm]Some [Cm]people wait\n',
+      );
+    });
+
+    test('混排行和弦同样过同音异名归一:D# 命中 Eb 白名单(#13)', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          [
+            'Intro: ',
+            {'c': 'D#', 's': 'D#'},
+            ' live\n',
+          ],
+        ],
+      })!;
+      expect(
+        buildChordPro(payload, allowedChords: {'Eb'}),
+        'Intro: [Eb] live\n',
+      );
+    });
+
+    test('「Amor Eterno」不再判成和弦样:悬空行后的歌词保留(#14)', () {
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          [
+            {'c': 'C', 's': 'C'},
+            '   ',
+            {'c': 'G', 's': 'G'},
+          ],
+          ['Amor Eterno'],
+          ['te dou meu coração'],
+        ],
+      })!;
+      expect(
+        buildChordPro(payload, allowedChords: {'C', 'G'}),
+        '[C]Amor[G] Eterno\nte dou meu coração\n',
+      );
+    });
+  });
+
 }

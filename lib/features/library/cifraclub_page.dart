@@ -37,6 +37,10 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
   /// 页面加载完成的一次性等待点(_navigateAndExtract 用)。
   Completer<void>? _pageWaiter;
 
+  /// 导航请求令牌:每次导航递增,等待返回后核对——被打断/被取代的导航
+  /// 不得把提取结果安到新请求上(审计 2026-10-16 #29)。
+  int _navToken = 0;
+
   /// 站点页面加载进度(0-100,中文状态条的数据源)。
   var _progress = 100;
 
@@ -50,19 +54,29 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) => NavigationDecision.navigate,
+          // 回调全部先查 mounted:离开页面后 WebView 回调仍会到达,
+          // 对已卸载的 State setState 会抛错(审计 2026-10-16 #28)。
           onUrlChange:
-              (change) => setState(() {
-                final url = change.url;
-                if (url != null) _currentUrl = Uri.tryParse(url);
-                _failure = null;
-                // 机检时「WebView 现在在哪页」从截图/树里都看不见——
-                // debug 构建留痕,release 零输出。
-                if (kDebugMode) debugPrint('CifraClub url: ${url ?? '<null>'}');
-              }),
+              (change) {
+                if (!mounted) return;
+                setState(() {
+                  final url = change.url;
+                  if (url != null) _currentUrl = Uri.tryParse(url);
+                  _failure = null;
+                  // 机检时「WebView 现在在哪页」从截图/树里都看不见——
+                  // debug 构建留痕,release 零输出。
+                  if (kDebugMode) {
+                    debugPrint('CifraClub url: ${url ?? '<null>'}');
+                  }
+                });
+              },
           onProgress:
-              (value) => setState(() {
-                _progress = value;
-              }),
+              (value) {
+                if (!mounted) return;
+                setState(() {
+                  _progress = value;
+                });
+              },
           onPageFinished: (_) {
             final waiter = _pageWaiter;
             _pageWaiter = null;
@@ -150,7 +164,13 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
   }
 
   /// 载入 [url] 等页面完成(15s 兜底),然后就绪重试提取。
+  ///
+  /// 导航关联纪律(审计 2026-10-16 #29):令牌核对——超时/被新导航取代
+  /// 时不再提取(旧实现超时当成功,会在随便哪一页上提取,可能导错歌);
+  /// 落点 URL 与请求不符(重定向去了别页)按失败返回,绝不拿旧页内容
+  /// 当目标谱。
   Future<Object?> _navigateAndExtract(Uri url) async {
+    final token = ++_navToken;
     final waiter = Completer<void>();
     _pageWaiter = waiter;
     await _controller.loadRequest(url);
@@ -158,7 +178,23 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       const Duration(seconds: 15),
       onTimeout: () {},
     );
+    if (token != _navToken) return const {'error': 'superseded'};
+    final landed = Uri.tryParse(await _controller.currentUrl() ?? '');
+    if (landed == null || !_sameSongDocument(landed, url)) {
+      return const {'error': 'wrong-page'};
+    }
     return _extractWhenReady();
+  }
+
+  /// 同一曲谱文档判定:忽略 query/fragment 与结尾斜杠(站点会挂跟踪
+  /// 参数),路径段须一致——重定向到别的歌不算到达。
+  bool _sameSongDocument(Uri a, Uri b) {
+    String normalize(Uri u) {
+      final segs = u.pathSegments.where((s) => s.isNotEmpty).toList();
+      return segs.join('/');
+    }
+
+    return normalize(a) == normalize(b);
   }
 
   /// 就绪重试:onPageFinished 可能早于 DOM 可用(真机实证——导航后
@@ -192,6 +228,8 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
           '稍等重试,或回曲库用文本导入。',
       'no-chords' => '这个页面没提取到和弦——可能不是曲谱页。'
           '也可以回曲库用文本导入。',
+      'wrong-page' => '页面没停在目标曲谱页(可能被站点重定向),请重试。',
+      'superseded' => '这次提取被新的操作取代了。',
       _ => '提取失败($code),请重试或用文本导入。',
     };
   }
