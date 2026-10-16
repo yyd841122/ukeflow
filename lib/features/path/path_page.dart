@@ -24,6 +24,9 @@ class _PathPageState extends ConsumerState<PathPage>
   /// 写入进行中:打卡钮禁用。
   bool _checking = false;
 
+  /// 打卡失败的可读说明(数据库错误等);重试成功即清。
+  String? _checkInError;
+
   /// 连击吸收窗:打卡推进页面当天,快速第二击会落在**新一天**的任务卡上,
   /// 仿佛用户连打两天——900ms 内的后续打卡静默忽略(无 Timer,fake zone 安全)。
   static const _tapAbsorbWindow = Duration(milliseconds: 900);
@@ -82,6 +85,7 @@ class _PathPageState extends ConsumerState<PathPage>
         checkIns: checkIns,
         onCheckIn: _checkInToday,
         checking: _checking,
+        error: _checkInError,
       ),
     );
   }
@@ -113,6 +117,12 @@ class _PathPageState extends ConsumerState<PathPage>
         ),
         checkedOnDay: today,
       );
+    } on Object catch (error) {
+      // 数据库读/打卡失败不得逃逸异步按钮回调:按钮恢复可用却不说明
+      // 进度未保存(审计 2026-10-16 #31,与文本导入 #30 同型同修)。
+      if (mounted) {
+        setState(() => _checkInError = '打卡没有存上,请重试:$error');
+      }
     } finally {
       if (mounted) {
         setState(() => _checking = false);
@@ -127,6 +137,7 @@ class _PathView extends StatelessWidget {
     required this.checkIns,
     required this.onCheckIn,
     required this.checking,
+    this.error,
   });
 
   final List<CheckIn> checkIns;
@@ -134,6 +145,9 @@ class _PathView extends StatelessWidget {
 
   /// 写入进行中:打卡钮禁用。
   final bool checking;
+
+  /// 打卡失败的可读说明(null = 没失败)。
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +167,36 @@ class _PathView extends StatelessWidget {
       children: [
         _ProgressHeader(checked: checkedDays.length, streak: streak),
         const SizedBox(height: 16),
+        if (error != null) ...[
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (nextDay != null)
           _TodayTaskCard(
             task: builtinLearningPath.tasks[nextDay - 1],

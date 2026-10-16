@@ -1,9 +1,10 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/model/checkin.dart';
+import 'package:ukeflow/data/checkins_dao.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
 import 'package:ukeflow/features/path/path_page.dart';
@@ -142,4 +143,36 @@ void main() {
     expect(find.text('打卡'), findsNothing);
     expect(find.text('连续 30 天'), findsOneWidget); // 30 个连续日历日(末于昨天)
   });
+
+  testWidgets('打卡失败(库错误):可读错误就地可见,不逃逸成未处理异常(审计30 #31)', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          checkInsDaoProvider.overrideWith((ref) => ExplodingCheckInsDao(db)),
+        ],
+        child: const MaterialApp(home: Scaffold(body: PathPage())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('打卡'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull, reason: '库错误不得逃逸成未处理异常');
+    expect(find.textContaining('打卡没有存上'), findsOneWidget);
+    expect(find.text('打卡'), findsOneWidget, reason: '仍在今日任务卡,可重试');
+  });
 }
+
+/// getAll 必炸的 DAO:制造库读失败现场。
+class ExplodingCheckInsDao extends CheckInsDao {
+  ExplodingCheckInsDao(super.db);
+
+  @override
+  Future<List<CheckIn>> getAll() => throw Exception('库读失败(注入)');
+}
+

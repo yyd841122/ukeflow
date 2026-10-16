@@ -86,9 +86,13 @@ class PracticeView extends StatelessWidget {
             builder: (context, box) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 歌词块收缩到内容实际高度(≤可用高度,给进度条留底线量)。
+                // 歌词块收缩到内容实际高度(≤可用高度,给进度条留底线量);
+                // 余高不足 24px(矮视口/横屏)钳到零——负 max 会直接
+                // BoxConstraints 断言崩(审计 2026-10-16 #36)。
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: box.maxHeight - 24),
+                  constraints: BoxConstraints(
+                    maxHeight: box.maxHeight < 24 ? 0 : box.maxHeight - 24,
+                  ),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
                     child: _lyricLines(scheme, lyricIndex),

@@ -262,4 +262,17 @@ void main() {
       reason: '长内容落在可滚容器里',
     );
   });
+
+  testWidgets('歌词余高不足 24px 不产生负 BoxConstraints 崩溃(审计30 #36)', (tester) async {
+    // 高度选在「外层固定控件恰好放下、歌词 Expanded 余高 <24px」的窗口
+    // (180px 连外层都会溢出,是另一个问题,不在本条范围):此处旧实现
+    // 会算出负 maxHeight 直接 BoxConstraints 断言崩,新实现钳零。
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(360, 280);
+    addTearDown(tester.view.reset);
+    await pumpView(tester, const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull,
+        reason: '余高不足 24px 时歌词块 maxHeight 钳零,不得负约束断言崩');
+  });
+
 }

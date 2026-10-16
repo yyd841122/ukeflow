@@ -349,4 +349,39 @@ void main() {
       reason: '取整曲头(round(4×period))起预备结束',
     );
   });
+
+  test('prepStateAt 倒计与拍声同毫秒翻转:跨 BPM 扫域钉取整边界(审计30 #19)', () {
+    // 拍声预定在 round(k×p)(beatTime 语义):倒计必须在同一毫秒翻页,
+    // 不得按连续网格 floor 晚亚毫秒(61BPM 拍 2 声 1967ms vs floor 界
+    // 1967.2ms)。
+    for (var bpm = 40; bpm <= 208; bpm++) {
+      final periodMs = 60000 / bpm;
+      int? countAt(double ms) => prepStateAt(
+            now: Duration(milliseconds: ms.round()),
+            t0Prep: Duration.zero,
+            periodMs: periodMs,
+          )?.count;
+      for (var k = 0; k < 4; k++) {
+        final click = (k * periodMs).round();
+        expect(
+          countAt(click.toDouble()),
+          4 - k,
+          reason: 'bpm=$bpm 拍 $k:第 ${k + 1} 声响的同一毫秒显示 ${4 - k}',
+        );
+        if (k > 0) {
+          expect(
+            countAt((click - 1).toDouble()),
+            4 - (k - 1),
+            reason: 'bpm=$bpm 拍 $k:声响前一毫秒仍是上一拍倒计',
+          );
+        }
+      }
+      expect(
+        countAt((4 * periodMs).round().toDouble()),
+        isNull,
+        reason: 'bpm=$bpm:取整曲头无缝交正曲',
+      );
+    }
+  });
+
 }

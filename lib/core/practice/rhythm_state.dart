@@ -5,6 +5,7 @@
 /// 一切时刻只认调用方传入的引擎时刻（ADR-0005），本文件无任何时钟。
 library;
 
+import '../audio/beat_scheduling.dart';
 import '../model/strum_pattern.dart';
 
 /// 一小节内的一个八分槽位上，节奏训练所处的全部状态。
@@ -42,9 +43,18 @@ RhythmPracticeState? rhythmPracticeAt({
   required double periodMs,
   required StrumPattern pattern,
 }) {
-  final elapsedMs = (now - t0).inMicroseconds / 1000;
-  if (elapsedMs < 0) return null;
-  final globalSlot = (elapsedMs / (periodMs / 2)).floor();
+  // 槽位经 beatAt 在**半拍周期**上取整派生(审计 2026-10-16 #20):连续
+  // 网格 floor 与拍声的取整网格在非整除 BPM 下错亚毫秒(61BPM 拍界
+  // round(2×983.6)=1967ms vs 槽界 2×983.6=1967.2ms),箭头翻页与节拍
+  // 声不同毫秒——同一取整语义逐拍对齐;round(2k×p/2)=round(k×p),拍界
+  // 与 beatAt 严格同刻。
+  final slotVisual = beatAt(
+    now: now,
+    t0: t0,
+    periodMs: periodMs / 2,
+  );
+  if (slotVisual == null) return null; // 预备期(now < t0)。
+  final (globalSlot, _, _) = slotVisual;
   final slotInBar = globalSlot % eighthsPerBar;
   final beatInBar = slotInBar ~/ 2;
   return RhythmPracticeState(

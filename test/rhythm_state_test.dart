@@ -103,4 +103,37 @@ void main() {
       }
     }
   });
+
+  test('槽位与拍声同毫秒翻转:半拍取整网格对齐 beatAt(审计30 #20)', () {
+    // 非整除 BPM(61):拍界 round(k×p) 处 beatInBar 必翻页(与拍声同刻),
+    // 半拍槽界 round((2k+1)×p/2) 处槽位翻页;连续网格 floor 会在拍界
+    // 晚亚毫秒,与 beatAt 错拍。
+    final periodMs = 60000 / 61;
+    RhythmPracticeState? at(double ms) => rhythmPracticeAt(
+          now: Duration(milliseconds: ms.round()),
+          t0: Duration.zero,
+          periodMs: periodMs,
+          pattern: pattern,
+        );
+    for (var k = 0; k < 8; k++) {
+      final beatBoundary = (k * periodMs).round();
+      expect(
+        at(beatBoundary.toDouble())!.beatInBar,
+        k % 4,
+        reason: '拍 $k 界($beatBoundary ms):与 beatAt 同毫秒翻页',
+      );
+      final halfBoundary = ((2 * k + 1) * periodMs / 2).round();
+      expect(
+        at(halfBoundary.toDouble())!.slotInBar,
+        (2 * k + 1) % 8,
+        reason: '半拍界($halfBoundary ms):槽位翻页',
+      );
+      expect(
+        at((halfBoundary - 1).toDouble())!.slotInBar,
+        (2 * k) % 8,
+        reason: '半拍界前一毫秒仍是原槽',
+      );
+    }
+  });
+
 }

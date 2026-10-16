@@ -105,16 +105,18 @@ class PrepState {
 /// prepBeats−k），取整曲头起预备已结束返回 null；[t0Prep] 之前（产品
 /// 不可达，纯函数自守）同样 null。
 ///
-/// 两个契约必须同源，预备→正曲的交接才无缝（页面对双 null 的反应是
+/// 三个契约必须同源，预备→正曲的交接才无缝（页面对双 null 的反应是
 /// 误判曲末）：
 /// - 锚取**预备第 0 拍**（调度器网格原点 t0，无取整）——取整后的曲头
 ///   反推剩余拍会出 ±1 拍误差（208BPM：4×288.46 取整 1154，0 时刻剩
 ///   余 4.0005 拍，ceil 炸成 5 被误判窗外）；
-/// - 结束边界取 **round(prepBeats×periodMs)**（与消费方 `_prepSpan`/
-///   visualAnchor 同一取整）——按浮点第 prepBeats 拍的天然末尾判定会
-///   留出 [round(4×period), 4×period) 级别的亚毫秒双 null 缝（208BPM
-///   实测 154µs，16ms 轮询约 1% 概率踩中）。窗内拍序仍按连续网格
-///   floor；取整窗比浮点拍短时末拍不足一整拍，倒计钳到 1。
+/// - 窗内倒计与结束边界都经 [beatAt] 派生（审计 2026-10-16 #19）：拍声
+///   预定在 round(k×periodMs)（beatTime 语义），倒计翻页若按连续网格
+///   floor 会比第三声预备晚亚毫秒（61BPM：拍 2 声在 round(1967.2)=
+///   1967ms，floor 边界 1967.2ms）——经 beatAt 同一取整网格取拍序，
+///   声与数同毫秒翻转;index ≥ prepBeats 即窗尾（恰为
+///   round(prepBeats×periodMs)，与消费方 `_prepSpan`/visualAnchor 同一
+///   取整，无亚毫秒双 null 缝）。
 PrepState? prepStateAt({
   required Duration now,
   required Duration t0Prep,
@@ -122,11 +124,11 @@ PrepState? prepStateAt({
   int prepBeats = 4,
 }) {
   requirePositiveFinite(periodMs, 'periodMs', '拍周期');
-  final elapsedUs = (now - t0Prep).inMicroseconds;
-  if (elapsedUs < 0) return null;
-  if (elapsedUs >= (prepBeats * periodMs).round() * 1000) return null;
-  final count = prepBeats - (elapsedUs / (periodMs * 1000)).floor();
-  return PrepState(count: count < 1 ? 1 : count);
+  final visual = beatAt(now: now, t0: t0Prep, periodMs: periodMs);
+  if (visual == null) return null; // 预备第 0 拍之前(纯函数自守)。
+  final (index, _, _) = visual;
+  if (index >= prepBeats) return null; // 预备窗已过,无缝交正曲。
+  return PrepState(count: prepBeats - index);
 }
 
 /// 时刻 ≤ [time] 的最后一个事件的通用取用（二分查找已定位，直接取）。
