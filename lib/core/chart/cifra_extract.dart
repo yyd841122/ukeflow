@@ -145,6 +145,10 @@ String buildChordPro(
   /// 等不到(空行/段落标记/谱尾)就按独立和弦行落盘。
   _ChordLine? hanging;
 
+  /// 站点「[Tab - X]」段 = 吉他六线谱(真机实证),对尤克里里跟练是
+  /// 纯噪声——进入这类段后所有行丢弃,直到下一个非 Tab 标记。
+  var skippingTabSection = false;
+
   void flushHangingStandalone() {
     final line = hanging;
     if (line != null) {
@@ -159,16 +163,24 @@ String buildChordPro(
   for (final line in _classifyLines(payload.lines)) {
     switch (line) {
       case _BlankLine():
+        if (skippingTabSection) break;
         flushHangingStandalone(); // 空行断开配对:悬空行就地独立落盘。
       case _MarkerLine(:final slug, :final label):
         flushHangingStandalone();
         closeSection();
+        if (slug.startsWith('tab')) {
+          skippingTabSection = true; // 六线谱段整段丢弃,不开指令对。
+          break;
+        }
+        skippingTabSection = false;
         openSection = slug;
         out.writeln('{start_of_$slug: $label}');
       case _ChordLine():
+        if (skippingTabSection) break;
         // 双记谱行(原调+capo 两行悬空):只收首条配歌词,后续行丢弃。
         hanging ??= line;
       case _LyricLine():
+        if (skippingTabSection) break;
         // 站点双记谱的 capo 行渲染为纯文本(无 b 元素):紧跟悬空和弦行、
         // 内容大半是和弦样的行是二记谱行,丢弃——真歌词不在这。
         if (hanging != null && line.chordalish) {
@@ -181,6 +193,7 @@ String buildChordPro(
             : line.pairedMarks(host, allowedChords: allowedChords);
         out.writeln(_interleave(line.lyricText, marks));
       case _MixedLine():
+        if (skippingTabSection) break;
         flushHangingStandalone();
         out.writeln(_interleave(line.lyricText, line.exactMarks));
     }

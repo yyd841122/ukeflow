@@ -106,8 +106,8 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
           raw = ukeRaw;
         } else {
           // 没有 ukulele 版(404 壳/页面无谱):回退原版,告知用户。
-          notice = '此歌没有 Ukulele 版,已按原版导入——可能是吉他谱,'
-              '吉他特有和弦会被校验拦下。';
+          notice = '站点没有这首的 Ukulele 转谱,已按原版导入。'
+              '和弦名通用,尤克里里照常可练;原谱中的六线谱段已过滤。';
           raw = await _navigateAndExtract(current!);
         }
       }

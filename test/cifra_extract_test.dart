@@ -370,6 +370,35 @@ void main() {
       );
     });
 
+    test('站点 Tab 段(六线谱噪声)整段跳过:报告只留和弦与歌词', () {
+      // 真站形态(2026-10-16 用户实测 Somewhere Over The Rainbow):
+      // 「[Tab - Intro]」custom 段里全是 E|---B|--- 六线谱行,对尤克里里
+      // 跟练是纯噪声,还让整份谱一眼像吉他谱——整段丢弃。
+      final payload = decodeCifraPayload({
+        'lines': <List<Object>>[
+          <Object>['[Intro]'],
+          <Object>[
+            ' ',
+            {'c': 'C', 's': 'C'},
+          ],
+          <Object>['[Tab - Intro]'],
+          <Object>['E|-------0-------|'],
+          <Object>['B|---1-------1---|'],
+          <Object>['[Chorus]'],
+          <Object>['la la la'],
+        ],
+      })!;
+
+      final text = buildChordPro(payload, allowedChords: {'C'});
+      expect(text, contains('{start_of_intro: Intro}'));
+      expect(text, contains('[C]'));
+      expect(text, contains('{start_of_chorus: Chorus}'));
+      expect(text, contains('la la la'));
+      expect(text, isNot(contains('Tab - Intro')));
+      expect(text, isNot(contains('E|---')));
+      expect(text, isNot(contains('B|---')));
+    });
+
     test('映射不越白名单:库没有的和弦保留原样交校验报错', () {
       final payload = decodeCifraPayload({
         'lines': <List<Object>>[
