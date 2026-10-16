@@ -66,16 +66,25 @@ class StrumScheduler {
 
   /// 从锚点 [t0] 起跑,并立即过一次窗。锚点处已过期(超迟到容差)的
   /// 事件越过不回放——暂停恢复后由控制器以重锚 t0 重建本调度器,恢复
-  /// 窗前的扫弦按「已随暂停消逝」处理,绝不回放。
-  void start({required Duration t0}) {
+  /// 窗前的扫弦按「已随暂停消逝」处理,绝不回放。[consumedUntil] 为
+  /// 会话进行中重建(恢复/变速/切换)时的**已消费截止线**:此刻之前的
+  /// 扫弦已由旧调度器预定发声,迟到容差窗(40ms)内已响的事件不得因
+  /// 重建重排而重放(审计 2026-10-16 #37);全新起跑传 null,锚点处
+  /// 容差窗内的事件照常入窗(首拍即刻可闻语义)。
+  void start({required Duration t0, Duration? consumedUntil}) {
     stop(); // 与 BeatScheduler.start 同契约:重复 start 不叠加在途状态
     _t0 = t0;
     _next = 0;
-    // 锚点前的过期事件直接越过:事件时刻 = t0+time,早于 now−容差即弃。
+    // 锚点前的过期事件直接越过:事件时刻 = t0+time,早于 now−容差或
+    // 不晚于已消费截止线即弃。
     final now = engine.engineTime();
-    while (_next < strums.length &&
-        t0 + strums[_next].time < now - _maxLate) {
-      _next++;
+    while (_next < strums.length) {
+      final time = t0 + strums[_next].time;
+      if (time < now - _maxLate || (consumedUntil != null && time <= consumedUntil)) {
+        _next++;
+      } else {
+        break;
+      }
     }
     _timer = Timer.periodic(pollInterval, (_) => _pass());
     _pass();

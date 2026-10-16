@@ -88,41 +88,51 @@ class _MetronomePageState extends ConsumerState<MetronomePage> {
       }
     });
     final colorScheme = Theme.of(context).colorScheme;
-    final beatInBar = state.running ? _lastBeatInBar : null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('节拍器')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _engineStatus(state, colorScheme),
-            const SizedBox(height: 32),
-            _beatRow(beatInBar, colorScheme),
-            const SizedBox(height: 16),
-            Text(
-              state.running ? '${beatInBar! + 1}' : '·',
-              style: Theme.of(context).textTheme.displayLarge,
+      // 矮视口(短屏/横屏)可滚:不可滚 Column 内容被裁(审计 2026-10-16
+      // #47);minHeight 保持常态下的竖直居中布局。
+      body: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: _bodyChildren(state, colorScheme),
+              ),
             ),
-            const SizedBox(height: 32),
-            _bpmControl(state, colorScheme),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              // key 供测试;引擎未就绪不可启。
-              key: const Key('metronome-toggle'),
-              onPressed: state.engineReady
-                  ? () => ref.read(metronomeProvider.notifier).toggle()
-                  : null,
-              icon: Icon(state.running ? Icons.stop : Icons.play_arrow),
-              label: Text(state.running ? '停止' : '开始'),
-            ),
-            const SizedBox(height: 24),
-            if (state.running) Text('已预定 ${state.scheduledBeats} 拍'),
-          ],
+          ),
         ),
       ),
     );
   }
+
+  List<Widget> _bodyChildren(MetronomeState state, ColorScheme colorScheme) => [
+        _engineStatus(state, colorScheme),
+        const SizedBox(height: 32),
+        _beatRow(state.running ? _lastBeatInBar : null, colorScheme),
+        const SizedBox(height: 16),
+        Text(
+          state.running ? '${_lastBeatInBar + 1}' : '·',
+          style: Theme.of(context).textTheme.displayLarge,
+        ),
+        const SizedBox(height: 32),
+        _bpmControl(state, colorScheme),
+        const SizedBox(height: 32),
+        FilledButton.icon(
+          // key 供测试;引擎未就绪不可启。
+          key: const Key('metronome-toggle'),
+          onPressed: state.engineReady
+              ? () => ref.read(metronomeProvider.notifier).toggle()
+              : null,
+          icon: Icon(state.running ? Icons.stop : Icons.play_arrow),
+          label: Text(state.running ? '停止' : '开始'),
+        ),
+        const SizedBox(height: 24),
+        if (state.running) Text('已预定 ${state.scheduledBeats} 拍'),
+      ];
 
   Widget _engineStatus(MetronomeState state, ColorScheme colorScheme) {
     if (state.error != null) {

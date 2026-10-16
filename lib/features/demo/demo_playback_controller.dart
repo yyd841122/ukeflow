@@ -78,6 +78,12 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
   Duration _t0 = Duration.zero;
   Timer? _endWatch;
 
+  /// 会话代数令牌:每次 start 递增、stop 作废——在途 _run 的 await 返回
+  /// 后与开声前复查,防「预备中停止再启动」后旧 run 以旧参数抢跑新会话
+  /// (旧 run 的 preparing 检查对新会话为真,会双调度器/覆盖参数,审计
+  /// 2026-10-16 #25)。
+  int _generation = 0;
+
   @override
   DemoPlaybackState build() {
     ref.onDispose(_teardown);
@@ -100,13 +106,14 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
       pattern: practice.pattern,
       bpm: practice.bpm.toDouble(),
       speed: practice.speed,
-    ));
+    ), ++_generation);
   }
 
-  /// 停止:停掉未响预定、曲末轮询取消,回 idle(错误文案保留)。
-  /// 引擎侧停止不依赖 ref(容器已销毁也照停);状态落盘前查 mounted
-  /// (与跟练控制器 stop 同纪律)。
+  /// 停止:作废在途会话令牌、停掉未响预定、曲末轮询取消,回 idle
+  /// (错误文案保留)。引擎侧停止不依赖 ref(容器已销毁也照停);状态
+  /// 落盘前查 mounted(与跟练控制器 stop 同纪律)。
   void stop() {
+    _generation++; // 在途 _run 全部作废。
     _discardSession();
     if (!ref.mounted) return;
     if (state.status != DemoPlaybackStatus.idle) {
@@ -126,18 +133,20 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
     _timeline = null;
   }
 
-  /// 一次试听的参数快照。
-  Future<void> _run(_Session session) async {
+  /// 一次试听的参数快照;[gen] 为本会话令牌,await 返回后与开声前各查
+  /// 一次,不符即作废返回。
+  Future<void> _run(_Session session, int gen) async {
     final engine = ref.read(audioEngineProvider);
     try {
       await engine.ensureInitialized();
       await _voicer!.preload();
     } on Object catch (error) {
-      _failPreparing('试听准备失败:$error');
+      _failPreparing('试听准备失败:$error', gen);
       return;
     }
+    if (gen != _generation) return; // 途中被停/再启:本 run 作废。
     if (!ref.mounted || state.status != DemoPlaybackStatus.preparing) {
-      return; // 途中被停/容器已退:不开声。
+      return; // 容器已退等异常态:不开声。
     }
     final timeline = compileTimeline(
       chart: session.chart,
@@ -155,7 +164,9 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
     _scheduler = scheduler;
     _t0 = engine.engineTime();
     scheduler.start(t0: _t0);
-    if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地,不宣布发声。
+    if (gen != _generation || _scheduler != scheduler) {
+      return; // 首过即抛或会话已被替换:错误状态已落地/属新会话。
+    }
     state = const DemoPlaybackState(status: DemoPlaybackStatus.playing);
     _endWatch = Timer.periodic(_endPoll, (_) => _checkEnd());
   }
@@ -172,7 +183,8 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
     stop();
   }
 
-  void _failPreparing(String message) {
+  void _failPreparing(String message, int gen) {
+    if (gen != _generation) return; // 旧会话的失败不得覆盖新会话。
     if (!ref.mounted || state.status != DemoPlaybackStatus.preparing) return;
     state = DemoPlaybackState(status: DemoPlaybackStatus.idle, error: message);
   }

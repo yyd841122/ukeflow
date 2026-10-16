@@ -95,4 +95,52 @@ void main() {
     expect(state.running, isFalse, reason: '出错自停');
     expect(state.error, isNotNull);
   });
+
+  group('审计30 同型三纪律(#43/#44/#45 与 #33 同型)', () {
+    test('warmup 期间容器释放:不抛、不写状态', () async {
+      final c = controller();
+      final warming = c.warmup(); // 不 await:让 dispose 插进 await 间隙
+      container.dispose(); // 同步释放:warmup 的续体落在已释放容器上
+      await expectLater(warming, completes);
+    });
+
+    test('warmup 成功清旧错误:瞬态失败后重开不残留失败文案', () async {
+      engine.failInitialization = true;
+      await controller().warmup();
+      expect(container.read(metronomeProvider).error, isNotNull);
+      engine.failInitialization = false;
+      await controller().warmup();
+      final s = container.read(metronomeProvider);
+      expect(s.engineReady, isTrue);
+      expect(s.error, isNull);
+    });
+
+    test('首播失败:running 不覆盖为 true、错误可见;解除后可再开', () async {
+      final c = controller();
+      await c.warmup();
+      engine.failNow = true;
+      c.toggle();
+      final s = container.read(metronomeProvider);
+      expect(s.running, isFalse, reason: '首播失败不得宣布运行');
+      expect(s.error, isNotNull);
+      expect(engine.scheduleLog.where((e) => !e.stopped), isEmpty);
+      engine.failNow = false;
+      c.toggle();
+      expect(container.read(metronomeProvider).running, isTrue);
+    });
+
+    test('运行时错误后 warmup 重试:引擎仍就绪时清陈错恢复可用', () async {
+      final c = controller();
+      await c.warmup();
+      engine.failNow = true;
+      c.toggle();
+      expect(container.read(metronomeProvider).error, isNotNull);
+      engine.failNow = false;
+      await c.warmup();
+      final s = container.read(metronomeProvider);
+      expect(s.error, isNull, reason: '重试=清陈错,重跑走 start');
+      expect(s.engineReady, isTrue);
+    });
+  });
+
 }

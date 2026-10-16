@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -263,4 +265,47 @@ void main() {
     expect(engine.scheduleLog, hasLength(logLen), reason: '重复 start 不叠加');
     demo().stop();
   });
+
+  test('预备中停止再启动:旧 run 不抢跑新会话,无双调度器叠加(审计30 #25)', () async {
+    engine = GatedInitEngine();
+    final gated = engine as GatedInitEngine;
+    container = ProviderContainer(
+      overrides: [audioEngineProvider.overrideWithValue(gated)],
+    );
+    gated.gateNextInit = true;
+    startDemo(); // run#1:进 preparing,卡在引擎初始化
+    expect(state().status, DemoPlaybackStatus.preparing);
+    demo().stop(); // 作废 run#1
+    expect(state().status, DemoPlaybackStatus.idle);
+    startDemo(); // run#2(同参数):新会话令牌
+    expect(state().status, DemoPlaybackStatus.preparing);
+    gated.gates.single.complete(); // 放行 run#1 的 await
+    for (var i = 0; i < 8; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(state().status, DemoPlaybackStatus.playing, reason: '新会话正常发声');
+    final times = plucks().map((e) => e.time).toList();
+    expect(times, isNotEmpty);
+    expect(
+      times.toSet().length,
+      times.length,
+      reason: '旧 run 抢跑会以同参数双调度器重排同刻扫弦,时刻必重复',
+    );
+    demo().stop();
+  });
+}
+
+/// ensureInitialized 可闸住的假引擎:制造「在途初始化横跨两次会话」现场。
+class GatedInitEngine extends FakeAudioEngine {
+  final gates = <Completer<void>>[];
+  bool gateNextInit = false;
+
+  @override
+  Future<void> ensureInitialized() {
+    if (!gateNextInit) return super.ensureInitialized();
+    gateNextInit = false;
+    final gate = Completer<void>();
+    gates.add(gate);
+    return gate.future.then((_) => super.ensureInitialized());
+  }
 }

@@ -131,7 +131,6 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   StrumScheduler? _strumScheduler;
   PlayTimeline? _timeline;
   Future<void>? _warming;
-  Future<void>? _strumPreloading;
 
   /// 会话锚点与参数:调度 t0（预备第 0 拍）、拍周期、当前谱与和弦表。
   /// 控制器持有（暂停后调度器已停,锚点仍须可查询）,调度器是 t0 的
@@ -190,7 +189,13 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   /// error 状态,页面上可见。并发调用共享同一次在途初始化(快速重进页
   /// 不重复注入音源)。
   Future<void> warmup() async {
-    if (state.engineReady) return;
+    if (state.engineReady) {
+      // 运行时错误后的重试(页上重试钮同一入口):引擎仍就绪,清陈错即
+      // 恢复可用,真正重跑走 start;重跑再败会再落错误态(审计
+      // 2026-10-16 #33)。未就绪路径照旧重跑预热。
+      if (state.error != null) state = state.copyWith(error: null);
+      return;
+    }
     return _warming ??= _doWarmup().whenComplete(() => _warming = null);
   }
 
@@ -240,12 +245,12 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   }
 
   /// 预注入全曲和弦的拨弦音源（参考音=扫弦的调度是同步路径,免 await）。
-  /// 失败静默降级;在途合并,重复调用不重注入（PluckPlayer 缓存兜底）。
+  /// 失败静默降级;不做在途合并——和弦表更新后各注入各的,PluckPlayer
+  /// 缓存按音源键去重兜底(在途合并会让新和弦表的预载落在旧表上,与
+  /// 指弹跟练 #40 同型)。
   Future<void> _ensureStrumSounds() {
     if (_chords.isEmpty) return Future.value();
-    return _strumPreloading ??= _preloadStrumSounds().whenComplete(
-      () => _strumPreloading = null,
-    );
+    return _preloadStrumSounds();
   }
 
   Future<void> _preloadStrumSounds() async {
@@ -285,10 +290,15 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
       _periodMs = newTimeline.periodMs;
       return;
     }
-    _scheduler!.changePeriod(newTimeline.periodMs);
+    // 本地持有再变速:changePeriod 尾过窗若同步报错,onError→stop 会清
+    // _scheduler——此时错误状态已落地,不得再回读锚点(空断言崩,
+    // 审计 2026-10-16 #34)。
+    final scheduler = _scheduler!;
+    scheduler.changePeriod(newTimeline.periodMs);
+    if (_scheduler != scheduler) return; // 变速首过即抛:错误状态已落地。
     _adoptSchedulerAnchor();
     _timeline = newTimeline;
-    _restartStrumScheduler();
+    _restartStrumScheduler(continuing: true);
   }
 
   /// 换节奏型。仅空闲生效:节奏型是编译参数,运行中换型=重编译(工单
@@ -298,19 +308,52 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     state = state.copyWith(pattern: pattern);
   }
 
-  /// 设参考音。运行中即时接线(节拍声靠 pickSound 读字段,扫弦声靠
-  /// 扫弦调度器启停);暂停中仅记参,恢复时按状态接线。
+  /// 设参考音。运行中即时接线:节拍调度器按当前相位重建——旧模式窗内
+  /// 已排队声取消,新模式自下一拍接线(切换前已过的拍不回放,切回不
+  /// 越拍——审计 2026-10-16 #35);扫弦声靠扫弦调度器启停。暂停中仅记
+  /// 参,恢复时按状态接线。
   void setReference(ReferenceSound reference) {
     if (reference == state.reference) return;
     _reference = reference;
     state = state.copyWith(reference: reference);
     if (!state.running || state.paused) return;
+    _restartBeatScheduler();
     if (reference == ReferenceSound.strum) {
-      _restartStrumScheduler();
+      _restartStrumScheduler(continuing: true);
     } else {
       _strumScheduler?.stop();
       _strumScheduler = null;
     }
+  }
+
+  /// 运行中重建节拍调度器(参考音切换):以引擎当前时刻按已逝拍数重锚
+  /// (相位保持,nextBeat = ceil(已逝拍数))——旧调度器已排队未响拍
+  /// 全部取消,新调度器自下一拍起按新参考音模式接线。
+  void _restartBeatScheduler() {
+    final old = _scheduler;
+    final timeline = _timeline;
+    if (old == null || timeline == null || !old.running) return;
+    final engine = ref.read(audioEngineProvider);
+    final now = engine.engineTime();
+    final elapsedBeats = (now - _t0).inMicroseconds / (_periodMs * 1000);
+    final t0 =
+        now - Duration(milliseconds: (elapsedBeats * _periodMs).round());
+    final nextBeat = elapsedBeats <= 0 ? 0 : elapsedBeats.ceil();
+    final scheduler = BeatScheduler(
+      engine: engine,
+      pickSound: _pick,
+      onError: _onEngineError,
+    );
+    _scheduler = scheduler; // 先挂字段再换:错误回调路径认 _scheduler。
+    old.stop();
+    scheduler.start(
+      periodMs: _periodMs,
+      totalBeats: prepBeats + timeline.totalBeats,
+      t0: t0,
+      nextBeat: nextBeat,
+    );
+    if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地。
+    _t0 = t0;
   }
 
   /// 开始跟练:编译时间轴,预备数拍+节拍声与时间轴同源起跑（调度
@@ -394,7 +437,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     );
     if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地。
     _t0 = t0;
-    _restartStrumScheduler();
+    _restartStrumScheduler(continuing: true); // 暂停前已响扫弦不重放。
     state = state.copyWith(paused: false);
   }
 
@@ -423,10 +466,13 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   /// 参考音=扫弦时重建扫弦调度器（启动/恢复/变速/切换的统一入口）:
   /// 以**曲头锚**（_t0 + 预备跨度,与 [visualAnchor] 同一刻）起跑——时间轴
   /// 扫弦事件时刻是曲头相对量,锚在预备拍 0 会让整曲提前一个预备跨度响、
-  /// 末小节永不发声;锚点前过期事件越过不回放。
-  void _restartStrumScheduler() {
-    _strumScheduler?.stop();
+  /// 末小节永不发声;锚点前过期事件越过不回放。[continuing] 标记会话
+  /// 进行中的重建（恢复/变速/切参考音）:此刻前的扫弦已由旧调度器消费,
+  /// 传入已消费截止线,迟到容差窗内已响扫弦不重放(审计 2026-10-16 #37)。
+  void _restartStrumScheduler({bool continuing = false}) {
+    final old = _strumScheduler;
     _strumScheduler = null;
+    old?.stop();
     if (_reference != ReferenceSound.strum) return;
     final timeline = _timeline;
     if (timeline == null) return;
@@ -437,7 +483,11 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
       onError: _onEngineError,
     );
     _strumScheduler = scheduler;
-    scheduler.start(t0: _t0 + _prepSpan);
+    scheduler.start(
+      t0: _t0 + _prepSpan,
+      consumedUntil:
+          continuing ? ref.read(audioEngineProvider).engineTime() : null,
+    );
     if (_strumScheduler != scheduler) _strumScheduler = null;
   }
 

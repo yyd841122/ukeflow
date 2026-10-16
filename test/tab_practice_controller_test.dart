@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ukeflow/core/audio/audio_engine.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/model/tab_chart.dart';
@@ -410,4 +414,93 @@ void main() {
     expect(state.running, isFalse, reason: '首过即抛,出错自停');
     expect(state.error, isNotNull);
   });
+
+  group('审计30(#40/#41/#42)', () {
+    test('运行中变速首过即抛:错误落地,不再回读锚点空断言崩(#41)', () async {
+      final c = controller();
+      c.prepareFor(tabFixtureChart);
+      await c.warmup();
+      fakeAsync((async) {
+        c.start(chart: tabFixtureChart);
+        // now=740:变速重锚后首拍 960 落在窗内,changePeriod 尾过窗必调
+        // playClocked(错误才触发)。
+        engine.advance(const Duration(milliseconds: 640));
+        engine.failNow = true;
+        expect(() => c.setSpeed(0.5), returnsNormally);
+        final s = container.read(tabPracticeProvider);
+        expect(s.running, isFalse, reason: '错误路径自停');
+        expect(s.error, isNotNull);
+      });
+    });
+
+    test('变速重建逐音调度:迟到窗内已响音不重放(#42)', () async {
+      final c = controller();
+      c.prepareFor(tabFixtureChart);
+      await c.warmup();
+      fakeAsync((async) {
+        engine.advance(const Duration(milliseconds: 100));
+        c.start(chart: tabFixtureChart);
+        // 曲头 3100:推进到 3130,喂窗让首音(3100)预定;此刻它在
+        // 40ms 迟到窗内刚响。
+        engine.advance(const Duration(milliseconds: 3030));
+        async.elapse(const Duration(milliseconds: 40));
+        expect(
+          engine.scheduleLog.where((e) => e.key.startsWith('pluck_')),
+          hasLength(1),
+          reason: '曲头首音已预定',
+        );
+        c.setSpeed(0.9); // 变速重建:新曲头锚落回迟到窗内,须按截止线跳过
+        async.elapse(const Duration(milliseconds: 40));
+        expect(
+          engine.scheduleLog
+              .where((e) =>
+                  e.key.startsWith('pluck_') &&
+                  e.time.inMilliseconds < 3130)
+              .map((e) => e.time),
+          hasLength(1),
+          reason: '首音不因重建重放(旧实现重排出第二声)',
+        );
+      });
+    });
+
+    test('预载按谱键控:换谱后新谱音源必被加载(#40)', () async {
+      const chartB = TabChart(
+        title: 'B',
+        artist: 'x',
+        tempo: 80,
+        notes: [TabNote(string: 4, fret: 0, beat: 0)],
+      );
+      final gated = GatedLoadEngine();
+      final local = ProviderContainer(
+        overrides: [audioEngineProvider.overrideWithValue(gated)],
+      );
+      addTearDown(local.dispose);
+      final c = local.read(tabPracticeProvider.notifier);
+      c.prepareFor(tabFixtureChart); // 预载 fixture:卡在 gate
+      c.prepareFor(chartB); // 换谱:在途预载不得吞掉新谱的预载
+      gated.gate.complete();
+      for (var i = 0; i < 6; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        gated.loadedKeys,
+        contains('pluck_${chartB.notes.first.frequency}_1500'),
+        reason: '换谱后新谱音高被补载(旧在途合并会落空)',
+      );
+    });
+  });
 }
+
+/// loadMem 可闸住的假引擎:预载在途与换谱的竞态用。
+class GatedLoadEngine extends FakeAudioEngine {
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<EngineSound> loadMem(String key, Uint8List wavBytes) {
+    if (key.startsWith('pluck_')) {
+      return gate.future.then((_) => super.loadMem(key, wavBytes));
+    }
+    return super.loadMem(key, wavBytes);
+  }
+}
+

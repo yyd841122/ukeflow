@@ -98,7 +98,6 @@ class TabPracticeController extends Notifier<TabSessionState> {
   TabNoteScheduler? _noteScheduler;
   TabTimeline? _timeline;
   Future<void>? _warming;
-  Future<void>? _pluckPreloading;
 
   /// 会话锚点与参数:调度 t0(预备第 0 拍)、拍周期、当前谱。
   Duration _t0 = Duration.zero;
@@ -151,7 +150,12 @@ class TabPracticeController extends Notifier<TabSessionState> {
   /// 引擎预热 + 注入预备拍音源(+已登记谱面的全曲拨弦音源);失败进
   /// error 状态。并发调用共享同一次在途初始化(快速重进页不重复注入)。
   Future<void> warmup() async {
-    if (state.engineReady) return;
+    if (state.engineReady) {
+      // 运行时错误后的重试(页上重试钮同一入口):引擎仍就绪,清陈错即
+      // 恢复可用,真正重跑走 start(审计 2026-10-16 #33 同型)。
+      if (state.error != null) state = state.copyWith(error: null);
+      return;
+    }
     return _warming ??= _doWarmup().whenComplete(() => _warming = null);
   }
 
@@ -183,13 +187,13 @@ class TabPracticeController extends Notifier<TabSessionState> {
   }
 
   /// 预注入当前谱全曲音高的拨弦音源(示范声调度是同步路径,免 await)。
-  /// 失败静默降级;在途合并,重复调用不重注入(PluckPlayer 缓存兜底)。
+  /// 失败静默降级;**按谱键控**——换谱后各注入各的,PluckPlayer 缓存
+  /// 按音源键去重兜底(旧「在途合并」会把换谱后的预载落在旧谱上,新谱
+  /// 音源静默缺失,审计 2026-10-16 #40)。
   Future<void> _ensurePluckSounds() {
     final chart = _chart;
     if (chart == null) return Future.value();
-    return _pluckPreloading ??= _preloadPluckSounds(
-      chart,
-    ).whenComplete(() => _pluckPreloading = null);
+    return _preloadPluckSounds(chart);
   }
 
   Future<void> _preloadPluckSounds(TabChart chart) async {
@@ -230,10 +234,15 @@ class TabPracticeController extends Notifier<TabSessionState> {
       _periodMs = newTimeline.periodMs;
       return;
     }
-    _scheduler!.changePeriod(newTimeline.periodMs);
+    // 本地持有再变速:changePeriod 尾过窗若同步报错,onError→stop 会清
+    // _scheduler——此时错误状态已落地,不得再回读锚点(空断言崩,
+    // 审计 2026-10-16 #41)。
+    final scheduler = _scheduler!;
+    scheduler.changePeriod(newTimeline.periodMs);
+    if (_scheduler != scheduler) return; // 变速首过即抛:错误状态已落地。
     _adoptSchedulerAnchor();
     _timeline = newTimeline;
-    _restartNoteScheduler();
+    _restartNoteScheduler(continuing: true);
   }
 
   /// 开始跟练:编译时间轴,预备数拍起跑(调度 totalBeats = 预备+曲拍数,
@@ -315,7 +324,7 @@ class TabPracticeController extends Notifier<TabSessionState> {
     );
     if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地。
     _t0 = t0;
-    _restartNoteScheduler();
+    _restartNoteScheduler(continuing: true); // 暂停前已响音不重放。
     state = state.copyWith(paused: false);
   }
 
@@ -344,10 +353,13 @@ class TabPracticeController extends Notifier<TabSessionState> {
   /// 重建逐音示范声调度器(启动/恢复/变速的统一入口):以**曲头锚**
   /// (_t0 + 预备跨度,与 [visualAnchor] 同一刻)起跑——时间轴音事件时刻
   /// 是曲头相对量,锚在预备拍 0 会让整曲提前一个预备跨度响;锚点前过期
-  /// 事件越过不回放。
-  void _restartNoteScheduler() {
-    _noteScheduler?.stop();
+  /// 事件越过不回放。[continuing] 标记会话进行中的重建(恢复/变速):
+  /// 此刻前的音已由旧调度器消费,传入已消费截止线,迟到容差窗内已响音
+  /// 不重放(审计 2026-10-16 #42)。
+  void _restartNoteScheduler({bool continuing = false}) {
+    final old = _noteScheduler;
     _noteScheduler = null;
+    old?.stop();
     final timeline = _timeline;
     if (timeline == null) return;
     final scheduler = TabNoteScheduler(
@@ -357,7 +369,11 @@ class TabPracticeController extends Notifier<TabSessionState> {
       onError: _onEngineError,
     );
     _noteScheduler = scheduler;
-    scheduler.start(t0: _t0 + _prepSpan);
+    scheduler.start(
+      t0: _t0 + _prepSpan,
+      consumedUntil:
+          continuing ? ref.read(audioEngineProvider).engineTime() : null,
+    );
     if (_noteScheduler != scheduler) _noteScheduler = null;
   }
 

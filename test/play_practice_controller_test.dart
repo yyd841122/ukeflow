@@ -596,4 +596,105 @@ group('工单 10:参考音(节拍声/示范扫弦声)', () {
     expect(resumedPlucks.length, lessThanOrEqualTo(4), reason: '有界:只排窗内事件');
   });
 });
+
+  group('审计30(#33/#34/#35)', () {
+    Map<String, Chord> fixtureChords() => {
+          for (final chord in uiFixtureLibrary.chords) chord.label: chord,
+        };
+
+    test('运行时错误后 warmup 重试:引擎仍就绪时清陈错恢复可用(#33)', () async {
+      final c = controller();
+      c.prepareFor(practiceFixtureChart);
+      await c.warmup();
+      engine.failNow = true;
+      fakeAsync((async) {
+        c.start(chart: practiceFixtureChart);
+      });
+      var s = container.read(playPracticeProvider);
+      expect(s.running, isFalse, reason: '首播失败不宣布运行');
+      expect(s.error, isNotNull);
+      engine.failNow = false;
+      await c.warmup();
+      s = container.read(playPracticeProvider);
+      expect(s.error, isNull, reason: '重试=清陈错,重跑走 start');
+      expect(s.engineReady, isTrue);
+    });
+
+    test('运行中变速首过即抛:错误落地,不再回读锚点空断言崩(#34)', () async {
+      final c = controller();
+      c.prepareFor(practiceFixtureChart);
+      await c.warmup();
+      fakeAsync((async) {
+        c.start(chart: practiceFixtureChart);
+        // now=740:变 0.5 速重锚后首拍 960 落在窗内,changePeriod 尾过窗
+        // 必调 playClocked(在 100 变速则首拍 1400 在窗外,错误不触发)。
+        engine.advance(const Duration(milliseconds: 640));
+        engine.failNow = true;
+        expect(
+          () => c.setSpeed(0.5),
+          returnsNormally,
+          reason: 'changePeriod 尾过窗报错后不得回读已清空的调度器',
+        );
+        final s = container.read(playPracticeProvider);
+        expect(s.running, isFalse, reason: '错误路径自停');
+        expect(s.error, isNotNull);
+      });
+    });
+
+    test('运行中切参考音:旧模式排队取消、不重排叠加、切回自下一拍(#35)', () async {
+      final c = controller();
+      c.prepareFor(practiceFixtureChart, chords: fixtureChords());
+      await c.warmup();
+      fakeAsync((async) {
+        engine.advance(const Duration(milliseconds: 100));
+        c.start(chart: practiceFixtureChart, chords: fixtureChords());
+        // 曲头 3100(预备 4×750):推进到 3700(曲内第 1 拍后),喂窗让
+        // 曲内拍 5(3850)排队。
+        engine.advance(const Duration(milliseconds: 3600));
+        async.elapse(const Duration(milliseconds: 40));
+        final queued = engine.scheduleLog
+            .where((e) =>
+                !e.stopped &&
+                e.key != 'tick_count' &&
+                e.time.inMilliseconds >= 3700)
+            .toList();
+        expect(queued, isNotEmpty, reason: '参考音=节拍:曲内拍已排队');
+
+        c.setReference(ReferenceSound.strum);
+        for (final e in queued) {
+          expect(e.stopped, isTrue, reason: '切扫弦:旧节拍排队取消 ${e.time}');
+        }
+        async.elapse(const Duration(milliseconds: 40)); // 新节拍调度器过窗
+        expect(
+          engine.scheduleLog.where((e) =>
+              e.key.startsWith('tick_') &&
+              !e.stopped &&
+              e.time.inMilliseconds >= 3700),
+          isEmpty,
+          reason: '正曲 tick 静默且不重排(无叠加)',
+        );
+
+        c.setReference(ReferenceSound.beat);
+        engine.advance(const Duration(milliseconds: 100)); // now=3800
+        async.elapse(const Duration(milliseconds: 40));
+        expect(
+          engine.scheduleLog
+              .where((e) => e.key == 'tick_weak' && !e.stopped)
+              .map((e) => e.time),
+          contains(const Duration(milliseconds: 3850)),
+          reason: '切回节拍:下一拍恢复 tick',
+        );
+        expect(
+          engine.scheduleLog.where((e) =>
+              e.key.startsWith('tick_') &&
+              !e.stopped &&
+              e.time.inMilliseconds > 3100 &&
+              e.time.inMilliseconds < 3850),
+          isEmpty,
+          reason: '切换前已消费的拍不回放',
+        );
+      });
+    });
+  });
+
 }

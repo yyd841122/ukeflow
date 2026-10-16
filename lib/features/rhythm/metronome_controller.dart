@@ -76,16 +76,29 @@ class MetronomeController extends Notifier<MetronomeState> {
   }
 
   /// 引擎预热 + 注入强弱拍音源;失败进 error 状态,页面上可见。
+  /// 每次异步返回后查 [ref.mounted]:容器已释放(应用退出竞态)时状态
+  /// 无可落盘,不得再写(审计 2026-10-16 #43);成功时清旧错误——
+  /// 瞬态失败后重开不残留失败文案(#44)。
   Future<void> warmup() async {
-    if (state.engineReady) return;
+    if (state.engineReady) {
+      // 运行时错误后的重试(引擎仍就绪):清陈错即恢复可用,真正重跑
+      // 走 start;重跑再败会再落错误态。
+      if (state.error != null) state = state.copyWith(error: null);
+      return;
+    }
     try {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
-      // 音源与引擎解耦(ADR-0004):WAV 由 TickSynth 代码合成,内存注入。
-      _strong = await engine.loadMem('tick_strong', TickSynth.strong());
-      _weak = await engine.loadMem('tick_weak', TickSynth.weak());
-      state = state.copyWith(engineReady: true);
+      if (!ref.mounted) return;
+      final strong = await engine.loadMem('tick_strong', TickSynth.strong());
+      final weak = await engine.loadMem('tick_weak', TickSynth.weak());
+      if (!ref.mounted) return;
+      _strong = strong;
+      _weak = weak;
+      // error: null——上次初始化失败的文案不残留到成功之后。
+      state = state.copyWith(engineReady: true, error: null);
     } catch (error) {
+      if (!ref.mounted) return;
       state = state.copyWith(error: '引擎初始化失败:$error');
     }
   }
@@ -112,15 +125,21 @@ class MetronomeController extends Notifier<MetronomeState> {
       pickSound: _pick,
       onError: _onEngineError,
     );
-    scheduler.start(periodMs: 60000 / state.bpm);
+    // 先注册再起跑:首播(即时首过)失败时 onError 已清引用与状态,
+    // 下方据此识别——不得再以 running=true / error=null 覆盖失败
+    // (审计 2026-10-16 #45)。
     _scheduler = scheduler;
+    scheduler.start(periodMs: 60000 / state.bpm);
+    if (_scheduler != scheduler) return; // 首播失败:错误已落地,不宣布运行。
     state = state.copyWith(running: true, error: null);
     refreshScheduled();
   }
 
   void stop() {
+    // 引擎侧停止不依赖 ref:容器已销毁(应用退出竞态)也照停。
     _scheduler?.stop();
     _scheduler = null;
+    if (!ref.mounted) return; // 容器已销毁:状态无可落盘(与训练器同纪律)。
     if (state.running) {
       state = state.copyWith(running: false, scheduledBeats: 0);
     }

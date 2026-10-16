@@ -232,6 +232,39 @@ void main() {
       );
     });
   });
+
+  test('consumedUntil 截止线:迟到窗内已消费事件不重放(审计30 #37)', () {
+    fakeAsync((async) {
+      // 曲头锚 0:推进到 520(事件 500 已由旧调度器消费,在迟到窗内)。
+      final now = const Duration(milliseconds: 520);
+      final consumed = StrumScheduler(
+        engine: engine,
+        strums: strums(),
+        pickStrings: resolver(),
+      )..start(t0: Duration.zero, consumedUntil: now);
+      expect(consumed.scheduledCount, 2, reason: '事件 0/500 已消费,越过');
+      final times500 = engine.scheduleLog
+          .where((e) => e.time.inMilliseconds >= 480 && e.time.inMilliseconds <= 520)
+          .toList();
+      expect(times500, isEmpty, reason: '迟到窗内已消费事件不重排');
+
+      // 对照:全新起跑(无截止线)同锚同刻,事件 500 照常入窗。
+      engine.scheduleLog.clear();
+      final fresh = StrumScheduler(
+        engine: engine,
+        strums: strums(),
+        pickStrings: resolver(),
+      )..start(t0: Duration.zero);
+      expect(
+        engine.scheduleLog.any((e) => e.key.startsWith('string')),
+        isTrue,
+        reason: '无截止线时容差窗内事件照常入窗',
+      );
+      fresh.stop();
+      consumed.stop();
+    });
+  });
+
 }
 
 class BrokenEngine extends FakeAudioEngine {
@@ -240,4 +273,5 @@ class BrokenEngine extends FakeAudioEngine {
       throw Exception('引擎预定失败(注入)');
 
   EngineSound loadMemSync(String key) => FakeSound(key);
+
 }

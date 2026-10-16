@@ -163,4 +163,25 @@ void main() {
       expect(scheduler.running, isFalse, reason: '出错即停机');
     });
   });
+
+  test('consumedUntil 截止线:迟到窗内已消费音不重放(审计30 #39)', () {
+    fakeAsync((async) {
+      // 曲头锚 0:推进到 520(音 500 已由旧调度器消费,在迟到窗内)。
+      final now = const Duration(milliseconds: 520);
+      final consumed = TabNoteScheduler(
+        engine: engine,
+        notes: notes(),
+        pickSound: resolver(),
+      )..start(t0: Duration.zero, consumedUntil: now);
+      expect(consumed.scheduledCount, 2, reason: '音 0/500 已消费,越过');
+      expect(
+        engine.scheduleLog
+            .where((e) => e.time.inMilliseconds >= 480 && e.time.inMilliseconds <= 520),
+        isEmpty,
+        reason: '迟到窗内已消费音不重排',
+      );
+      consumed.stop();
+    });
+  });
+
 }

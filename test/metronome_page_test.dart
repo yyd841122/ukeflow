@@ -118,6 +118,18 @@ void main() {
     await tester.pump();
     expect(find.text('120'), findsOneWidget);
   });
+
+  testWidgets('矮视口(360x320)不溢出,控件滚动可达(审计30 #47)', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpPage(tester);
+    expect(tester.takeException(), isNull, reason: '不可滚 Column 会 RenderFlex overflow');
+    final toggle = find.byKey(const Key('metronome-toggle'));
+    await tester.scrollUntilVisible(toggle, 100, scrollable: find.byType(Scrollable).first);
+    expect(toggle, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
 
 /// 第 [i] 个拍点当前的颜色。
