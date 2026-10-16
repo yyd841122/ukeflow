@@ -295,4 +295,51 @@ void main() {
       }
     });
   });
+
+  test('快进扫域:全周期域上窗内拍集与逐拍 brute-force 逐项一致(边界扫域)', () {
+    // 独立参考实现:从拍 0 逐拍推进,收 [now−40, now+400] 窗内的拍;
+    // nextBeat = 首个超窗拍的序号(越过全部已过窗拍,含被 maxLate 跳过的)。
+    (List<int>, int) bruteForce(double periodMs, Duration now) {
+      const from = Duration(milliseconds: 40);
+      const limit = Duration(milliseconds: 400);
+      final expected = <int>[];
+      var b = 0;
+      for (;; b++) {
+        final t = Duration(milliseconds: (b * periodMs).round());
+        if (t > now + limit) break;
+        if (t >= now - from) expected.add(b);
+      }
+      return (expected, b);
+    }
+
+    void checkOne(double periodMs, Duration now) {
+      final s = BeatSchedule(t0: Duration.zero, nextBeat: 0, periodMs: periodMs);
+      final (next, due) = s.scheduleDue(
+        now: now,
+        lookahead: const Duration(milliseconds: 400),
+        maxLate: const Duration(milliseconds: 40),
+      );
+      final (expected, expectedNextBeat) = bruteForce(periodMs, now);
+      expect(
+        due.map((e) => e.$1).toList(),
+        expected,
+        reason: 'periodMs=$periodMs now=$now:窗内拍集不错不漏',
+      );
+      expect(
+        next.nextBeat,
+        expectedNextBeat,
+        reason: 'periodMs=$periodMs now=$now:nextBeat 收在首个超窗拍',
+      );
+    }
+
+    // 非整除周期域(小数周期,取整边界误差最丰富):
+    for (var i = 0; i < 160; i++) {
+      checkOne(1.0 + i * 0.37, const Duration(milliseconds: 2000));
+    }
+    // 产品 BPM 域 40..208 逐 1(跨 BPM 扫域,单点整除不作数):
+    for (var bpm = 40; bpm <= 208; bpm++) {
+      checkOne(60000 / bpm, const Duration(milliseconds: 5000));
+    }
+  });
+
 }

@@ -30,7 +30,7 @@ class DemoPlaybackState {
 
   final DemoPlaybackStatus status;
 
-  /// 引擎/准备错误文案(试听已停止);null = 正常。停止后保留,下次
+  /// 引擎/准备错误文案(示范试听已停止);null = 正常。停止后保留,下次
   /// 开试听清空。
   final String? error;
 }
@@ -141,7 +141,7 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
       await engine.ensureInitialized();
       await _voicer!.preload();
     } on Object catch (error) {
-      _failPreparing('试听准备失败:$error', gen);
+      _failPreparing('示范试听准备失败:$error', gen);
       return;
     }
     if (gen != _generation) return; // 途中被停/再启:本 run 作废。
@@ -192,7 +192,7 @@ class DemoPlaybackController extends Notifier<DemoPlaybackState> {
   void _onEngineError(Object error) {
     stop();
     if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
-    state = DemoPlaybackState(error: '引擎出错,试听已停止:$error');
+    state = DemoPlaybackState(error: '引擎出错,示范试听已停止:$error');
   }
 
   void _teardown() {

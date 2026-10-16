@@ -194,36 +194,42 @@ class StrumChartParser {
       '第 ${span.line} 行第 ${span.column} 列';
 
   /// 不支持指令检查:{transpose} 与非 4/4 拍号此前被静默丢弃(谱照过、
-  /// 播放按原调/4/4 走,音全错)——显式拒绝,给可读消息(审计
-  /// 2026-10-16 #17)。
+  /// 播放按原调/4/4 走,音全错)——显式拒绝,给可读消息,定位到指令
+  /// 原文所在行列(审计 2026-10-16 #17)。
   static List<ChartIssue> _unsupportedDirectiveIssues(
     Song song,
     List<String> sourceLines,
   ) {
     final issues = <ChartIssue>[];
-    final meta = song.metadata;
-    final transpose = meta.transpose;
-    if (transpose != null && transpose != 0) {
-      issues.add(
-        ChartIssue(
-          code: ChartIssueCode.unsupportedDirective,
-          line: 1,
-          column: 1,
-          message: '谱面要求移调 {transpose: $transpose}，本 App 不支持移调;'
-              '请把谱面转回原调后再导入',
-        ),
-      );
-    }
-    for (final time in meta.times) {
-      if (time.trim() == '4/4') continue;
-      issues.add(
-        ChartIssue(
-          code: ChartIssueCode.unsupportedDirective,
-          line: 1,
-          column: 1,
-          message: '谱面拍号 {$time} 不是 4/4，本 App 仅支持 4/4 节拍网格',
-        ),
-      );
+    for (final d in song.directives) {
+      final value = (d.value ?? '').trim();
+      switch (d.name) {
+        case 'transpose':
+          final semitones = int.tryParse(value);
+          if (semitones != null && semitones != 0) {
+            issues.add(
+              ChartIssue(
+                code: ChartIssueCode.unsupportedDirective,
+                line: d.span.line,
+                column: d.span.column,
+                message: '${_at(d.span)}:{transpose: $semitones} 要求移调，'
+                    '本 App 不支持移调;请把谱面转回原调后再导入',
+              ),
+            );
+          }
+        case 'time':
+          if (value != '4/4') {
+            issues.add(
+              ChartIssue(
+                code: ChartIssueCode.unsupportedDirective,
+                line: d.span.line,
+                column: d.span.column,
+                message: '${_at(d.span)}:拍号 {$value} 不是 4/4，'
+                    '本 App 仅支持 4/4 节拍网格',
+              ),
+            );
+          }
+      }
     }
     return issues;
   }
