@@ -115,11 +115,21 @@ class BeatScheduler {
   }
 
   /// 停止:取消轮询,停掉尚未发声的预定,清空时间轴。
+  ///
+  /// 清理各步独立容错(与 _pass 恢复路径同一纪律):时钟读不出则全量
+  /// 取消——已响 voice 的 stop 是无害空操作;单个 stop 失败不得中断
+  /// 其余、也不得外抛,把失败升级成状态残留(审计 2026-10-16 #3)。
   void stop() {
     final pending = _clearScheduleState();
-    final now = engine.engineTime();
+    Duration? now;
+    try {
+      now = engine.engineTime();
+    } catch (_) {}
     for (final entry in pending) {
-      if (entry.time > now) engine.stop(entry.voice);
+      if (now != null && entry.time <= now) continue;
+      try {
+        engine.stop(entry.voice);
+      } catch (_) {}
     }
   }
 

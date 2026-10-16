@@ -328,6 +328,46 @@ void main() {
       expect(errors, hasLength(1));
     });
   });
+
+  test('stop 清理容错:时钟不可读仍全量取消待发声,不外抛(审计30 #3)', () {
+    fakeAsync((async) {
+      final scheduler = BeatScheduler(
+        engine: engine,
+        pickSound: (beat) => strong,
+      );
+      scheduler.start(periodMs: 500);
+      for (var i = 0; i < 3; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      engine.failClock = true;
+      expect(scheduler.stop, returnsNormally, reason: '时钟读不出不得让停机外抛');
+      expect(scheduler.running, isFalse);
+      final stopped = engine.scheduleLog.where((c) => c.stopped);
+      expect(
+        stopped,
+        isNotEmpty,
+        reason: '读不出时刻 = 全量取消(已响 voice 的 stop 是无害空操作)',
+      );
+    });
+  });
+
+  test('stop 清理容错:单个取消失败不中断其余取消、不外抛(审计30 #3)', () {
+    fakeAsync((async) {
+      final scheduler = BeatScheduler(
+        engine: engine,
+        pickSound: (beat) => strong,
+      );
+      scheduler.start(periodMs: 500);
+      for (var i = 0; i < 3; i++) {
+        engine.advance(const Duration(milliseconds: 40));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      engine.failStop = true;
+      expect(scheduler.stop, returnsNormally, reason: '取消失败不得让停机外抛');
+      expect(scheduler.running, isFalse, reason: '本地状态先行清空,引擎失败不残留');
+    });
+  });
 }
 
 class BrokenPlayEngine extends FakeAudioEngine {

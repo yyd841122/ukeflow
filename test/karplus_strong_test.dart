@@ -118,6 +118,21 @@ void main() {
       });
     }
 
+    /// 高音域:延迟线短,平均滤波的半样本群延迟占比大,不补偿则偏差
+    /// 超界(880Hz 处旧实现实测 890.9Hz = +1.24%,审计 2026-10-16 #5)。
+    const highCases = [
+      (name: '1 弦 12 品 A5', freq: 880.0),
+      (name: 'C6(12 品位)', freq: 1046.5022696278916),
+    ];
+    for (final (:name, :freq) in highCases) {
+      test('$name 实测基频偏差 <1%($freq Hz)', () {
+        final wav = KarplusStrong.pluck(freq: freq, ms: 1500);
+        final measured = measuredPeakHz(wav, freq, 44100);
+        final errPercent = (measured - freq).abs() / freq * 100;
+        expect(errPercent, lessThan(1.0), reason: '实测 $measured Hz');
+      });
+    }
+
     /// 等分 [parts] 段的各段 RMS(0..32767 刻度)。
     List<double> segmentRms(Uint8List wav, int parts) {
       final total = (wav.length - 44) ~/ 2;

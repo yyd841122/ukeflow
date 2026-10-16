@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'audio_engine.dart';
+import 'init_lifecycle.dart';
 
 /// flutter_soloud 真实现(ADR-0005)。
 /// 初始化参数为 spike B 真机验证值:44.1kHz / buffer 1024 / mono / lowLatency。
@@ -12,23 +13,27 @@ class SoloudAudioEngine implements AudioEngine {
   static const _sampleRate = 44100;
   static const _bufferSize = 1024;
 
-  Future<void>? _initializing;
+  /// dispose 与挂起初始化的竞态守卫(审计 2026-10-16 #9):初始化在途
+  /// 时 dispose 也要保证原生资源最终释放,且 dispose 后拒绝复活。
+  final InitLifecycle _lifecycle = InitLifecycle(
+    isLive: () => SoLoud.instance.isInitialized,
+    shutdown: SoLoud.instance.deinit,
+  );
 
   @override
   bool get isInitialized => SoLoud.instance.isInitialized;
 
   @override
   Future<void> ensureInitialized() {
-    if (SoLoud.instance.isInitialized) return Future.value();
     // 并发调用合并:SoLoud 内部会排队重复 init,这里直接复用同一个 Future。
-    return _initializing ??= SoLoud.instance
-        .init(
-          sampleRate: _sampleRate,
-          bufferSize: _bufferSize,
-          channels: Channels.mono,
-          lowLatency: true,
-        )
-        .whenComplete(() => _initializing = null);
+    return _lifecycle.ensureInitialized(
+      () => SoLoud.instance.init(
+        sampleRate: _sampleRate,
+        bufferSize: _bufferSize,
+        channels: Channels.mono,
+        lowLatency: true,
+      ),
+    );
   }
 
   @override
@@ -67,9 +72,7 @@ class SoloudAudioEngine implements AudioEngine {
   }
 
   @override
-  void dispose() {
-    if (SoLoud.instance.isInitialized) SoLoud.instance.deinit();
-  }
+  void dispose() => _lifecycle.dispose();
 }
 
 final class SoloudSound implements EngineSound {

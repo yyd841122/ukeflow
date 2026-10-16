@@ -18,6 +18,49 @@ void main() {
     }
   });
 
+  test('拍周期下限 1ms:低于拒以 ArgumentError,单窗拍数无界防线(审计30 #4)', () {
+    expect(
+      () => BeatSchedule(t0: Duration.zero, nextBeat: 0, periodMs: 0.9),
+      throwsArgumentError,
+    );
+    expect(
+      () => BeatSchedule(t0: Duration.zero, nextBeat: 0, periodMs: 1.0),
+      returnsNormally,
+      reason: '恰在下限可用(60000 BPM,产品域外但缝自洽)',
+    );
+  });
+
+  test('时钟大步前跳:过期拍算术快进,窗内拍从首个未过期拍起不错不漏(审计30 #4)', () {
+    final s = BeatSchedule(t0: Duration.zero, nextBeat: 0, periodMs: 1.0);
+    final (next, due) = s.scheduleDue(
+      now: const Duration(seconds: 100),
+      lookahead: const Duration(milliseconds: 400),
+      maxLate: const Duration(milliseconds: 40),
+    );
+    // 窗 [99960, 100400]ms:拍 99960..100400 共 441 拍,时刻逐拍精确。
+    expect(due, hasLength(441));
+    expect(due.first.$1, 99960);
+    expect(due.first.$2, const Duration(milliseconds: 99960));
+    expect(due.last.$1, 100400);
+    expect(next.nextBeat, 100401);
+  });
+
+  test('快进不越过曲末:totalBeats 全部过期时 nextBeat 停在曲末(审计30 #4)', () {
+    final capped = BeatSchedule(
+      t0: Duration.zero,
+      nextBeat: 0,
+      periodMs: 1.0,
+      totalBeats: 10,
+    );
+    final (next, due) = capped.scheduleDue(
+      now: const Duration(seconds: 100),
+      lookahead: const Duration(milliseconds: 400),
+      maxLate: const Duration(milliseconds: 40),
+    );
+    expect(due, isEmpty);
+    expect(next.nextBeat, 10, reason: '曲末状态不被快进越过');
+  });
+
   test('t0 首次过窗:只有第 0 拍入窗(下一拍 500ms 在窗外)', () {
     final (next, due) = sched120().scheduleDue(now: Duration.zero);
     expect(due, [(0, Duration.zero)]);

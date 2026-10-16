@@ -56,6 +56,17 @@ void main() {
     await expectLater(player.pluck(freq: 440), throwsException);
   });
 
+  test('同步注入失败不留在缓存:同音重试成功(审计30 #6)', () async {
+    final engine = FakeAudioEngine();
+    final player = PluckPlayer(engine: engine);
+
+    engine.failLoadMemSync = true;
+    await expectLater(player.pluck(freq: 440), throwsException);
+    engine.failLoadMemSync = false;
+    await expectLater(player.pluck(freq: 440), completes);
+    expect(player.loadedSound(440), isNotNull, reason: '重试成功后进就绪底册');
+  });
+
   test('after 参数:相对引擎当前时刻延迟预定(工单 05 错峰琶音依赖)', () async {
     final engine = FakeAudioEngine()..now = const Duration(seconds: 2);
     final player = PluckPlayer(engine: engine);

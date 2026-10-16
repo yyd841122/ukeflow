@@ -36,8 +36,15 @@ double effectivePeriodMs({required double bpm, required double speed}) {
 /// 拍时刻定义:t0 + round(beat × periodMs) 毫秒(逐拍直接四舍五入,
 /// 不累加误差——spike B 同语义)。
 class BeatSchedule {
-  /// [periodMs] 必须为有限正值(公共缝校验,release 也生效):非正会使
-  /// [scheduleDue] 死循环/倒走,非有限值让时刻计算抛错。
+  /// 拍周期下限(毫秒,公共缝自守):单窗拍数 = 440ms / periodMs,周期
+  /// 再小一次过窗就要生成数十万拍条目,一轮轮询即耗尽 UI isolate(审计
+  /// 2026-10-16 #4)。1ms = 60000 BPM,产品域(40–208)的 ~288 倍余量,
+  /// 只拦退化输入,不触及任何现实调参。
+  static const minPeriodMs = 1.0;
+
+  /// [periodMs] 必须为有限正值且不低于 [minPeriodMs](公共缝校验,
+  /// release 也生效):非正会使 [scheduleDue] 死循环/倒走,非有限值让
+  /// 时刻计算抛错,过小值让单窗拍数无界。
   BeatSchedule({
     required this.t0,
     required this.nextBeat,
@@ -45,6 +52,9 @@ class BeatSchedule {
     this.totalBeats,
   }) {
     requirePositiveFinite(periodMs, 'periodMs', '拍周期');
+    if (periodMs < minPeriodMs) {
+      throw ArgumentError.value(periodMs, 'periodMs', '拍周期低于下限 $minPeriodMs ms');
+    }
   }
 
   /// 提前量窗口:窗口内的拍现在预定。spike B 真机验证参数。
@@ -78,9 +88,15 @@ class BeatSchedule {
   }) {
     final from = now - maxLate;
     final limit = now + lookahead;
-    final due = <ScheduledBeat>[];
-    var next = nextBeat;
+    // 算术快进:nextBeat 远落后于窗(引擎时钟前跳)时不逐拍迭代到窗沿,
+    // 一步跳到首个窗内拍。beatTime 逐拍四舍五入,起点按连续网格估并
+    // 保守偏早一拍(floor − 1,t0 相对计时):可证估计点拍时刻必在窗沿
+    // 之前(周期 ≥ minPeriodMs),窗内拍一个不漏;快进只省过期拍空转。
+    final fromMs = (from - t0).inMicroseconds / 1000.0;
+    var next = math.max(nextBeat, (fromMs / periodMs).floor() - 1);
+    if (totalBeats != null) next = math.min(next, totalBeats!);
     var time = beatTime(next);
+    final due = <ScheduledBeat>[];
     while ((totalBeats == null || next < totalBeats!) && time <= limit) {
       if (time >= from) due.add((next, time));
       next++;

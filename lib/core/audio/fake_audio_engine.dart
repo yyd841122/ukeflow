@@ -12,6 +12,16 @@ class FakeAudioEngine implements AudioEngine {
   /// 注入运行中预定失败(模拟真机引擎异常)。
   bool failNow = false;
 
+  /// 注入同步 loadMem 失败(异常在 Future 之前同步抛出;测试
+  /// 同步失败路径与缓存回滚时序)。
+  bool failLoadMemSync = false;
+
+  /// 注入 engineTime 失败(模拟引擎时钟不可读)。
+  bool failClock = false;
+
+  /// 注入 stop 失败(模拟取消失败)。
+  bool failStop = false;
+
   final List<String> loadedKeys = [];
   final List<FakeScheduledCall> scheduleLog = [];
 
@@ -37,12 +47,20 @@ class FakeAudioEngine implements AudioEngine {
   }
 
   @override
-  Duration engineTime() => _now;
+  Duration engineTime() {
+    if (failClock) throw Exception('FakeAudioEngine: 模拟引擎时钟不可读');
+    return _now;
+  }
 
   @override
-  Future<EngineSound> loadMem(String key, Uint8List wavBytes) async {
+  Future<EngineSound> loadMem(String key, Uint8List wavBytes) {
+    // 非 async:failLoadMemSync 的异常同步抛给调用方(接口允许同步失败,
+    // 真实现也有同步段,PluckPlayer 缓存回滚必须两头都兜)。
+    if (failLoadMemSync) {
+      throw Exception('FakeAudioEngine: 模拟同步注入失败');
+    }
     loadedKeys.add(key);
-    return FakeSound(key);
+    return Future.value(FakeSound(key));
   }
 
   @override
@@ -55,6 +73,7 @@ class FakeAudioEngine implements AudioEngine {
 
   @override
   void stop(EngineVoice voice) {
+    if (failStop) throw Exception('FakeAudioEngine: 模拟取消失败');
     for (final call in scheduleLog) {
       if (identical(call.voice, voice)) call.stopped = true;
     }

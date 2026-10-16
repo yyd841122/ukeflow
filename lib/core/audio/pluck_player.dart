@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'audio_engine.dart';
 import 'karplus_strong.dart';
 import '../model/strum_pattern.dart' show StrumDirection;
@@ -73,9 +75,25 @@ class PluckPlayer {
       'pluck_${freq}_$ms';
 
   /// 「音高×时长」对应的音源,首次取用时合成并注入(缓存见类注释)。
+  ///
+  /// 注入失败清缓存挂在插入**之后**:异步函数同步段抛错(合成/引擎
+  /// 同步失败)时,catch 先于本方法插入执行,内部的 remove 会落空——
+  /// 错误 Future 一旦留在缓存,同音重试永远拿到同一失败(审计
+  /// 2026-10-16 #6)。identical 守卫:若同音已被新一次取用重新插入,
+  /// 旧失败的回滚不得误删。
   Future<EngineSound> _soundFor(double freq, [int ms = downStrumMs]) {
     final key = _keyFor(freq, ms);
-    return _sounds[key] ??= _load(key, freq, ms);
+    final existing = _sounds[key];
+    if (existing != null) return existing;
+    final future = _load(key, freq, ms);
+    _sounds[key] = future;
+    unawaited(future.then(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_sounds[key], future)) _sounds.remove(key);
+      },
+    ));
+    return future;
   }
 
   /// 预注入一批拨弦音源(工单 10 参考音=示范扫弦:跟练起跑前把全曲
@@ -108,15 +126,10 @@ class PluckPlayer {
       loadedSound(freq, strumMs(direction));
 
   Future<EngineSound> _load(String key, double freq, int ms) async {
-    try {
-      final sound = await engine.loadMem(
-        key,
-        KarplusStrong.pluck(freq: freq, ms: ms),
-      );
-      return _ready[key] = sound;
-    } on Object {
-      _sounds.remove(key); // 注入失败不缓存,下次拨同音可重试
-      rethrow;
-    }
+    final sound = await engine.loadMem(
+      key,
+      KarplusStrong.pluck(freq: freq, ms: ms),
+    );
+    return _ready[key] = sound;
   }
 }
