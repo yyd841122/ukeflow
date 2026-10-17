@@ -48,7 +48,8 @@ class CifraPayload {
 
 /// 桥返回值解码公共前导:字符串先解 JSON,Android 桥对字符串返回值再包
 /// 一层 JSON 引号就再剥一层;非 Map 形状返回 null(调用方各自处置)。
-Map? _decodeBridgeValue(Object? input) {
+/// 工单 27 的搜索结果解码走同一前导。
+Map? decodeBridgeValue(Object? input) {
   Object? value = input;
   if (value is String) {
     try {
@@ -72,7 +73,7 @@ Map? _decodeBridgeValue(Object? input) {
 /// [input] 接受已解码的 Map,或 JSON 字符串(Android 桥可能给返回值
 /// 再包一层 JSON 引号,剥两层都试)。
 CifraPayload? decodeCifraPayload(Object? input) {
-  final value = _decodeBridgeValue(input);
+  final value = decodeBridgeValue(input);
   if (value == null) return null;
   final rawLines = value['lines'];
   if (rawLines is! List) return null;
@@ -105,7 +106,7 @@ CifraPayload? decodeCifraPayload(Object? input) {
 /// 提取失败码:JS 侧返回 `{error: <code>}`(页面结构变化/拦截/没和弦)
 /// 时给出代码字符串,供上层映射可读文案;不是失败形状则 null。
 String? cifraExtractError(Object? input) {
-  final value = _decodeBridgeValue(input);
+  final value = decodeBridgeValue(input);
   if (value == null) return null;
   final error = value['error'];
   return error is String ? error : null;

@@ -8,7 +8,7 @@ import '../play/practice_page.dart';
 import '../play/tab_chart_page.dart';
 import '../rhythm/metronome_page.dart';
 import '../rhythm/rhythm_trainer_page.dart';
-import 'cifraclub_page.dart';
+import 'cifraclub_search_page.dart';
 import 'text_import_page.dart';
 
 /// 曲库页(工单 15):练琴入口的唯一家——顶部练琴工具行(节拍器/节奏型
@@ -121,8 +121,9 @@ Widget _sectionHeader(BuildContext context, String text) {
   return Text(text, style: Theme.of(context).textTheme.titleMedium);
 }
 
-/// 弹唱谱区头:区名 + 文本导入入口(工单 16)+ 搜索源入口(工单 17)。
-/// 入口不依赖曲库数据,加载/错误态也在——导入只需和弦库,不被列表问题挡路。
+/// 弹唱谱区头:区名 + 文本导入入口(工单 16)+ 搜索源入口(工单 27
+/// 原生搜索页;原站浏览兜底在搜索页右上角)。入口不依赖曲库数据,加载/
+/// 错误态也在——导入只需和弦库,不被列表问题挡路。
 Widget _strumSectionHeader(BuildContext context) {
   return Row(
     children: [
@@ -132,7 +133,7 @@ Widget _strumSectionHeader(BuildContext context) {
         onPressed:
             () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const CifraClubPage(),
+                builder: (_) => const CifraClubSearchPage(),
               ),
             ),
         icon: const Icon(Icons.travel_explore),

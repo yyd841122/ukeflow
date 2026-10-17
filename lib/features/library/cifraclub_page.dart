@@ -1,20 +1,20 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../core/chart/cifra_extract.dart';
 import '../../data/chord_library.dart';
-import 'cifraclub_extract_js.dart';
+import 'cifraclub_driver.dart';
+import 'cifraclub_failure_banner.dart';
+import 'cifraclub_import.dart';
 import 'cifraclub_urls.dart';
 import 'text_import_page.dart';
 
 /// Cifra Club 搜索源页(工单 17,GLOSSARY「搜索源」):WebView 站内搜索
 /// → 浏览到曲谱页 → 从 DOM 提取内嵌和弦数据 → 转文本谱 → 走 16 的
-/// 校验入库管线。
+/// 校验入库管线。导入编排(ukulele 优先/令牌/就绪重试)在
+/// cifraclub_import.dart(工单 27 提出,搜索页共用)。
 ///
 /// 一切提取只在 WebView 里发生(ADR-0002/调研:站点 Akamai 反爬,禁止
 /// 服务端直连)。导入钮只在曲谱页形状的 URL 上出现;提取失败(结构变化/
@@ -28,18 +28,12 @@ class CifraClubPage extends ConsumerStatefulWidget {
 
 class _CifraClubPageState extends ConsumerState<CifraClubPage> {
   late final WebViewController _controller;
+  late final CifraClubImporter _importer;
 
   Uri? _currentUrl;
 
   /// 提取失败的可读原因(null = 没失败)。换页即清。
   String? _failure;
-
-  /// 页面加载完成的一次性等待点(_navigateAndExtract 用)。
-  Completer<void>? _pageWaiter;
-
-  /// 导航请求令牌:每次导航递增,等待返回后核对——被打断/被取代的导航
-  /// 不得把提取结果安到新请求上(审计 2026-10-16 #29)。
-  int _navToken = 0;
 
   /// 站点页面加载进度(0-100,中文状态条的数据源)。
   var _progress = 100;
@@ -77,14 +71,11 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
                   _progress = value;
                 });
               },
-          onPageFinished: (_) {
-            final waiter = _pageWaiter;
-            _pageWaiter = null;
-            waiter?.complete();
-          },
+          onPageFinished: (_) => _importer.notePageFinished(),
         ),
       )
       ..loadRequest(CifraClubUrls.home);
+    _importer = CifraClubImporter(WebViewDriver(_controller));
   }
 
   bool get _onSongPage {
@@ -101,10 +92,8 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
     await _controller.loadRequest(link ?? CifraClubUrls.search(q));
   }
 
-  /// 导入此谱(**ukulele 优先**,用户反馈:版本管理不该甩给用户):
-  /// 当前是两段标准曲谱页时先载 `/ukulele/` 变体提取;没有该版
-  /// (站点 404 壳/无和弦)自动回退原版,并在导入页中文告知「已按
-  /// 原版导入」。提取→转文本谱→进 16 的校验入库管线(预填直达报告)。
+  /// 导入此谱:编排走 [CifraClubImporter](ukulele 优先+回退告知,
+  /// 同一校验层 ADR-0006——预填进文本导入页,过了校验才谈入库)。
   Future<void> _import() async {
     if (_importing) return;
     setState(() {
@@ -112,126 +101,28 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
       _failure = null;
     });
     try {
-      final current = _currentUrl;
-      final uke = current == null ? null : CifraClubUrls.ukuleleVariant(current);
-      String? notice;
-      var raw = uke == null
-          ? await _controller.runJavaScriptReturningResult(cifraExtractScript)
-          : null;
-      if (uke != null) {
-        final ukeRaw = await _navigateAndExtract(uke);
-        if (_readableFailure(ukeRaw) == null &&
-            decodeCifraPayload(ukeRaw) != null) {
-          raw = ukeRaw;
-        } else {
-          // 没有 ukulele 版(404 壳/页面无谱):回退原版,告知用户。
-          notice = '站点没有这首的 Ukulele 转谱,已按原版导入。'
-              '和弦名通用,尤克里里照常可练;原谱中的六线谱段已过滤。';
-          raw = await _navigateAndExtract(current!);
-        }
-      }
-
-      final failureText = _readableFailure(raw);
-      if (failureText != null) {
-        setState(() => _failure = failureText);
-        return;
-      }
-      final payload = decodeCifraPayload(raw);
-      if (payload == null) {
-        setState(() => _failure = _failureCopy('no-content'));
-        return;
-      }
-      final library = await ref.read(chordLibraryProvider.future);
-      if (!mounted) return;
-      final source = buildChordPro(payload, allowedChords: library.labels);
-      // 同一校验层(ADR-0006):预填进文本导入页,过了校验才谈入库。
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              TextImportPage(initialSource: source, notice: notice),
-        ),
+      final outcome = await _importer.importSong(
+        _currentUrl!, // 导入钮只在 _onSongPage(非 null)时出现
+        allowedChords: (await ref.read(chordLibraryProvider.future)).labels,
       );
-    } catch (error) {
-      if (mounted) {
-        setState(
-          () => _failure = '提取失败,请重试;若反复出现请回曲库用文本导入。'
-              '(技术细节:$error)',
-        );
+      if (!mounted) return;
+      switch (outcome) {
+        case CifraImportOk(:final source, :final notice):
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  TextImportPage(initialSource: source, notice: notice),
+            ),
+          );
+        case CifraImportFail(:final message):
+          setState(() => _failure = message);
       }
+    } catch (error) {
+      // importSong 不抛,但和弦库加载会(17 原页面级 catch 的下家)。
+      if (mounted) setState(() => _failure = importCatchCopy(error));
     } finally {
       if (mounted) setState(() => _importing = false);
     }
-  }
-
-  /// 载入 [url] 等页面完成(15s 兜底),然后就绪重试提取。
-  ///
-  /// 导航关联纪律(审计 2026-10-16 #29):令牌核对——超时/被新导航取代
-  /// 时不再提取(旧实现超时当成功,会在随便哪一页上提取,可能导错歌);
-  /// 落点 URL 与请求不符(重定向去了别页)按失败返回,绝不拿旧页内容
-  /// 当目标谱。
-  Future<Object?> _navigateAndExtract(Uri url) async {
-    final token = ++_navToken;
-    final waiter = Completer<void>();
-    _pageWaiter = waiter;
-    await _controller.loadRequest(url);
-    await waiter.future.timeout(
-      const Duration(seconds: 15),
-      onTimeout: () {},
-    );
-    if (token != _navToken) return const {'error': 'superseded'};
-    final landed = Uri.tryParse(await _controller.currentUrl() ?? '');
-    if (landed == null || !_sameSongDocument(landed, url)) {
-      return const {'error': 'wrong-page'};
-    }
-    return _extractWhenReady();
-  }
-
-  /// 同一曲谱文档判定:忽略 query/fragment 与结尾斜杠(站点会挂跟踪
-  /// 参数),路径段须一致——重定向到别的歌不算到达。
-  bool _sameSongDocument(Uri a, Uri b) {
-    String normalize(Uri u) {
-      final segs = u.pathSegments.where((s) => s.isNotEmpty).toList();
-      return segs.join('/');
-    }
-
-    return normalize(a) == normalize(b);
-  }
-
-  /// 就绪重试:onPageFinished 可能早于 DOM 可用(真机实证——导航后
-  /// 0.5s 即触发,提取落空拿到错误 JSON)。pre 是服务端渲染,页面就位
-  /// 即可取,提取失败按 1.5s 间隔重取,总窗约 10s。
-  Future<Object?> _extractWhenReady() async {
-    Object? raw;
-    for (var attempt = 0; attempt < 6; attempt++) {
-      raw = await _controller.runJavaScriptReturningResult(
-        cifraExtractScript,
-      );
-      final ready =
-          _readableFailure(raw) == null && decodeCifraPayload(raw) != null;
-      if (ready) return raw;
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
-    }
-    return raw;
-  }
-
-  /// JS 返回值里的失败码 → 可读文案;不是失败形状则 null。
-  String? _readableFailure(Object? raw) {
-    final code = cifraExtractError(raw);
-    if (code == null) return null;
-    return _failureCopy(code);
-  }
-
-  String _failureCopy(String code) {
-    if (code.startsWith('exception:')) return '页内脚本出错($code),请重试';
-    return switch (code) {
-      'no-content' => '没认出谱面内容——页面可能没加载完,或站点改版了。'
-          '稍等重试,或回曲库用文本导入。',
-      'no-chords' => '这个页面没提取到和弦——可能不是曲谱页。'
-          '也可以回曲库用文本导入。',
-      'wrong-page' => '页面没停在目标曲谱页(可能被站点重定向),请重试。',
-      'superseded' => '这次提取被新的操作取代了。',
-      _ => '提取失败($code),请重试或用文本导入。',
-    };
   }
 
   @override
@@ -250,7 +141,7 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
           ),
           _StatusLine(progress: _progress, onSongPage: _onSongPage),
           Expanded(child: WebViewWidget(controller: _controller)),
-          if (_failure != null) _FailureBanner(message: _failure!),
+          if (_failure != null) FailureBanner(message: _failure!),
           if (_onSongPage || _importing)
             SafeArea(
               child: Padding(
@@ -269,36 +160,6 @@ class _CifraClubPageState extends ConsumerState<CifraClubPage> {
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 提取失败的可见横幅:原文直接展示,指路文本导入(与曲库错误同一哲学)。
-class _FailureBanner extends StatelessWidget {
-  const _FailureBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      color: scheme.errorContainer,
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.error_outline, color: scheme.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(color: scheme.onErrorContainer),
-            ),
-          ),
         ],
       ),
     );
