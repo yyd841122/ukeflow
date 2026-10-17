@@ -5,6 +5,7 @@ import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/play_timeline.dart';
 import '../../core/practice/practice_state.dart';
+import '../../core/ui/arrow_strip.dart';
 import '../../data/chord_library.dart' show Chord;
 import '../chords/chord_diagram.dart';
 
@@ -60,7 +61,11 @@ class PracticeView extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _ArrowStrip(pattern: pattern, currentSlot: _currentSlot),
+          child: ArrowStrip(
+            pattern: pattern,
+            currentSlot: _currentSlot,
+            slotKeyPrefix: 'play-slot',
+          ),
         ),
         const SizedBox(height: 4),
         Text(
@@ -393,67 +398,3 @@ class _NextChordCard extends StatelessWidget {
   }
 }
 
-/// 一小节 8 槽一行均分(视觉语言与节奏型训练页一致):扫弦槽画 ↓/↑,
-/// 空拍槽画圆点;当前动作主色点亮,本小节已扫淡出,未到描边待命。
-class _ArrowStrip extends StatelessWidget {
-  const _ArrowStrip({required this.pattern, required this.currentSlot});
-
-  final StrumPattern pattern;
-  final int? currentSlot;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        for (var slot = 0; slot < eighthsPerBar; slot++) ...[
-          if (slot > 0) const SizedBox(width: 6),
-          Expanded(child: _slotCell(slot, scheme)),
-        ],
-      ],
-    );
-  }
-
-  Widget _slotCell(int slot, ColorScheme scheme) {
-    final current = currentSlot;
-    final isCurrent = current == slot;
-    final isPlayed = current != null && slot < current;
-    final stroke = pattern.slots[slot];
-    final Color fill;
-    final Color content;
-    final Border? border;
-    if (isCurrent) {
-      fill = scheme.primary;
-      content = scheme.onPrimary;
-      border = null;
-    } else if (isPlayed) {
-      fill = scheme.surfaceContainerHighest;
-      content = scheme.onSurfaceVariant;
-      border = null;
-    } else {
-      fill = Colors.transparent;
-      content = scheme.onSurface;
-      border = Border.all(color: scheme.outlineVariant);
-    }
-    return Container(
-      key: Key('play-slot-$slot'),
-      height: 52,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(10),
-        border: border,
-      ),
-      child: Center(
-        child: stroke == null
-            ? Text('·', style: TextStyle(color: content, height: 1))
-            : Icon(
-                stroke == StrumDirection.down
-                    ? Icons.arrow_downward
-                    : Icons.arrow_upward,
-                color: content,
-                size: 26,
-              ),
-      ),
-    );
-  }
-}

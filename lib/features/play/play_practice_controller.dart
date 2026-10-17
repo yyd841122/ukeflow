@@ -4,7 +4,7 @@ import '../../core/audio/audio_engine.dart';
 import '../../core/audio/beat_scheduling.dart';
 import '../../core/audio/beat_scheduler.dart';
 import '../../core/audio/providers.dart';
-import '../../core/audio/tick_synth.dart';
+import '../../core/audio/tick_sounds.dart';
 import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
@@ -130,7 +130,6 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   BeatScheduler? _scheduler;
   StrumScheduler? _strumScheduler;
   PlayTimeline? _timeline;
-  Future<void>? _warming;
 
   /// 会话锚点与参数:调度 t0（预备第 0 拍）、拍周期、当前谱与和弦表。
   /// 控制器持有（暂停后调度器已停,锚点仍须可查询）,调度器是 t0 的
@@ -186,8 +185,8 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   }
 
   /// 引擎预热 + 注入强弱拍/预备拍音源(+已定和弦表的扫弦音源);失败进
-  /// error 状态,页面上可见。并发调用共享同一次在途初始化(快速重进页
-  /// 不重复注入音源)。
+  /// error 状态,页面上可见。并发调用共享同一次在途初始化(SingleFlight,
+  /// 快速重进页不重复注入音源)。
   Future<void> warmup() async {
     if (state.engineReady) {
       // 运行时错误后的重试(页上重试钮同一入口):引擎仍就绪,清陈错即
@@ -196,21 +195,26 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
       if (state.error != null) state = state.copyWith(error: null);
       return;
     }
-    return _warming ??= _doWarmup().whenComplete(() => _warming = null);
+    return _warmups.run(_doWarmup);
   }
+
+  final SingleFlight _warmups = SingleFlight();
 
   Future<void> _doWarmup() async {
     try {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
       if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
-      final strong = await engine.loadMem('tick_strong', TickSynth.strong());
-      final weak = await engine.loadMem('tick_weak', TickSynth.weak());
-      final count = await engine.loadMem('tick_count', TickSynth.count());
+      final ticks = await TickSounds.load(
+        engine,
+        strong: true,
+        weak: true,
+        count: true,
+      );
       if (!ref.mounted) return;
-      _strong = strong;
-      _weak = weak;
-      _count = count;
+      _strong = ticks.strong;
+      _weak = ticks.weak;
+      _count = ticks.count;
       // 扫弦音源注入失败只降级(参考音=扫弦时无声),不进 error 状态。
       await _ensureStrumSounds();
       if (!ref.mounted) return;

@@ -4,7 +4,7 @@ import '../../core/audio/audio_engine.dart';
 import '../../core/audio/beat_scheduling.dart';
 import '../../core/audio/beat_scheduler.dart';
 import '../../core/audio/providers.dart';
-import '../../core/audio/tick_synth.dart';
+import '../../core/audio/tick_sounds.dart';
 import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_pattern.dart';
 
@@ -92,6 +92,8 @@ class RhythmTrainerController extends Notifier<RhythmTrainerState> {
   /// 引擎预热 + 注入强弱拍音源;失败进 error 状态,页面上可见。
   /// 每次异步返回后查 [ref.mounted](审计 2026-10-16 #48,同节拍器 #43);
   /// 成功时清旧错误——瞬态失败后重开不残留失败文案(#49,同 #44)。
+  /// 并发调用共享同一次在途初始化(SingleFlight,工单 19 收拢:原缺合并,
+  /// 快速重进页会重复注入)。
   Future<void> warmup() async {
     if (state.engineReady) {
       // 运行时错误后的重试(引擎仍就绪):清陈错即恢复可用,真正重跑
@@ -99,15 +101,20 @@ class RhythmTrainerController extends Notifier<RhythmTrainerState> {
       if (state.error != null) state = state.copyWith(error: null);
       return;
     }
+    return _warmups.run(_doWarmup);
+  }
+
+  final SingleFlight _warmups = SingleFlight();
+
+  Future<void> _doWarmup() async {
     try {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
       if (!ref.mounted) return;
-      final strong = await engine.loadMem('tick_strong', TickSynth.strong());
-      final weak = await engine.loadMem('tick_weak', TickSynth.weak());
+      final ticks = await TickSounds.load(engine, strong: true, weak: true);
       if (!ref.mounted) return;
-      _strong = strong;
-      _weak = weak;
+      _strong = ticks.strong;
+      _weak = ticks.weak;
       // error: null——上次初始化失败的文案不残留到成功之后。
       state = state.copyWith(engineReady: true, error: null);
     } catch (error) {

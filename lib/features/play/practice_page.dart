@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,18 +5,21 @@ import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/practice_state.dart';
+import '../../core/ui/bpm_control.dart';
+import '../../core/ui/engine_status_line.dart';
+import '../../core/ui/speed_control.dart';
 import '../../data/chord_library.dart';
 import '../demo/demo_playback_controller.dart';
 import 'chart_meta.dart';
 import 'play_practice_controller.dart';
+import 'practice_session_shell.dart';
 import 'practice_view.dart';
 
 /// 跟练会话页(GLOSSARY「跟练」):一首内置弹唱谱的完整练习现场。
 ///
 /// 空闲面板定参数(BPM/变速/节奏型/参考音)后开始;运行时页面只是练习
-/// 状态的轮询壳(ADR-0005):16ms 定时器只当重绘触发器,一切时刻经
-/// [practiceStateAt]/[prepStateAt] 按 [PlayPracticeController.visualNow]
-/// 读出,页内无第二时间源。预备数拍期显示倒计面板;曲末自动回闲。
+/// 状态的轮询壳(轮询壳/预备过渡/弹回即停纪律在 [PracticeSessionState],
+/// 与指弹会话页共用)。预备数拍期显示倒计面板;曲末自动回闲。
 class PracticePage extends ConsumerStatefulWidget {
   const PracticePage({super.key, required this.chart});
 
@@ -28,16 +29,9 @@ class PracticePage extends ConsumerStatefulWidget {
   ConsumerState<PracticePage> createState() => _PracticePageState();
 }
 
-class _PracticePageState extends ConsumerState<PracticePage> {
-  static const _pollInterval = Duration(milliseconds: 16);
-
-  Timer? _poll;
-
+class _PracticePageState extends PracticeSessionState<PracticePage> {
   /// 最近一次轮询算出的练习状态(运行中视图的全部数据源);空闲 null。
   PracticeState? _visual;
-
-  /// 预备数拍期剩余倒计(4..1);非 null = 倒计面板。正曲期 null。
-  int? _prepCount;
 
   // dispose 里不能用 ref(Riverpod 3):notifier 在 initState 缓存成字段。
   late final PlayPracticeController _controller;
@@ -61,20 +55,10 @@ class _PracticePageState extends ConsumerState<PracticePage> {
   Map<String, Chord> _chords() => _chordMap(ref.read(chordLibraryProvider).value);
 
   @override
-  void dispose() {
-    _poll?.cancel();
-    // 弹回即停。Riverpod 3 禁止 widget unmount 期间改 provider 状态
-    // (直接 stop 会抛"tried to modify a provider"),推迟一个微任务:
-    // 引擎调度与节拍声/试听声在下一宏任务前即全停,无任何残留。
-    // 节奏型训练页同此纪律(工单 06 顺修)。
-    scheduleMicrotask(() {
-      _controller.stop();
-      _demo.stop();
-    });
-    super.dispose();
-  }
+  void resetVisual() => _visual = null;
 
-  void _onPoll() {
+  @override
+  void onPoll() {
     final timeline = _controller.timeline;
     final anchor = _controller.visualAnchor;
     final now = _controller.visualNow();
@@ -82,12 +66,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 
     // 预备数拍期:倒计面板(预备拍与正曲同一节拍网格,查询同源;
     // 锚在调度 t0,经控制器查询——曲头反推会有取整误差,见 prepStateAt)。
-    final prep = _controller.prepStateNow();
-    if (prep != null) {
-      if (prep.count != _prepCount) setState(() => _prepCount = prep.count);
-      return;
-    }
-    if (_prepCount != null) setState(() => _prepCount = null); // 预备毕,切正曲
+    if (advancePrep(_controller.prepStateNow()?.count)) return;
 
     final practice = practiceStateAt(
       timeline: timeline,
@@ -98,7 +77,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
       _controller.stop(); // 曲末(节拍网格走出最后一拍):回闲,轮询随之自停。
       return;
     }
-    // 拍/动作/行/段落任一推进才重绘(与节奏型训练页同一薄渲染纪律)。
+    // 拍/动作/行/段落任一推进才重绘(薄渲染纪律)。
     if (practice.beat != _visual?.beat ||
         practice.currentStrum != _visual?.currentStrum ||
         practice.currentLine != _visual?.currentLine ||
@@ -107,19 +86,10 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     }
   }
 
-  void _startPoll() {
-    _poll?.cancel();
-    setState(() {
-      _visual = null;
-      _prepCount = null;
-    });
-    _poll = Timer.periodic(_pollInterval, (_) => _onPoll());
-    _onPoll(); // 首查同步完成(与 BeatScheduler 先过窗同理):进入即有画面。
-  }
-
-  void _stopPoll() {
-    _poll?.cancel();
-    _poll = null;
+  @override
+  void dispose() {
+    stopSessionOnUnmount([_controller.stop, _demo.stop]);
+    super.dispose();
   }
 
   @override
@@ -129,7 +99,7 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     // 运行状态翻转时启停轮询(ref.listen 须在 build 内注册)。
     ref.listen(playPracticeProvider, (previous, next) {
       if (previous?.running != next.running) {
-        next.running ? _startPoll() : _stopPoll();
+        next.running ? startPolling() : stopPolling();
       }
     });
     // 和弦库异步就绪后推给控制器(预备扫弦音源;进页时多半还没就绪)。
@@ -163,14 +133,25 @@ class _PracticePageState extends ConsumerState<PracticePage> {
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           const SizedBox(height: 12),
-          _engineStatus(state),
+          EngineStatusLine(
+            ready: state.engineReady,
+            error: state.error,
+            onRetry: () => _controller.warmup(),
+          ),
           const SizedBox(height: 32),
           Text('速度', style: _sectionLabelStyle),
-          _bpmControl(state),
+          BpmControl(
+            bpm: state.bpm,
+            min: PlayPracticeController.minBpm,
+            max: PlayPracticeController.maxBpm,
+            onChanged: _controller.setBpm,
+          ),
           const SizedBox(height: 16),
           Text('变速', style: _sectionLabelStyle),
-          _SpeedControl(
+          SpeedControl(
             speed: state.speed,
+            min: PlayPracticeController.minSpeed,
+            max: PlayPracticeController.maxSpeed,
             onChanged: _controller.setSpeed,
           ),
           const SizedBox(height: 16),
@@ -236,78 +217,6 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 
   TextStyle get _sectionLabelStyle => Theme.of(context).textTheme.labelLarge!;
 
-  Widget _engineStatus(PlayPracticeState state) {
-    if (state.error != null) {
-      return Column(
-        children: [
-          Text(
-            state.error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          // 初始化失败可原地重试,不必重进页面(warmup 自带在途合并)。
-          TextButton.icon(
-            key: const Key('warmup-retry'),
-            onPressed: () => _controller.warmup(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('重试'),
-          ),
-        ],
-      );
-    }
-    return Text(
-      state.engineReady ? '引擎就绪' : '引擎初始化中…',
-      style: TextStyle(color: Theme.of(context).colorScheme.outline),
-      textAlign: TextAlign.center,
-    );
-  }
-
-  Widget _bpmControl(PlayPracticeState state) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              key: const Key('bpm-minus'),
-              onPressed: () => _controller.setBpm(state.bpm - 1),
-              icon: const Icon(Icons.remove),
-            ),
-            SizedBox(
-              width: 96,
-              child: Text(
-                '${state.bpm}',
-                key: const Key('bpm-value'),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-            IconButton(
-              key: const Key('bpm-plus'),
-              onPressed: () => _controller.setBpm(state.bpm + 1),
-              icon: const Icon(Icons.add),
-            ),
-            Text(
-              'BPM',
-              style: TextStyle(color: Theme.of(context).colorScheme.outline),
-            ),
-          ],
-        ),
-        Slider(
-          key: const Key('bpm-slider'),
-          value: state.bpm.toDouble(),
-          min: PlayPracticeController.minBpm.toDouble(),
-          max: PlayPracticeController.maxBpm.toDouble(),
-          divisions:
-              PlayPracticeController.maxBpm - PlayPracticeController.minBpm,
-          label: '${state.bpm}',
-          onChanged: (v) => _controller.setBpm(v.round()),
-        ),
-      ],
-    );
-  }
-
   Widget _patternPicker(PlayPracticeState state) {
     return Wrap(
       spacing: 8,
@@ -334,8 +243,8 @@ class _PracticePageState extends ConsumerState<PracticePage> {
     return Column(
       children: [
         Expanded(
-          child: _prepCount != null
-              ? _prepPanel(_prepCount!)
+          child: prepCount != null
+              ? _prepPanel(prepCount!)
               : _songBody(libraryAsync, state.pattern),
         ),
         _controls(state),
@@ -422,7 +331,12 @@ class _PracticePageState extends ConsumerState<PracticePage> {
             ],
           ),
           const SizedBox(height: 4),
-          _SpeedControl(speed: state.speed, onChanged: _controller.setSpeed),
+          SpeedControl(
+            speed: state.speed,
+            min: PlayPracticeController.minSpeed,
+            max: PlayPracticeController.maxSpeed,
+            onChanged: _controller.setSpeed,
+          ),
           _ReferenceToggle(
             reference: state.reference,
             onChanged: _controller.setReference,
@@ -437,43 +351,6 @@ class _PracticePageState extends ConsumerState<PracticePage> {
 Map<String, Chord> _chordMap(ChordLibrary? library) => library == null
     ? const {}
     : {for (final chord in library.chords) chord.label: chord};
-
-/// 变速控制(空闲与运行共用):原速的 50%–100%,5% 一档。
-class _SpeedControl extends StatelessWidget {
-  const _SpeedControl({required this.speed, required this.onChanged});
-
-  final double speed;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = (speed * 100).round();
-    return Row(
-      children: [
-        SizedBox(
-          width: 52,
-          child: Text(
-            '$percent%',
-            key: const Key('speed-value'),
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-        Expanded(
-          child: Slider(
-            key: const Key('speed-slider'),
-            value: speed,
-            min: PlayPracticeController.minSpeed,
-            max: PlayPracticeController.maxSpeed,
-            divisions: 10,
-            label: '$percent%',
-            onChanged: onChanged,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 /// 参考音切换(空闲与运行共用):节拍声 / 示范扫弦声。
 class _ReferenceToggle extends StatelessWidget {

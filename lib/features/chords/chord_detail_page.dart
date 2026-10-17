@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/providers.dart';
+import '../../core/ui/equal_row.dart';
 import '../../data/chord_library.dart';
 import 'chord_diagram.dart';
 import 'chord_tips.dart';
@@ -62,25 +63,21 @@ class _ChordDetailPageState extends ConsumerState<ChordDetailPage> {
           ),
           if (chord.fingerings.length > 1) ...[
             const SizedBox(height: 12),
-            // 一行宽度均分(按法全库上限 4 个):同工单 04 四弦钮的做法。
-            // 水平内边距收小:M3 默认值会把四等分内宽挤到「按法 4」折行;
-            // 选中态去掉 ✓(琥珀填充已足够醒目),✓ 会把「按法 1」挤到折行被裁。
+            // 一行宽度均分(按法全库上限 4 个)走共享等分行组件(工单 19
+            // 提取,与调音器四弦钮同壳)。选中态去掉 ✓(琥珀填充已足够
+            // 醒目),✓ 会把「按法 1」挤到折行被裁。
             ChipTheme(
               data: ChipTheme.of(context).copyWith(showCheckmark: false),
-              child: Row(
+              child: EqualRow(
+                horizontalPadding: 3,
                 children: [
                   for (var i = 0; i < chord.fingerings.length; i++)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: ChoiceChip(
-                          label: Text('按法 ${i + 1}'),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          selected: i == _index,
-                          onSelected: (_) => setState(() => _index = i),
-                        ),
-                      ),
+                    ChoiceChip(
+                      label: Text('按法 ${i + 1}'),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      selected: i == _index,
+                      onSelected: (_) => setState(() => _index = i),
                     ),
                 ],
               ),

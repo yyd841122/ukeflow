@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/providers.dart';
 import '../../core/model/builtin_strum_patterns.dart';
-import '../../core/model/strum_pattern.dart';
 import '../../core/practice/rhythm_state.dart';
+import '../../core/ui/arrow_strip.dart';
+import '../../core/ui/bpm_control.dart';
+import '../../core/ui/engine_status_line.dart';
 import 'rhythm_trainer_controller.dart';
 
 /// 节奏型训练页:选节奏型 + BPM 慢练,↓↑ 箭头随节拍逐槽高亮,节拍声可开关。
@@ -88,7 +90,6 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
         next.running ? _startPoll() : _stopPoll();
       }
     });
-    final colorScheme = Theme.of(context).colorScheme;
     final currentSlot = state.running ? _visual?.slotInBar : null;
 
     return Scaffold(
@@ -101,11 +102,14 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _engineStatus(state, colorScheme),
+                EngineStatusLine(
+                  ready: state.engineReady,
+                  error: state.error,
+                ),
                 const SizedBox(height: 24),
                 _patternPicker(state),
                 const SizedBox(height: 24),
-                _arrowStrip(state, currentSlot, colorScheme),
+                ArrowStrip(pattern: state.pattern, currentSlot: currentSlot),
                 const SizedBox(height: 16),
                 Text(
                   state.running && _visual != null
@@ -116,7 +120,14 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
                   style: Theme.of(context).textTheme.displayLarge,
                 ),
                 const SizedBox(height: 24),
-                _bpmControl(state, colorScheme),
+                BpmControl(
+                  bpm: state.bpm,
+                  min: RhythmTrainerController.minBpm,
+                  max: RhythmTrainerController.maxBpm,
+                  onChanged: (v) =>
+                      ref.read(rhythmTrainerProvider.notifier).setBpm(v),
+                  enabled: state.engineReady,
+                ),
                 const SizedBox(height: 12),
                 _clickSwitch(state),
                 const SizedBox(height: 24),
@@ -137,21 +148,6 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
     );
   }
 
-  Widget _engineStatus(RhythmTrainerState state, ColorScheme colorScheme) {
-    if (state.error != null) {
-      return Text(
-        state.error!,
-        style: TextStyle(color: colorScheme.error),
-        textAlign: TextAlign.center,
-      );
-    }
-    return Text(
-      state.engineReady ? '引擎就绪' : '引擎初始化中…',
-      style: TextStyle(color: colorScheme.outline),
-      textAlign: TextAlign.center,
-    );
-  }
-
   Widget _patternPicker(RhythmTrainerState state) {
     return Wrap(
       spacing: 8,
@@ -166,115 +162,6 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
             // 运行中换型即时生效:纯函数下一帧即按新节奏型查表。
             onSelected: (_) => _controller.setPattern(pattern),
           ),
-      ],
-    );
-  }
-
-  /// 一小节 8 槽一行均分:扫弦槽画 ↓/↑,空拍槽画小圆点;
-  /// 当前槽主色填充(当前动作突出),本小节已扫槽淡出,未到槽描边待命。
-  Widget _arrowStrip(
-    RhythmTrainerState state,
-    int? currentSlot,
-    ColorScheme colorScheme,
-  ) {
-    return Row(
-      children: [
-        for (var slot = 0; slot < eighthsPerBar; slot++) ...[
-          if (slot > 0) const SizedBox(width: 6),
-          Expanded(child: _slotCell(state, slot, currentSlot, colorScheme)),
-        ],
-      ],
-    );
-  }
-
-  Widget _slotCell(
-    RhythmTrainerState state,
-    int slot,
-    int? currentSlot,
-    ColorScheme colorScheme,
-  ) {
-    final isCurrent = currentSlot == slot;
-    final isPlayed = currentSlot != null && slot < currentSlot;
-    final stroke = state.pattern.slots[slot];
-    final Color fill;
-    final Color content;
-    final Border? border;
-    if (isCurrent) {
-      fill = colorScheme.primary;
-      content = colorScheme.onPrimary;
-      border = null;
-    } else if (isPlayed) {
-      fill = colorScheme.surfaceContainerHighest;
-      content = colorScheme.onSurfaceVariant;
-      border = null;
-    } else {
-      fill = Colors.transparent;
-      content = colorScheme.onSurface;
-      border = Border.all(color: colorScheme.outlineVariant);
-    }
-    return Container(
-      key: Key('arrow-slot-$slot'),
-      height: 52,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(10),
-        border: border,
-      ),
-      child: Center(
-        child: stroke == null
-            ? Text(
-                '·',
-                style: TextStyle(color: content, height: 1),
-              )
-            : Icon(
-                stroke == StrumDirection.down
-                    ? Icons.arrow_downward
-                    : Icons.arrow_upward,
-                color: content,
-                size: 26,
-              ),
-      ),
-    );
-  }
-
-  Widget _bpmControl(RhythmTrainerState state, ColorScheme colorScheme) {
-    final controller = ref.read(rhythmTrainerProvider.notifier);
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              onPressed: state.engineReady
-                  ? () => controller.setBpm(state.bpm - 1)
-                  : null,
-              icon: const Icon(Icons.remove),
-            ),
-            SizedBox(
-              width: 96,
-              child: Text(
-                '${state.bpm}',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-            IconButton(
-              onPressed: state.engineReady
-                  ? () => controller.setBpm(state.bpm + 1)
-                  : null,
-              icon: const Icon(Icons.add),
-            ),
-            Text('BPM', style: TextStyle(color: colorScheme.outline)),
-          ],
-        ),
-        Slider(
-          value: state.bpm.toDouble(),
-          min: RhythmTrainerController.minBpm.toDouble(),
-          max: RhythmTrainerController.maxBpm.toDouble(),
-          divisions: RhythmTrainerController.maxBpm - RhythmTrainerController.minBpm,
-          label: '${state.bpm}',
-          onChanged: state.engineReady ? (v) => controller.setBpm(v.round()) : null,
-        ),
       ],
     );
   }

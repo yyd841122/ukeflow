@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/model/strum_chart.dart';
+import '../../core/ui/load_error_view.dart';
 import '../../data/chart_providers.dart';
 import '../play/chart_meta.dart';
 import '../play/practice_page.dart';
@@ -62,7 +63,7 @@ class LibraryPage extends ConsumerWidget {
           ],
           error: (error, _) => [
             _strumSectionHeader(context),
-            _LibraryErrorView(error: error),
+            LoadErrorView(title: '曲库加载失败', error: error),
           ],
           data: (library) => [
             _strumSectionHeader(context),
@@ -207,29 +208,6 @@ class _CustomEmptyHint extends StatelessWidget {
   }
 }
 
-/// 曲库加载失败的可见报错:原文直接展示,不带病进列表(与和弦库页同一哲学)。
-class _LibraryErrorView extends StatelessWidget {
-  const _LibraryErrorView({required this.error});
-
-  final Object error;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Icon(Icons.error_outline, size: 48, color: scheme.error),
-          const SizedBox(height: 12),
-          Text('曲库加载失败', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text('$error', textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
-}
 
 /// 区段加载态:合流 provider 未就绪时的转圈。
 class _SectionLoading extends StatelessWidget {

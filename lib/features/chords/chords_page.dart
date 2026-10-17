@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/ui/load_error_view.dart';
 import '../../data/chord_library.dart';
 import 'chord_detail_page.dart';
 import 'chord_diagram.dart';
@@ -33,6 +34,7 @@ class _ChordsPageState extends ConsumerState<ChordsPage> {
 }
 
 /// 坏数据/加载失败的可见报错：原文直接展示，不带病进浏览页。
+/// 面板本体走共享 LoadErrorView(工单 19 提取,与曲库页同壳),这里只管居中。
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.error});
 
@@ -40,21 +42,8 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: scheme.error),
-            const SizedBox(height: 12),
-            Text('和弦库加载失败', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('$error', textAlign: TextAlign.center),
-          ],
-        ),
-      ),
+      child: LoadErrorView(title: '和弦库加载失败', error: error),
     );
   }
 }
