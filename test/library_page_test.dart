@@ -2,17 +2,22 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
+import 'package:ukeflow/features/library/image_chart_viewer_page.dart';
+import 'package:ukeflow/features/library/image_pick_flow.dart';
 import 'package:ukeflow/features/library/library_page.dart';
 import 'package:ukeflow/features/play/chart_meta.dart';
 
 import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
+import 'helpers/image_fixtures.dart';
 
 /// 曲库页(工单 15):内置弹唱谱+自建弹唱谱(同一弹唱谱区,数据源接通)
 /// 与内置指弹谱(指弹谱区)。内置谱注入 fixture,自建谱走真内存库
@@ -22,7 +27,10 @@ void main() {
   late AppDatabase db;
   late FakeAudioEngine engine;
 
-  Future<void> pumpLibrary(WidgetTester tester) async {
+  Future<void> pumpLibrary(
+    WidgetTester tester, {
+    ImagePickFlow? imagePickFlow,
+  }) async {
     db = AppDatabase(
       DatabaseConnection(
         NativeDatabase.memory(),
@@ -45,7 +53,9 @@ void main() {
             ),
           ]),
         ],
-        child: const MaterialApp(home: LibraryPage()),
+        child: MaterialApp(
+          home: Scaffold(body: LibraryPage(imagePickFlow: imagePickFlow)),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -182,7 +192,7 @@ void main() {
             (ref) async => throw StateError('内置谱炸了'),
           ),
         ],
-        child: const MaterialApp(home: LibraryPage()),
+        child: const MaterialApp(home: Scaffold(body: LibraryPage())),
       ),
     );
     await tester.pumpAndSettle();
@@ -211,4 +221,137 @@ void main() {
       reason: '全空返回 null 而非空串',
     );
   });
+
+  group('图片谱区(工单 18,ADR-0002 只读边界)', () {
+    testWidgets('内置图片谱在列,区头与卡片都标识只读,有相册选图入口', (tester) async {
+      await pumpLibrary(tester);
+
+      // 区在长列表折叠线下,滚到可见再断言。
+      await tester.scrollUntilVisible(
+        find.text('Big Big World(图片版)'),
+        200,
+      );
+      expect(find.text('图片谱'), findsOneWidget);
+      expect(find.text('Big Big World(图片版)'), findsOneWidget);
+      // 「只读」标识逐卡可见:图片谱不能跟练是 v1 物理边界(ADR-0002)。
+      expect(find.text('图片谱 · 只读'), findsOneWidget);
+      expect(find.text('相册选图'), findsOneWidget);
+    });
+
+    testWidgets('数据源接通:相册图片入库即自动入列,同样标识只读', (tester) async {
+      await pumpLibrary(tester);
+
+      await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('相册来的谱'), 200);
+
+      expect(find.text('相册来的谱'), findsOneWidget);
+      expect(find.byKey(const Key('user-image-1')), findsOneWidget);
+      // 内置 1 张 + 相册 1 张,只读标识两张都在。
+      expect(find.text('图片谱 · 只读'), findsNWidgets(2));
+    });
+
+    testWidgets('点图片谱进查看器:全程无跟练入口(ADR-0002)', (tester) async {
+      await pumpLibrary(tester);
+
+      await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('相册来的谱'), 200);
+      await tester.tap(find.byKey(const Key('user-image-1')));
+      // 定步 pump 不 pumpAndSettle:测试 FakeAsync 区里真图片解码不走
+      // 真异步,photo_view 的加载转圈(无限动画)会把 settle 拖死;
+      // 查看器页本身的断言不依赖图片出帧(出帧在 viewer 测试里验)。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(ImageChartViewerPage), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ImageChartViewerPage),
+          matching: find.text('相册来的谱'),
+        ),
+        findsOneWidget,
+        reason: '查看器标题(曲库卡片在路由下层,需限定)',
+      );
+      expect(find.text('只读'), findsOneWidget, reason: '查看器内只读徽标');
+      expect(find.text('开始跟练'), findsNothing, reason: '不出现跟练入口');
+    });
+
+    testWidgets('相册选图失败给可读引导,不崩溃不入库', (tester) async {
+      // 假 picker 直接抛平台异常(选择器打不开的情形);
+      // widget 测试 FakeAsync 区里真通道调用永远等不到响应,必须打桩。
+      ImagePickerPlatform.instance = _ThrowingPickerPlatform();
+      addTearDown(() => ImagePickerPlatform.instance = _originalPickerPlatform);
+      await pumpLibrary(tester);
+
+      await tester.scrollUntilVisible(find.text('相册选图'), 200);
+      // 再拖一点让按钮离开视口边缘,settle 后再点(按钮在区头右缘,
+      // 滚停即点容易脱靶)。
+      await tester.drag(find.byType(ListView), const Offset(0, -60));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('相册选图'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('打开相册没成功'), findsOneWidget);
+      expect(find.byKey(const Key('user-image-1')), findsNothing);
+    });
+
+    testWidgets('相册选图全链路:选图→命名→落库→自动入列', (tester) async {
+      // 选图+验真一环打桩(引擎解码在测试 FakeAsync 区不走真异步,
+      // 真选图链在 image_pick_flow_test 真异步下覆盖);对话框→命名→
+      // 落库→出卡走真链路。
+      await pumpLibrary(tester, imagePickFlow: _StubPickedFlow());
+
+      await tester.scrollUntilVisible(find.text('相册选图'), 200);
+      await tester.drag(find.byType(ListView), const Offset(0, -60));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('相册选图'));
+      await tester.pumpAndSettle();
+
+      // 命名对话框:预填文件名去扩展名,改个名确认。
+      expect(find.byKey(const Key('image-chart-title-input')), findsOneWidget);
+      expect(
+        find.text('my-chart'),
+        findsOneWidget,
+        reason: '建议名 = 文件名去扩展名',
+      );
+      await tester.enterText(find.byKey(const Key('image-chart-title-input')), '相册真图');
+      await tester.tap(find.text('存入曲库'));
+      await tester.pumpAndSettle();
+
+      // 曲库流自动入列:改的名落卡。
+      expect(find.text('相册真图'), findsOneWidget);
+      expect(
+        find.byKey(const Key('user-image-1')),
+        findsOneWidget,
+        reason: '内存库首行 id=1(内置示例是资产条目,不占库 id)',
+      );
+    });
+  });
+}
+
+/// image_picker 平台打桩:widget 测试 FakeAsync 区里真通道调用永远等
+/// 不到响应(不会抛 MissingPluginException,是挂死),必须从平台接口
+/// 缝注入。生产代码同走 ImagePickerPlatform.instance,别无旁门。
+final ImagePickerPlatform _originalPickerPlatform = ImagePickerPlatform.instance;
+
+/// 选择器打不开/平台异常路。
+class _ThrowingPickerPlatform extends ImagePickerPlatform {
+  @override
+  Future<XFile?> getImageFromSource({
+    required ImageSource source,
+    ImagePickerOptions options = const ImagePickerOptions(),
+  }) async {
+    throw PlatformException(code: 'picker_unavailable', message: '没有可用的相册选择器');
+  }
+}
+
+/// 选到好图路:直接给 ImagePicked(跳过平台选图与引擎解码,见全链路
+/// 测试注释)。
+class _StubPickedFlow extends ImagePickFlow {
+  @override
+  Future<ImagePickOutcome> pickAndValidate() async => ImagePicked(
+    bytes: tinyPngBytes,
+    suggestedTitle: 'my-chart',
+  );
 }

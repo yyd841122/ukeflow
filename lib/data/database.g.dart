@@ -517,6 +517,257 @@ class CustomChartsCompanion extends UpdateCompanion<CustomChart> {
   }
 }
 
+class $ImageChartsTable extends ImageCharts
+    with TableInfo<$ImageChartsTable, ImageChart> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ImageChartsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageMeta = const VerificationMeta('image');
+  @override
+  late final GeneratedColumn<Uint8List> image = GeneratedColumn<Uint8List>(
+    'image',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, title, image];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'image_charts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ImageChart> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('image')) {
+      context.handle(
+        _imageMeta,
+        image.isAcceptableOrUnknown(data['image']!, _imageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imageMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ImageChart map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ImageChart(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      image: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}image'],
+      )!,
+    );
+  }
+
+  @override
+  $ImageChartsTable createAlias(String alias) {
+    return $ImageChartsTable(attachedDatabase, alias);
+  }
+}
+
+class ImageChart extends DataClass implements Insertable<ImageChart> {
+  /// 自增主键:入库序即曲库展示序。
+  final int id;
+
+  /// 入库时的命名。
+  final String title;
+
+  /// 图片文件全字节(PNG/JPEG 由解码器自动识别)。
+  final Uint8List image;
+  const ImageChart({
+    required this.id,
+    required this.title,
+    required this.image,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['title'] = Variable<String>(title);
+    map['image'] = Variable<Uint8List>(image);
+    return map;
+  }
+
+  ImageChartsCompanion toCompanion(bool nullToAbsent) {
+    return ImageChartsCompanion(
+      id: Value(id),
+      title: Value(title),
+      image: Value(image),
+    );
+  }
+
+  factory ImageChart.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ImageChart(
+      id: serializer.fromJson<int>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      image: serializer.fromJson<Uint8List>(json['image']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'title': serializer.toJson<String>(title),
+      'image': serializer.toJson<Uint8List>(image),
+    };
+  }
+
+  ImageChart copyWith({int? id, String? title, Uint8List? image}) => ImageChart(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    image: image ?? this.image,
+  );
+  ImageChart copyWithCompanion(ImageChartsCompanion data) {
+    return ImageChart(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      image: data.image.present ? data.image.value : this.image,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImageChart(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('image: $image')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, title, $driftBlobEquality.hash(image));
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ImageChart &&
+          other.id == this.id &&
+          other.title == this.title &&
+          $driftBlobEquality.equals(other.image, this.image));
+}
+
+class ImageChartsCompanion extends UpdateCompanion<ImageChart> {
+  final Value<int> id;
+  final Value<String> title;
+  final Value<Uint8List> image;
+  const ImageChartsCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.image = const Value.absent(),
+  });
+  ImageChartsCompanion.insert({
+    this.id = const Value.absent(),
+    required String title,
+    required Uint8List image,
+  }) : title = Value(title),
+       image = Value(image);
+  static Insertable<ImageChart> custom({
+    Expression<int>? id,
+    Expression<String>? title,
+    Expression<Uint8List>? image,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (image != null) 'image': image,
+    });
+  }
+
+  ImageChartsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? title,
+    Value<Uint8List>? image,
+  }) {
+    return ImageChartsCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      image: image ?? this.image,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (image.present) {
+      map['image'] = Variable<Uint8List>(image.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImageChartsCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('image: $image')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SettingsTable extends Settings with TableInfo<$SettingsTable, Setting> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -730,9 +981,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CheckInsTable checkIns = $CheckInsTable(this);
   late final $CustomChartsTable customCharts = $CustomChartsTable(this);
+  late final $ImageChartsTable imageCharts = $ImageChartsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
   late final CheckInsDao checkInsDao = CheckInsDao(this as AppDatabase);
   late final CustomChartsDao customChartsDao = CustomChartsDao(
+    this as AppDatabase,
+  );
+  late final ImageChartsDao imageChartsDao = ImageChartsDao(
     this as AppDatabase,
   );
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
@@ -743,6 +998,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     checkIns,
     customCharts,
+    imageCharts,
     settings,
   ];
 }
@@ -1070,6 +1326,167 @@ typedef $$CustomChartsTableProcessedTableManager =
       CustomChart,
       PrefetchHooks Function()
     >;
+typedef $$ImageChartsTableCreateCompanionBuilder =
+    ImageChartsCompanion Function({
+      Value<int> id,
+      required String title,
+      required Uint8List image,
+    });
+typedef $$ImageChartsTableUpdateCompanionBuilder =
+    ImageChartsCompanion Function({
+      Value<int> id,
+      Value<String> title,
+      Value<Uint8List> image,
+    });
+
+class $$ImageChartsTableFilterComposer
+    extends Composer<_$AppDatabase, $ImageChartsTable> {
+  $$ImageChartsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get image => $composableBuilder(
+    column: $table.image,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ImageChartsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ImageChartsTable> {
+  $$ImageChartsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get image => $composableBuilder(
+    column: $table.image,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ImageChartsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ImageChartsTable> {
+  $$ImageChartsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get image =>
+      $composableBuilder(column: $table.image, builder: (column) => column);
+}
+
+class $$ImageChartsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ImageChartsTable,
+          ImageChart,
+          $$ImageChartsTableFilterComposer,
+          $$ImageChartsTableOrderingComposer,
+          $$ImageChartsTableAnnotationComposer,
+          $$ImageChartsTableCreateCompanionBuilder,
+          $$ImageChartsTableUpdateCompanionBuilder,
+          (
+            ImageChart,
+            BaseReferences<_$AppDatabase, $ImageChartsTable, ImageChart>,
+          ),
+          ImageChart,
+          PrefetchHooks Function()
+        > {
+  $$ImageChartsTableTableManager(_$AppDatabase db, $ImageChartsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ImageChartsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ImageChartsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ImageChartsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<Uint8List> image = const Value.absent(),
+              }) => ImageChartsCompanion(id: id, title: title, image: image),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String title,
+                required Uint8List image,
+              }) => ImageChartsCompanion.insert(
+                id: id,
+                title: title,
+                image: image,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ImageChartsTable, ImageChart>(table),
+                  BaseReferences<_$AppDatabase, $ImageChartsTable, ImageChart>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ImageChartsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ImageChartsTable,
+      ImageChart,
+      $$ImageChartsTableFilterComposer,
+      $$ImageChartsTableOrderingComposer,
+      $$ImageChartsTableAnnotationComposer,
+      $$ImageChartsTableCreateCompanionBuilder,
+      $$ImageChartsTableUpdateCompanionBuilder,
+      (
+        ImageChart,
+        BaseReferences<_$AppDatabase, $ImageChartsTable, ImageChart>,
+      ),
+      ImageChart,
+      PrefetchHooks Function()
+    >;
 typedef $$SettingsTableCreateCompanionBuilder =
     SettingsCompanion Function({
       required String key,
@@ -1220,6 +1637,8 @@ class $AppDatabaseManager {
       $$CheckInsTableTableManager(_db, _db.checkIns);
   $$CustomChartsTableTableManager get customCharts =>
       $$CustomChartsTableTableManager(_db, _db.customCharts);
+  $$ImageChartsTableTableManager get imageCharts =>
+      $$ImageChartsTableTableManager(_db, _db.imageCharts);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
 }

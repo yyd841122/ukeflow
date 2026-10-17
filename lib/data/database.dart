@@ -4,6 +4,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import '../core/model/checkin.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
+import 'image_charts_dao.dart';
 import 'settings_dao.dart';
 
 part 'database.g.dart';
@@ -41,11 +42,27 @@ class CustomCharts extends Table {
   TextColumn get source => text()();
 }
 
+/// 图片谱表(工单 18):一行 = 一张从相册入库的图片谱(GLOSSARY
+/// 「图片谱」——只读,不参与跟练)。图片字节整块落库(BLOB):备份
+/// (工单 21,单 JSON 导出)天然携带,不散落应用目录、无孤儿文件清理。
+/// 展示名 = 入库命名,与自建谱同一纪律;入库前解码验真在
+/// core/chart/image_ingest.dart,DAO 只管存取。
+class ImageCharts extends Table {
+  /// 自增主键:入库序即曲库展示序。
+  IntColumn get id => integer().autoIncrement()();
+
+  /// 入库时的命名。
+  TextColumn get title => text()();
+
+  /// 图片文件全字节(PNG/JPEG 由解码器自动识别)。
+  BlobColumn get image => blob()();
+}
+
 /// UkeFlow 本地数据库(drift/SQLite)。
 /// 加表时 schemaVersion 递增并写迁移。
 @DriftDatabase(
-  tables: [CheckIns, CustomCharts, Settings],
-  daos: [CheckInsDao, CustomChartsDao, SettingsDao],
+  tables: [CheckIns, CustomCharts, ImageCharts, Settings],
+  daos: [CheckInsDao, CustomChartsDao, ImageChartsDao, SettingsDao],
 )
 class AppDatabase extends _$AppDatabase {
   /// 默认连接设备上的 ukeflow.sqlite;测试注入内存执行器。
@@ -53,7 +70,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'ukeflow'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   // v1 前期 schema 只加不改:建库与升级都 createAll(生成 IF NOT EXISTS,幂等),
   // 后续工单加表只需建表 + 递增 schemaVersion,升级安装也能拿到新表;

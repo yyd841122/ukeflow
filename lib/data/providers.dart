@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'database.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
+import 'image_charts_dao.dart';
 import 'settings_dao.dart';
 
 /// 全局唯一数据库实例：首次读取时创建，容器销毁时关闭。
@@ -21,6 +22,11 @@ final checkInsDaoProvider = Provider<CheckInsDao>(
 /// 自建谱数据访问（曲库数据源，工单 15）。
 final customChartsDaoProvider = Provider<CustomChartsDao>(
   (ref) => ref.watch(appDatabaseProvider).customChartsDao,
+);
+
+/// 图片谱数据访问(相册图片谱数据源,工单 18)。
+final imageChartsDaoProvider = Provider<ImageChartsDao>(
+  (ref) => ref.watch(appDatabaseProvider).imageChartsDao,
 );
 
 /// 设置数据访问(工单 20:键值读写,加载/写透纪律见 settings_providers)。

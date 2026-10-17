@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/chart/builtin_charts.dart';
+import '../core/chart/builtin_image_charts.dart';
 import '../core/chart/builtin_tab_charts.dart';
 import '../core/chart/custom_charts.dart';
 import '../core/model/strum_chart.dart';
@@ -12,6 +14,8 @@ import 'providers.dart';
 
 export '../core/chart/builtin_charts.dart'
     show BuiltInChart, builtinChartCatalog;
+export '../core/chart/builtin_image_charts.dart'
+    show BuiltinImageChart, builtinImageChartCatalog;
 export '../core/chart/builtin_tab_charts.dart'
     show BuiltInTabChart, builtinTabChartCatalog;
 
@@ -48,12 +52,13 @@ class BrokenCustomStrum extends CustomStrumEntry {
   final Object error;
 }
 
-/// 曲库内容(工单 15):弹唱谱 = 内置 + 自建(尾随),指弹谱 = 内置。
-/// 图片谱归工单 18,届时并入此类型。
+/// 曲库内容(工单 15):弹唱谱 = 内置 + 自建(尾随),指弹谱 = 内置,
+/// 图片谱(工单 18)= 内置资产 + 相册入库(尾随)。
 typedef LibraryContent = ({
   List<BuiltInChart> builtinStrum,
   List<CustomStrumEntry> customStrum,
   List<BuiltInTabChart> tab,
+  List<ImageChartEntry> imageCharts,
 });
 
 /// 内置曲库（GLOSSARY「内置曲库」）：5 首目标曲，随 App 交付、开箱即练。
@@ -108,12 +113,93 @@ CustomStrumEntry _parseCustomEntry(CustomChart row, Set<String> allowedChords) {
   }
 }
 
-/// 曲库数据源(工单 15):三类曲目合流为一处 AsyncValue,曲库页
-/// 统一呈现加载/错误/数据。自建谱走流,导入后本 provider 自动重建,
-/// 新谱即出现在列表(「同一列表」验收的数据面)。
+/// 图片谱条目(工单 18,GLOSSARY「图片谱」):只读——无解析、无
+/// 降级,能解码就展示(入库前已验真,见 core/chart/image_ingest.dart)。
+sealed class ImageChartEntry {
+  const ImageChartEntry({required this.title});
+
+  final String title;
+
+  /// 查看器用图片源。
+  ImageProvider get imageProvider;
+
+  /// 曲库卡片 key。
+  String get cardKey;
+}
+
+/// 内置图片谱:资产随 App 交付。
+class BuiltinImageChartEntry extends ImageChartEntry {
+  const BuiltinImageChartEntry({
+    required super.title,
+    required this.id,
+    required this.assetPath,
+  });
+
+  final String id;
+  final String assetPath;
+
+  @override
+  ImageProvider get imageProvider => AssetImage(assetPath);
+
+  @override
+  String get cardKey => 'builtin-image-$id';
+}
+
+/// 相册入库图片谱(GLOSSARY「用户图片谱」):字节整块落库(BLOB),
+/// 备份天然携带。命名取 User,不碰「自建谱(Custom Chart)」——
+/// GLOSSARY 把自建谱限定为文本谱。
+class UserImageChartEntry extends ImageChartEntry {
+  const UserImageChartEntry({
+    required super.title,
+    required this.id,
+    required this.bytes,
+  });
+
+  final int id;
+  final Uint8List bytes;
+
+  @override
+  ImageProvider get imageProvider => MemoryImage(bytes);
+
+  @override
+  String get cardKey => 'user-image-$id';
+}
+
+/// 相册图片谱流(工单 18):数据库行直映条目,选图入库即自动入列。
+final imageChartsProvider = StreamProvider<List<UserImageChartEntry>>((ref) {
+  return ref.watch(imageChartsDaoProvider).watchAll().map(
+        (rows) => [
+          for (final row in rows)
+            UserImageChartEntry(
+              id: row.id,
+              title: row.title,
+              bytes: row.image,
+            ),
+        ],
+      );
+});
+
+/// 曲库数据源(工单 15):四类曲目合流为一处 AsyncValue,曲库页
+/// 统一呈现加载/错误/数据。自建谱与用户图片谱走流,导入后本 provider
+/// 自动重建,新谱即出现在列表(「同一列表」验收的数据面)。
 final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   final builtinStrum = await ref.watch(builtinChartsProvider.future);
   final customStrum = await ref.watch(customStrumChartsProvider.future);
   final tab = await ref.watch(builtinTabChartsProvider.future);
-  return (builtinStrum: builtinStrum, customStrum: customStrum, tab: tab);
+  final customImages = await ref.watch(imageChartsProvider.future);
+  final imageCharts = [
+    for (final chart in builtinImageChartCatalog)
+      BuiltinImageChartEntry(
+        id: chart.id,
+        title: chart.title,
+        assetPath: chart.assetPath,
+      ),
+    ...customImages,
+  ];
+  return (
+    builtinStrum: builtinStrum,
+    customStrum: customStrum,
+    tab: tab,
+    imageCharts: imageCharts,
+  );
 });
