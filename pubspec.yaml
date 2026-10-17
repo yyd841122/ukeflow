@@ -18,6 +18,10 @@ dependencies:
   chord_pro: ^0.8.0
   flutter_soloud: ^4.1.7
   webview_flutter: ^4.14.1
+  # 调音链路(工单 19,spike A 迁入):record 采集 PCM16/44.1kHz/单声道,
+  # pitch_detector_dart 做 YIN 音高检测(2048 窗)。版本与 spike 对齐。
+  record: ^7.1.1
+  pitch_detector_dart: ^0.0.7
 
 dev_dependencies:
   flutter_test:

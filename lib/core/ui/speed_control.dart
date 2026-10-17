@@ -37,7 +37,8 @@ class SpeedControl extends StatelessWidget {
             value: speed,
             min: min,
             max: max,
-            divisions: 10,
+            // 档位由本控件文档的「5% 一档」对范围推导,不靠调用方记数字。
+            divisions: (((max - min) * 100) / 5).round(),
             label: '$percent%',
             onChanged: onChanged,
           ),

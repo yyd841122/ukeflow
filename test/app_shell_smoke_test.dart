@@ -58,8 +58,9 @@ void main() {
     }
     // 跟练页签不复存在:跟练是点歌后发生的活动,入口在曲库页与路径页。
     expect(navLabel('跟练'), findsNothing);
-    // 当前页（调音器）= 页签 label + 页面标题各一份；未切到的页只出现在页签上。
-    expect(find.text('调音器'), findsNWidgets(2));
+    // 当前页(调音器)页签 label 一份;正式页(工单 19)不再带页内大题
+    // (页题即底栏页签,与和弦/路径/曲库页一致)。
+    expect(find.text('调音器'), findsOneWidget);
     expect(find.text('曲库'), findsOneWidget);
   });
 
@@ -67,10 +68,10 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // 页面标记 = 各页内独有的文本(占位页标题 / 和弦库分组头 / 路径头 /
-    // 曲库工具行,工单 15 起曲库页为真列表页兼练琴工具家)。
+    // 页面标记 = 各页内独有的文本(调音器麦克风卡题 / 和弦库分组头 /
+    // 路径头 / 曲库工具行,工单 15 起曲库页为真列表页兼练琴工具家)。
     const pageMarkers = {
-      '调音器': '此页由后续工单实现',
+      '调音器': '麦克风调音',
       '和弦': '常用',
       '路径': '总进度',
       '曲库': '节拍器',

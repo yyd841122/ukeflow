@@ -27,6 +27,21 @@ void main() {
     expect(engine.loadedKeys, containsAll(['tick_strong', 'tick_weak']));
   });
 
+  test('并发 warmup 共享同一次在途初始化:音源只注入一次', () async {
+    // 防回归(工单19 收拢顺修):原 warmup 无在途合并,快速重进页/
+    // 双击开始会重复 loadMem。红验证:对无合并版(直接 await _doWarmup)
+    // 跑出 tick_strong ×2,恢复 SingleFlight 后转绿。
+    final a = controller().warmup();
+    final b = controller().warmup();
+    await Future.wait([a, b]);
+    expect(container.read(metronomeProvider).engineReady, isTrue);
+    expect(
+      engine.loadedKeys.where((k) => k == 'tick_strong'),
+      hasLength(1),
+      reason: '并发调用须合并为一次注入',
+    );
+  });
+
   test('warmup 失败:错误可见、不就绪;start 不动作', () async {
     engine.failInitialization = true;
     await controller().warmup();
