@@ -14,6 +14,10 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 
 Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
 
+## 审计消化票收口
+
+findings 消化完成、翻状态后,跑 `tool/check-digest.py <findings.md> <ticket.md>`:findings 无 open 行、票面 WP 行的发现编号并集覆盖 findings 全集,exit 1 即有缺口。发现编号的**权威记录是票面 WP 行**——并包/补修要改 WP 行本身,评论里提及不算覆盖(工单 30:清单总和 48≠51 漏 4 条,评审阶段才抓出,检查由此立)。
+
 ## When a skill says "fetch the relevant ticket"
 
 Read the file at the referenced path. The user will normally pass the path or the issue number directly.
