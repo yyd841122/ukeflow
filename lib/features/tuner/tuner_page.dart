@@ -6,6 +6,7 @@ import '../../core/model/uke_string.dart';
 import '../../core/tuner/pitch_math.dart';
 import '../../core/tuner/tuner_filter.dart';
 import '../../core/ui/equal_row.dart';
+import '../../tab_index.dart';
 import 'tuner_controller.dart';
 
 /// 调音器正式页(工单 19,spike A 迁入):麦克风拾音调音 + 空弦试音。
@@ -23,9 +24,35 @@ class TunerPage extends ConsumerStatefulWidget {
   ConsumerState<TunerPage> createState() => _TunerPageState();
 }
 
-class _TunerPageState extends ConsumerState<TunerPage> {
+class _TunerPageState extends ConsumerState<TunerPage>
+    with WidgetsBindingObserver {
   /// 当前目标弦(默认 4 弦 G,与弦号序一致)。
   UkeString _target = UkeString.g;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 隐私纪律(真机验收反馈):拾音只发生在调音器页可见时——切走页签
+  /// 或 App 退后台,立即停麦。回来不自动续:重开是显式动作。
+  void _stopIfListening() {
+    if (ref.read(tunerProvider).listening) {
+      ref.read(tunerProvider.notifier).stop();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _stopIfListening();
+  }
 
   Future<void> _pluck(UkeString string) async {
     try {
@@ -42,11 +69,15 @@ class _TunerPageState extends ConsumerState<TunerPage> {
   @override
   Widget build(BuildContext context) {
     final tuner = ref.watch(tunerProvider);
-    // 页签页不自带 AppBar(页题在底栏与导航壳各一份,导航壳统一管理)。
+    // 切走页签即停(IndexedStack 保活,本页不 dispose;真机验收反馈)。
+    ref.listen(activeTabIndexProvider, (previous, next) {
+      if (next != tunerTabIndex) _stopIfListening();
+    });
     return ListView(
-      padding: const EdgeInsets.all(16),
+      // 页签页无 AppBar:顶部留白放宽,内容不贴状态栏(真机验收反馈)。
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: 32),
         _MicTunerCard(
           state: tuner,
           target: _target,

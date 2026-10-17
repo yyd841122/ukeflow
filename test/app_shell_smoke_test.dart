@@ -6,11 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/app.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/core/tuner/tuner_recorder.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
 
 import 'helpers/chord_fixtures.dart';
 import 'helpers/chart_fixtures.dart';
+import 'tuner_controller_test.dart' show FakeRecorder;
 
 void main() {
   // 每个用例各建一个 ProviderScope，各自创建并关闭 AppDatabase；关闭是异步的，
@@ -21,7 +23,7 @@ void main() {
   // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
   // 工单 09 起加载内置曲库(工单 15 起归曲库页):同为 fixture 谱。传 engine 时一并注入假引擎。
   // 工单 14 起路径页读打卡库：内存库注入（关库纪律见 path_page_test 注释）。
-  Widget app([FakeAudioEngine? engine]) {
+  Widget app([FakeAudioEngine? engine, FakeRecorder? recorder]) {
     final db = AppDatabase(
       DatabaseConnection(
         NativeDatabase.memory(),
@@ -37,6 +39,7 @@ void main() {
           (id: 'test-chart-a', chart: practiceFixtureChart),
         ]),
         if (engine != null) audioEngineProvider.overrideWithValue(engine),
+        if (recorder != null) tunerRecorderProvider.overrideWithValue(recorder),
       ],
       child: const UkeFlowApp(),
     );
@@ -85,6 +88,25 @@ void main() {
         reason: '点 ${entry.key} 后应显示其页面',
       );
     }
+  });
+
+  testWidgets('调音器拾音中切走页签即停麦(IndexedStack 保活不 dispose)', (tester) async {
+    final recorder = FakeRecorder();
+    await tester.pumpWidget(app(FakeAudioEngine(), recorder));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('开始调音'));
+    await tester.pump();
+    expect(recorder.startStreamCalls, 1);
+
+    await tester.tap(navLabel('和弦'));
+    await tester.pumpAndSettle();
+    expect(recorder.stopCalls, 1, reason: '切走即停,拾音只在调音器页可见时进行');
+
+    // 切回调音器页不自动续:重开是显式动作。
+    await tester.tap(navLabel('调音器'));
+    await tester.pumpAndSettle();
+    expect(recorder.startStreamCalls, 1);
   });
 
   testWidgets('曲库页的节拍器入口可直达节拍器页(假引擎)', (tester) async {

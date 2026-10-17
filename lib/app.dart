@@ -8,6 +8,7 @@ import 'features/chords/chords_page.dart';
 import 'features/library/library_page.dart';
 import 'features/path/path_page.dart';
 import 'features/tuner/tuner_page.dart';
+import 'tab_index.dart';
 
 /// UkeFlow 应用根：中文 UI、统一主题、四页签导航壳。
 class UkeFlowApp extends StatelessWidget {
@@ -42,6 +43,8 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
+/// 当前页签下标见 tab_index.dart(调音器「离开页面即停」的感知缝)。
+
 class _HomeShellState extends ConsumerState<HomeShell> {
   static const _tabs = [
     (label: '调音器', icon: Icons.tune, page: TunerPage()),
@@ -63,7 +66,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
+        onDestinationSelected: (index) => setState(() {
+          _index = index;
+          ref.read(activeTabIndexProvider.notifier).set(index);
+        }),
         destinations: [
           for (final tab in _tabs)
             NavigationDestination(icon: Icon(tab.icon), label: tab.label),

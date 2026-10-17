@@ -130,6 +130,22 @@ void main() {
     expect(engine.loadedKeys.single, startsWith('pluck_391.99'));
   });
 
+  testWidgets('App 退后台即停麦(隐私:拾音只在页可见时进行)', (tester) async {
+    await pumpPage(tester);
+    await tester.tap(find.text('开始调音'));
+    await tester.pump();
+    expect(recorder.startStreamCalls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(recorder.stopCalls, 1, reason: '退后台即停');
+
+    // 回前台不自动续拾音:重开是显式动作。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(recorder.startStreamCalls, 1);
+  });
+
   testWidgets('手机宽度(360dp)下目标行与试音行各四钮单行不溢出', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3.0;
