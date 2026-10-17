@@ -4,7 +4,7 @@
 
 **Blocked by:** 无(17 已落地,本票是其搜索体验的 UX 改造)
 
-**Status:** needs-triage
+**Status:** done
 
 - [x] 输歌名 → 原生中文结果列表(歌名+艺人),不再暴露站点葡语搜索 UI
 - [x] 点结果 → 直达导入(ukulele 优先+回退告知,复用 17 管线)
@@ -19,3 +19,4 @@
 - 2026-10-17 (实现): 结构落点:①17 的导入编排从页面提出 `cifraclub_import.dart`(CifraClubImporter+WebView 驱动最小面),ukulele 优先/导航令牌/落点核对/就绪重试**原样随迁**,补 8 条 fake-driver 单测(这段时序逻辑 17/30 时代只有真机验收覆盖);②搜索编排 `cifraclub_search.dart`(解码+轮询+supersede+连续 pending re-kick——首次搜索撞上首页还在载入时 window 变量会被导航清掉,不 re-kick 只能等超时)+13 条单测,延时注入零值真 async(无 fakeAsync);③原生页 `cifraclub_search_page.dart`:WebView 常驻底层,`IgnorePointer`(不挡则点空白区穿透到隐形站点链接)+`ExcludeSemantics`(不挡则葡语内容全进 a11y 树,读屏可逛到隐形页)双包,原生层整面盖住。全库 519 绿,analyzer 零告警。
 - 2026-10-17 (机检): A 输「let it be」→原生中文列表(歌名+艺人,葡语 UI 全隐,a11y 树只剩原生节点);B 点「Beat It / Michael Jackson」→直达导入,ukulele 变体页 10s 未出谱**自动回退原版**(logcat 实证 `/beat-it/ukulele/` → `/beat-it/`),预填文本导入页,校验层正常报 E5/D5 不在库(既有行为);C 搜「zzzqqqxx」→「没有找到…换个歌名试试,或回曲库用文本导入」。logcat 无 E/flutter/FATAL。搜索失败态由单测覆盖(真机断网会断无线 adb,不做)。待用户过目验收后转 done。
 - 2026-10-17 (评审落实,双轴): Standards/Spec 两轴评审各抓出三条,同源两处实锤+一处死管线,全部落地:①**页面级 catch 补下家**——重构时 `ref.read(chordLibraryProvider.future)` 留在调用点 try 内、importSong 之外,库加载失败会逃逸成未处理异步异常(旧 17 页有 catch);两页补 `catch → importCatchCopy 横幅`,helper 落 cifraclub_import.dart。②**就地提取恢复**——旧 17 页 `uke==null`(已是 /ukulele/ 或 versao 页)是就地提取,重构版一律先 loadRequest 同一 URL(多余一次导航,违反「删除的守卫要有下家」);importer 恢复就地路径,红验证:新测试「已是 ukulele 页不导航」对修复前实现跑红(loaded 实际含导航)再修绿。superseded 测试随之改写为可达语义(uke 尝试被新导入取代 → 回退原版,回退提取拿原版页新载荷,断言不跨请求串线)。③**hasUkulele 死管线删除**——立票要「是否有 ukulele 版」,真机逆向实证 solr 载荷无此字段(ukulele 存在性由导入时 ukulele-first 探测兜住,列表不标);字段/解码分支删除,决策记录于此。④杂项:FakeDriver/ThrowingDriver 双份并入 test/helpers/cifraclub_fake_driver.dart;FailureBanner 提出独立文件;搜索页共享单个 WebViewDriver;结果链接拼域改 `CifraClubUrls.home.resolve`。终态全库 519 绿,analyzer 零告警;最终版真机复验:zztest 空态、deixe me ir 搜索→1Kilo 导入(回退告知横幅完整可见,预填 Fmaj7/Dm9),logcat 无异常。`_currentUrl!` 的 null 容忍删除:导入钮只在 `_onSongPage`(非 null)时出现,不可达,null 断言安全(原容忍无触发路径,留注释说明)。
+- 2026-10-17 (验收): 用户真机过目通过,转 done。
