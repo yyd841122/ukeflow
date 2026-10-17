@@ -67,8 +67,9 @@ class MetronomeController extends Notifier<MetronomeState> {
   MetronomeState build() {
     ref.onDispose(_teardown);
     // 初始 BPM 取「默认 BPM」设置(工单 20)。watch:设置变更即重置回新
-    // 默认——重置只落在空闲态(本推送路由打开期间设置不可达),重进页
-    // 由页面 warmup 重建就绪,代价可忽略。
+    // 默认。重建只会落在空闲态——手动改设置时本推送路由打开期间设置页
+    // 不可达;例外是启动初载落地也会触发重建,但冷启加载毫秒级、人开到
+    // 节拍器需数秒,窗口实际不可达。代价上界:重进页 warmup 一次。
     return MetronomeState.initial(bpm: ref.watch(defaultBpmProvider));
   }
 

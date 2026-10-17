@@ -86,6 +86,7 @@ class AppSettingsController extends Notifier<AppSettings> {
   /// 写透 DAO(滑动连发即多次写,单行 upsert 量级无害;重启仍在是票面验收)。
   Future<void> setReferenceA4(int hz) async {
     await ready;
+    if (!ref.mounted) return; // 容器已释放:状态无可落盘(与 _load 同纪律)。
     state = AppSettings(
       referenceA4: hz.clamp(minReferenceA4, maxReferenceA4),
       defaultBpm: state.defaultBpm,
@@ -96,6 +97,7 @@ class AppSettingsController extends Notifier<AppSettings> {
   /// 设默认 BPM(钳制 [minDefaultBpm]..[maxDefaultBpm])。
   Future<void> setDefaultBpm(int bpm) async {
     await ready;
+    if (!ref.mounted) return;
     state = AppSettings(
       referenceA4: state.referenceA4,
       defaultBpm: bpm.clamp(minDefaultBpm, maxDefaultBpm),
