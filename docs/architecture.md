@@ -32,9 +32,12 @@ lib/
 │   │                 # rhythm_state.dart 节奏型训练状态(循环网格先行版)、
 │   │                 # tab_timeline.dart 指弹谱→逐音事件时间轴(工单 12,取整语义与弹唱时间轴同型、类型独立)、
 │   │                 # tab_practice_state.dart 逐音练习状态((时间轴,引擎时刻)→当前音/预亮窗/拍,工单 13)
+│   ├── backup/       # 备份文档编解码(工单 21,纯数据变换零 drift 依赖):四表↔单个版本化 JSON,
+│   │                 # 解析层拦坏文件(版本/形状/主键重复/全空),可读中文错误
 │   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
-├── data/             # drift 表：checkins、custom_charts(自建谱)、settings(键值设置,工单 20)；
+├── data/             # drift 表：checkins、custom_charts(自建谱)、image_charts(用户图片谱,工单 18)、
+│                     # settings(键值设置,工单 20);backup_service(工单 21:导出快照/导入即覆盖的事务落库口);
 │                     # assets/：内置谱、chords-db、采样
 ├── features/
 │   ├── tuner/        # 调音器（spike A 代码升级迁入）

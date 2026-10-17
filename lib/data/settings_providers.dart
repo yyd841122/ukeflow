@@ -105,6 +105,13 @@ class AppSettingsController extends Notifier<AppSettings> {
     await _persist(SettingsKeys.defaultBpm, state.defaultBpm);
   }
 
+  /// 重读落库值(工单 21:导入备份把设置行整表换掉,内存状态须跟着
+  /// 重读)。与初载同一竞态契约:先 `await ready` 定序再读。
+  Future<void> reload() async {
+    await ready;
+    await _load();
+  }
+
   /// 写透失败不回滚状态(UI 已呈现新值);采集侧失败重试由再改一次覆盖。
   Future<void> _persist(String key, int value) async {
     try {

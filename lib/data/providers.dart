@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'backup_service.dart';
 import 'database.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
@@ -32,6 +33,11 @@ final imageChartsDaoProvider = Provider<ImageChartsDao>(
 /// 设置数据访问(工单 20:键值读写,加载/写透纪律见 settings_providers)。
 final settingsDaoProvider = Provider<SettingsDao>(
   (ref) => ref.watch(appDatabaseProvider).settingsDao,
+);
+
+/// 备份服务(工单 21:四表全量与单个 JSON 文档互转的落库口)。
+final backupServiceProvider = Provider<BackupService>(
+  (ref) => BackupService(ref.watch(appDatabaseProvider)),
 );
 
 /// 打卡流：路径页订阅，打卡写入即刷新（drift watch 响应式）。

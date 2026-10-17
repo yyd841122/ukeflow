@@ -100,4 +100,24 @@ void main() {
     expect(container.read(referenceA4Provider), 435.0, reason: '秒改不被初载回滚');
     expect(await db.settingsDao.getInt(SettingsKeys.referenceA4), 435);
   });
+
+  test('reload:导入备份换掉设置行后,重读落库值(工单 21)', () async {
+    await pumpContainer(
+      seed: (db) async {
+        await db.settingsDao.setInt(SettingsKeys.referenceA4, 440);
+      },
+    );
+    final notifier = container.read(settingsProvider.notifier);
+    await notifier.ready;
+    expect(container.read(referenceA4Provider), 440.0);
+
+    // 模拟导入备份:库里行被换成备份内容(不经控制器,直达库)。
+    await db.settingsDao.setInt(SettingsKeys.referenceA4, 432);
+    await db.settingsDao.setInt(SettingsKeys.defaultBpm, 96);
+
+    await notifier.reload();
+
+    expect(container.read(referenceA4Provider), 432.0);
+    expect(container.read(defaultBpmProvider), 96);
+  });
 }

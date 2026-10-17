@@ -49,4 +49,10 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
       SettingsCompanion.insert(key: key, value: '$value'),
     );
   }
+
+  /// 全部设置行原样读出(工单 21 备份导出:全量搬运,不筛已知键)。
+  Future<List<Setting>> getAll() {
+    return (select(settings)..orderBy([(row) => OrderingTerm.asc(row.key)]))
+        .get();
+  }
 }
