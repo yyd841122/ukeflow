@@ -7,10 +7,11 @@ import 'data/providers.dart';
 import 'features/chords/chords_page.dart';
 import 'features/library/library_page.dart';
 import 'features/path/path_page.dart';
+import 'features/settings/settings_page.dart';
 import 'features/tuner/tuner_page.dart';
 import 'tab_index.dart';
 
-/// UkeFlow 应用根：中文 UI、统一主题、四页签导航壳。
+/// UkeFlow 应用根：中文 UI、统一主题、五页签导航壳。
 class UkeFlowApp extends StatelessWidget {
   const UkeFlowApp({super.key});
 
@@ -33,9 +34,10 @@ class UkeFlowApp extends StatelessWidget {
   }
 }
 
-/// 底部导航壳：调音器 / 和弦 / 路径 / 曲库(四页签,工单 15 后续自用户
-/// 决策裁撤跟练页签——跟练是点歌后发生的活动,入口在曲库页与路径页)。
-/// IndexedStack 保活各页状态，切页签不丢滚动位置。
+/// 底部导航壳：调音器 / 和弦 / 路径 / 曲库 / 设置(五页签;四页签形态见
+/// 工单 15 用户决策裁撤跟练页签——跟练是点歌后发生的活动,入口在曲库页
+/// 与路径页;设置页归工单 20)。IndexedStack 保活各页状态，切页签不丢
+/// 滚动位置。
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -51,6 +53,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     (label: '和弦', icon: Icons.music_note, page: ChordsPage()),
     (label: '路径', icon: Icons.route, page: PathPage()),
     (label: '曲库', icon: Icons.library_music, page: LibraryPage()),
+    (label: '设置', icon: Icons.settings, page: SettingsPage()),
   ];
 
   int _index = 0;

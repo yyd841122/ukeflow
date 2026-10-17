@@ -9,6 +9,7 @@ import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/play_timeline.dart';
+import '../../data/settings_providers.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart' show Chord;
 import 'strum_scheduler.dart';
@@ -114,7 +115,8 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   static const minBpm = 40;
   static const maxBpm = 208;
 
-  /// 无谱面 tempo 时的缺省速度（与节奏型训练器同源,慢练起步）。
+  /// 无谱面 tempo 时的缺省速度的**初始态占位**(进谱后由「默认 BPM」设置
+  /// 或谱面 tempo 接管,见 [prepareFor];占位值与设置缺省同源 80,慢练起步)。
   static const defaultBpm = 80;
 
   /// 预备数拍拍数（工单 10 验收:4 拍倒计）。
@@ -226,17 +228,18 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     }
   }
 
-  /// 进谱定参:取谱面 tempo 为当前 BPM（钳制 40–208）、变速回原速;记录
-  /// 和弦表并预备扫弦音源。只应在进页时调;运行中是空操作（页内重启不
-  /// 清已调好的参数——变速归零是例外:每首谱都从原速起）。
+  /// 进谱定参:取谱面 tempo 为当前 BPM（钳制 40–208;无 tempo 谱回退
+  /// 「默认 BPM」设置,工单 20——进谱时读一次,设置变更下次进谱生效）、
+  /// 变速回原速;记录和弦表并预备扫弦音源。只应在进页时调;运行中是
+  /// 空操作（页内重启不清已调好的参数——变速归零是例外:每首谱都从原速起）。
   void prepareFor(StrumChart chart, {Map<String, Chord> chords = const {}}) {
     if (state.running) return;
     _chart = chart;
-    final tempo = chart.tempo ?? defaultBpm;
-    state = state.copyWith(
-      bpm: tempo.clamp(minBpm, maxBpm),
-      speed: 1.0,
-    );
+    // 先读后并:写成 `tempo ?? ref.read(...)` 会让 ?? 的可空左位把
+    // read 的 T 推成 int?(分析器报 clamp 不可靠),拆两行即得 int。
+    final fallbackBpm = ref.read(defaultBpmProvider);
+    final tempo = chart.tempo ?? fallbackBpm;
+    state = state.copyWith(bpm: tempo.clamp(minBpm, maxBpm), speed: 1.0);
     setChords(chords);
   }
 
@@ -340,8 +343,7 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     final engine = ref.read(audioEngineProvider);
     final now = engine.engineTime();
     final elapsedBeats = (now - _t0).inMicroseconds / (_periodMs * 1000);
-    final t0 =
-        now - Duration(milliseconds: (elapsedBeats * _periodMs).round());
+    final t0 = now - Duration(milliseconds: (elapsedBeats * _periodMs).round());
     final nextBeat = elapsedBeats <= 0 ? 0 : elapsedBeats.ceil();
     final scheduler = BeatScheduler(
       engine: engine,
@@ -362,7 +364,10 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
 
   /// 开始跟练:编译时间轴,预备数拍+节拍声与时间轴同源起跑（调度
   /// totalBeats = 预备+曲拍数,曲末无幻拍声）。未就绪或已在跑则拒绝。
-  void start({required StrumChart chart, Map<String, Chord> chords = const {}}) {
+  void start({
+    required StrumChart chart,
+    Map<String, Chord> chords = const {},
+  }) {
     if (!state.engineReady || state.running) return;
     _chart = chart; // 会话参数登记(变速重编译/restart 的依据)
     _chords = chords;
@@ -419,10 +424,9 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     final timeline = _timeline;
     if (timeline == null) return;
     final engine = ref.read(audioEngineProvider);
-    final t0 = engine.engineTime() -
-        Duration(
-          milliseconds: (_elapsedBeatsAtPause * _periodMs).round(),
-        );
+    final t0 =
+        engine.engineTime() -
+        Duration(milliseconds: (_elapsedBeatsAtPause * _periodMs).round());
     final nextBeat = _elapsedBeatsAtPause <= 0
         ? 0
         : _elapsedBeatsAtPause.ceil();
@@ -489,8 +493,9 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     _strumScheduler = scheduler;
     scheduler.start(
       t0: _t0 + _prepSpan,
-      consumedUntil:
-          continuing ? ref.read(audioEngineProvider).engineTime() : null,
+      consumedUntil: continuing
+          ? ref.read(audioEngineProvider).engineTime()
+          : null,
     );
     if (_strumScheduler != scheduler) _strumScheduler = null;
   }

@@ -3,27 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/rhythm/metronome_page.dart';
 
 /// 节拍器页:引擎一律注入 FakeAudioEngine;视觉拍推进用假时钟驱动。
 void main() {
   late FakeAudioEngine engine;
 
-  Future<void> pumpPage(WidgetTester tester) async {
+  Future<void> pumpPage(WidgetTester tester, {int bpm = 80}) async {
     engine = FakeAudioEngine();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [audioEngineProvider.overrideWithValue(engine)],
+        overrides: [
+          audioEngineProvider.overrideWithValue(engine),
+          // 「默认 BPM」消费缝(工单 20):override 隔离,不触真库。
+          // 时序场景显式定速(如 120),不随缺省漂移。
+          defaultBpmProvider.overrideWithValue(bpm),
+        ],
         child: const MaterialApp(home: MetronomePage()),
       ),
     );
     await tester.pumpAndSettle(); // warmup 微任务落定
   }
 
-  testWidgets('渲染:BPM 默认 120,四个拍点,引擎就绪后可启停', (tester) async {
+  testWidgets('渲染:BPM 默认 80(工单 20「默认 BPM」缺省,原 120 收拢归一),四个拍点,引擎就绪后可启停', (
+    tester,
+  ) async {
     await pumpPage(tester);
     expect(find.text('节拍器'), findsOneWidget);
-    expect(find.text('120'), findsOneWidget);
+    expect(find.text('80'), findsOneWidget);
     expect(find.text('BPM'), findsOneWidget);
     for (var i = 0; i < 4; i++) {
       expect(find.byKey(Key('beat-dot-$i')), findsOneWidget);
@@ -55,7 +63,7 @@ void main() {
   });
 
   testWidgets('开始后拍点随引擎时钟推进,停后回闲且不再调度', (tester) async {
-    await pumpPage(tester);
+    await pumpPage(tester, bpm: 120); // 拍周期 500ms,时序断言不随缺省漂移
 
     await tester.tap(find.byKey(const Key('metronome-toggle')));
     await tester.pump(); // start 即时首过
@@ -86,7 +94,7 @@ void main() {
   });
 
   testWidgets('停止时窗内未响拍被 stop(已响拍不动)', (tester) async {
-    await pumpPage(tester);
+    await pumpPage(tester, bpm: 120); // 拍周期 500ms,时序断言不随缺省漂移
     await tester.tap(find.byKey(const Key('metronome-toggle')));
     await tester.pump();
 
@@ -98,8 +106,9 @@ void main() {
     await tester.tap(find.byKey(const Key('metronome-toggle')));
     await tester.pump();
     final stopped = engine.scheduleLog.where((c) => c.stopped).toList();
-    expect(stopped.map((c) => c.key), ['tick_weak'],
-        reason: '只有未响的拍 1(弱拍)被 stop');
+    expect(stopped.map((c) => c.key), [
+      'tick_weak',
+    ], reason: '只有未响的拍 1(弱拍)被 stop');
     expect(engine.scheduleLog.first.stopped, isFalse, reason: '拍 0 已响不 stop');
   });
 
@@ -110,30 +119,37 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.add));
     await tester.pump();
-    expect(find.text('121'), findsOneWidget);
+    expect(find.text('81'), findsOneWidget);
     // 重锚后时间轴仍在:视觉锚点存在、运行中。
     expect(find.byIcon(Icons.stop), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.remove));
     await tester.pump();
-    expect(find.text('120'), findsOneWidget);
+    expect(find.text('80'), findsOneWidget);
   });
 
   testWidgets('矮视口(360x320)不溢出,控件滚动可达(审计30 #47)', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 320));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await pumpPage(tester);
-    expect(tester.takeException(), isNull, reason: '不可滚 Column 会 RenderFlex overflow');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: '不可滚 Column 会 RenderFlex overflow',
+    );
     final toggle = find.byKey(const Key('metronome-toggle'));
-    await tester.scrollUntilVisible(toggle, 100, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(
+      toggle,
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(toggle, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
 }
 
 /// 第 [i] 个拍点当前的颜色。
 Color dotColor(WidgetTester tester, int i) =>
     (tester.widget<Container>(find.byKey(Key('beat-dot-$i'))).decoration!
-        as BoxDecoration)
+            as BoxDecoration)
         .color!;

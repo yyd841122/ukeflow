@@ -7,7 +7,7 @@ import '../../core/audio/providers.dart';
 import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/practice/rhythm_state.dart';
 import '../../core/ui/arrow_strip.dart';
-import '../../core/ui/bpm_control.dart';
+import '../../core/ui/step_slider_control.dart';
 import '../../core/ui/engine_status_line.dart';
 import 'rhythm_trainer_controller.dart';
 
@@ -120,8 +120,8 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
                   style: Theme.of(context).textTheme.displayLarge,
                 ),
                 const SizedBox(height: 24),
-                BpmControl(
-                  bpm: state.bpm,
+                StepSliderControl(
+                  value: state.bpm,
                   min: RhythmTrainerController.minBpm,
                   max: RhythmTrainerController.maxBpm,
                   onChanged: (v) =>

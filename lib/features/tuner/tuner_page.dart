@@ -6,6 +6,7 @@ import '../../core/model/uke_string.dart';
 import '../../core/tuner/pitch_math.dart';
 import '../../core/tuner/tuner_filter.dart';
 import '../../core/ui/equal_row.dart';
+import '../../data/settings_providers.dart';
 import '../../tab_index.dart';
 import 'tuner_controller.dart';
 
@@ -13,8 +14,8 @@ import 'tuner_controller.dart';
 ///
 /// 上卡「麦克风调音」:选 GCEA 目标弦 → 拨弦看实时音名与偏差音分,
 /// ±5 音分点亮「已调准」;静音/噪声段不出读数、读数带阻尼(语义见
-/// [TunerFilter])。权限拒绝给引导态,重试再走请求。A4 固定 440
-/// ([referenceA4],接设置归工单 20)。
+/// [TunerFilter])。权限拒绝给引导态,重试再走请求。A4 参考音随设置
+/// ([referenceA4Provider],工单 20):目标频率/判准/试音/音名同源换算。
 /// 下卡「空弦试音」:点弦名拨响标准音对照听音调弦(GLOSSARY:调音器页
 /// 常驻,音源走拨弦合成管线)。
 class TunerPage extends ConsumerStatefulWidget {
@@ -54,9 +55,9 @@ class _TunerPageState extends ConsumerState<TunerPage>
     if (state == AppLifecycleState.paused) _stopIfListening();
   }
 
-  Future<void> _pluck(UkeString string) async {
+  Future<void> _pluck(UkeString string, double a4) async {
     try {
-      await ref.read(pluckPlayerProvider).pluck(freq: string.frequency);
+      await ref.read(pluckPlayerProvider).pluck(freq: string.frequencyAt(a4));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -69,6 +70,7 @@ class _TunerPageState extends ConsumerState<TunerPage>
   @override
   Widget build(BuildContext context) {
     final tuner = ref.watch(tunerProvider);
+    final a4 = ref.watch(referenceA4Provider);
     // 切走页签即停(IndexedStack 保活,本页不 dispose;真机验收反馈)。
     ref.listen(activeTabIndexProvider, (previous, next) {
       if (next != tunerTabIndex) _stopIfListening();
@@ -81,6 +83,7 @@ class _TunerPageState extends ConsumerState<TunerPage>
         _MicTunerCard(
           state: tuner,
           target: _target,
+          a4: a4,
           onTargetChanged: (s) => setState(() => _target = s),
           onToggle: () => ref.read(tunerProvider.notifier).toggle(),
           onRetry: () => ref.read(tunerProvider.notifier).start(),
@@ -111,7 +114,7 @@ class _TunerPageState extends ConsumerState<TunerPage>
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                           ),
-                          onPressed: () => _pluck(string),
+                          onPressed: () => _pluck(string, a4),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -152,6 +155,7 @@ class _MicTunerCard extends StatelessWidget {
   const _MicTunerCard({
     required this.state,
     required this.target,
+    required this.a4,
     required this.onTargetChanged,
     required this.onToggle,
     required this.onRetry,
@@ -159,6 +163,10 @@ class _MicTunerCard extends StatelessWidget {
 
   final TunerState state;
   final UkeString target;
+
+  /// A4 参考音 Hz(设置,工单 20):目标频率/判准随它换算。
+  final double a4;
+
   final ValueChanged<UkeString> onTargetChanged;
   final VoidCallback onToggle;
   final VoidCallback onRetry;
@@ -166,7 +174,9 @@ class _MicTunerCard extends StatelessWidget {
   /// 相对目标弦的偏差音分(偏差条与判准共用一次换算,勿两处各算)。
   double? get _targetCents {
     final reading = state.reading;
-    return reading == null ? null : centsBetween(reading.freq, target.frequency);
+    return reading == null
+        ? null
+        : centsBetween(reading.freq, target.frequencyAt(a4));
   }
 
   /// ±5 音分判准(spec 用户故事 3)。
@@ -187,9 +197,9 @@ class _MicTunerCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '选目标弦,拨弦看偏差',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.outline,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.outline),
             ),
             const SizedBox(height: 12),
             KeyedSubtree(
@@ -217,7 +227,7 @@ class _MicTunerCard extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           Text(
-                            '${string.frequency.round()}Hz',
+                            '${string.frequencyAt(a4).round()}Hz',
                             maxLines: 1,
                             softWrap: false,
                             style: Theme.of(context).textTheme.bodySmall,
@@ -288,9 +298,9 @@ class _PermissionGuide extends StatelessWidget {
         Text(
           '请在系统设置 › 应用 › UkeFlow › 权限中允许麦克风,再回来重试',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: scheme.outline,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.outline),
         ),
         const SizedBox(height: 8),
         TextButton.icon(
@@ -328,13 +338,10 @@ class _Reading extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          switch (reading) {
-            null => listening ? '倾听中…' : '开始后拨响琴弦',
-            final r => '${r.freq.toStringAsFixed(1)} Hz',
-          },
-          style: TextStyle(color: scheme.outline),
-        ),
+        Text(switch (reading) {
+          null => listening ? '倾听中…' : '开始后拨响琴弦',
+          final r => '${r.freq.toStringAsFixed(1)} Hz',
+        }, style: TextStyle(color: scheme.outline)),
       ],
     );
   }
@@ -375,13 +382,19 @@ class _DeviationBar extends StatelessWidget {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: inTune ? Colors.green.shade200 : scheme.surfaceContainerHighest,
+                    color: inTune
+                        ? Colors.green.shade200
+                        : scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(7),
                   ),
                 ),
                 Align(
                   alignment: Alignment(((cents ?? 0) / 50).clamp(-1.0, 1.0), 0),
-                  child: Container(width: 4, height: 14, color: scheme.onSurface),
+                  child: Container(
+                    width: 4,
+                    height: 14,
+                    color: scheme.onSurface,
+                  ),
                 ),
               ],
             ),

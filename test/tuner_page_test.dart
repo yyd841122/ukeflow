@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/tuner/tuner_recorder.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/tuner/tuner_page.dart';
 
 import 'tuner_controller_test.dart' show FakeRecorder;
@@ -23,6 +24,9 @@ void main() {
         overrides: [
           audioEngineProvider.overrideWithValue(engine),
           tunerRecorderProvider.overrideWithValue(recorder),
+          // A4 参考音走派生 provider(设置消费缝,工单 20):override 隔离,
+          // 不让页面链路触到真库。
+          referenceA4Provider.overrideWithValue(440.0),
         ],
         child: const MaterialApp(home: Scaffold(body: TunerPage())),
       ),

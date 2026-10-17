@@ -5,6 +5,7 @@ import '../../core/audio/beat_scheduling.dart';
 import '../../core/audio/beat_scheduler.dart';
 import '../../core/audio/providers.dart';
 import '../../core/audio/tick_sounds.dart';
+import '../../data/settings_providers.dart';
 
 /// 节拍器页状态。
 class MetronomeState {
@@ -16,13 +17,9 @@ class MetronomeState {
     this.error,
   });
 
-  const MetronomeState.initial()
-      : this(
-          bpm: MetronomeController.defaultBpm,
-          engineReady: false,
-          running: false,
-          scheduledBeats: 0,
-        );
+  /// 初始 BPM 由调用方给定(控制器 build 取「默认 BPM」设置)。
+  const MetronomeState.initial({int bpm = settingsDefaultBpm})
+    : this(bpm: bpm, engineReady: false, running: false, scheduledBeats: 0);
 
   /// 拍频(40–208,工单验收范围)。
   final int bpm;
@@ -41,20 +38,18 @@ class MetronomeState {
     Object? error = _sentinel,
     bool? running,
     int? scheduledBeats,
-  }) =>
-      MetronomeState(
-        bpm: bpm ?? this.bpm,
-        engineReady: engineReady ?? this.engineReady,
-        error: identical(error, _sentinel) ? this.error : error as String?,
-        running: running ?? this.running,
-        scheduledBeats: scheduledBeats ?? this.scheduledBeats,
-      );
+  }) => MetronomeState(
+    bpm: bpm ?? this.bpm,
+    engineReady: engineReady ?? this.engineReady,
+    error: identical(error, _sentinel) ? this.error : error as String?,
+    running: running ?? this.running,
+    scheduledBeats: scheduledBeats ?? this.scheduledBeats,
+  );
 
   static const _sentinel = Object();
 }
 
-final metronomeProvider =
-    NotifierProvider<MetronomeController, MetronomeState>(
+final metronomeProvider = NotifierProvider<MetronomeController, MetronomeState>(
   MetronomeController.new,
 );
 
@@ -63,7 +58,6 @@ final metronomeProvider =
 class MetronomeController extends Notifier<MetronomeState> {
   static const minBpm = 40;
   static const maxBpm = 208;
-  static const defaultBpm = 120;
 
   EngineSound? _strong;
   EngineSound? _weak;
@@ -72,7 +66,10 @@ class MetronomeController extends Notifier<MetronomeState> {
   @override
   MetronomeState build() {
     ref.onDispose(_teardown);
-    return const MetronomeState.initial();
+    // 初始 BPM 取「默认 BPM」设置(工单 20)。watch:设置变更即重置回新
+    // 默认——重置只落在空闲态(本推送路由打开期间设置不可达),重进页
+    // 由页面 warmup 重建就绪,代价可忽略。
+    return MetronomeState.initial(bpm: ref.watch(defaultBpmProvider));
   }
 
   /// 引擎预热 + 注入强弱拍音源;失败进 error 状态,页面上可见。

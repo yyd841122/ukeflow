@@ -50,13 +50,13 @@ void main() {
     matching: find.text(label),
   );
 
-  // 工单 01 验收：App 启动渲染出导航壳(工单 15 后续裁撤跟练页签,四页签)。
-  testWidgets('启动渲染四页签导航壳，初始落在调音器', (tester) async {
+  // 工单 01 验收：App 启动渲染出导航壳(工单 15 裁撤跟练页签,工单 20 增设置页签,五页签)。
+  testWidgets('启动渲染五页签导航壳，初始落在调音器', (tester) async {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    for (final label in ['调音器', '和弦', '路径', '曲库']) {
+    for (final label in ['调音器', '和弦', '路径', '曲库', '设置']) {
       expect(navLabel(label), findsOneWidget, reason: '页签 $label 应存在');
     }
     // 跟练页签不复存在:跟练是点歌后发生的活动,入口在曲库页与路径页。
@@ -67,17 +67,19 @@ void main() {
     expect(find.text('曲库'), findsOneWidget);
   });
 
-  testWidgets('点击页签可在四个页面间切换', (tester) async {
+  testWidgets('点击页签可在五个页面间切换', (tester) async {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     // 页面标记 = 各页内独有的文本(调音器麦克风卡题 / 和弦库分组头 /
-    // 路径头 / 曲库工具行,工单 15 起曲库页为真列表页兼练琴工具家)。
+    // 路径头 / 曲库工具行,工单 15 起曲库页为真列表页兼练琴工具家;
+    // 设置页 A4 行卡题,工单 20)。
     const pageMarkers = {
       '调音器': '麦克风调音',
       '和弦': '常用',
       '路径': '总进度',
       '曲库': '节拍器',
+      '设置': 'A4 参考音',
     };
     for (final entry in pageMarkers.entries) {
       await tester.tap(navLabel(entry.key));

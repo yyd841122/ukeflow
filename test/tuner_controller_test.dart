@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/tuner/tuner_recorder.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/tuner/tuner_controller.dart';
 
 /// 调音控制器:录音器一律注入假件,检测链用合成正弦 PCM16 过**真 YIN**
@@ -47,9 +48,7 @@ List<Uint8List> sineChunks(
   final total = chunks * samplesPerChunk;
   final bytes = ByteData(total * 2);
   for (var i = 0; i < total; i++) {
-    final v = (6000 *
-            math.sin(2 * math.pi * hz * i / sampleRate))
-        .round();
+    final v = (6000 * math.sin(2 * math.pi * hz * i / sampleRate)).round();
     bytes.setInt16(i * 2, v, Endian.little);
   }
   return [
@@ -65,7 +64,12 @@ void main() {
   setUp(() {
     recorder = FakeRecorder();
     container = ProviderContainer(
-      overrides: [tunerRecorderProvider.overrideWithValue(recorder)],
+      overrides: [
+        tunerRecorderProvider.overrideWithValue(recorder),
+        // A4 参考音走派生 provider(设置消费缝,工单 20):override 隔离,
+        // 不触真库(链路另一端是 drift 库,单测环境不可打开)。
+        referenceA4Provider.overrideWithValue(440.0),
+      ],
     );
     addTearDown(container.dispose);
   });

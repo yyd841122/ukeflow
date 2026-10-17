@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/rhythm/metronome_controller.dart';
 
 /// 节拍器控制器:接缝在 MetronomeState 与公开方法;
@@ -16,7 +17,11 @@ void main() {
   setUp(() {
     engine = FakeAudioEngine();
     container = ProviderContainer(
-      overrides: [audioEngineProvider.overrideWithValue(engine)],
+      overrides: [
+        audioEngineProvider.overrideWithValue(engine),
+        // 「默认 BPM」消费缝(工单 20):override 隔离,不触真库。
+        defaultBpmProvider.overrideWithValue(80),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -53,6 +58,19 @@ void main() {
     expect(container.read(metronomeProvider).running, isFalse);
   });
 
+  test('初始 BPM 取「默认 BPM」设置(工单 20)', () {
+    // 设置消费缝:override 派生 provider 隔离,不触真库。
+    // 红验证:对缺省常量 120 的旧实现,此测必红(读到 120)。
+    final c96 = ProviderContainer(
+      overrides: [
+        audioEngineProvider.overrideWithValue(engine),
+        defaultBpmProvider.overrideWithValue(96),
+      ],
+    );
+    addTearDown(c96.dispose);
+    expect(c96.read(metronomeProvider).bpm, 96, reason: '初始 BPM 随设置');
+  });
+
   test('setBpm 钳制到 40–208;未运行时不碰引擎', () {
     final c = controller();
     c.setBpm(39);
@@ -74,8 +92,11 @@ void main() {
     expect(state.running, isTrue);
     expect(state.scheduledBeats, 1, reason: 'start 即时首过');
     expect(engine.scheduleLog.single.key, 'tick_strong');
-    expect(engine.scheduleLog.single.time, const Duration(milliseconds: 900),
-        reason: '锚定引擎当前时刻,不用挂钟');
+    expect(
+      engine.scheduleLog.single.time,
+      const Duration(milliseconds: 900),
+      reason: '锚定引擎当前时刻,不用挂钟',
+    );
 
     c.toggle();
     state = container.read(metronomeProvider);
@@ -157,5 +178,4 @@ void main() {
       expect(s.engineReady, isTrue);
     });
   });
-
 }

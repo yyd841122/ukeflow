@@ -5,7 +5,7 @@ import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/practice_state.dart';
-import '../../core/ui/bpm_control.dart';
+import '../../core/ui/step_slider_control.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
 import '../../data/chord_library.dart';
@@ -140,8 +140,8 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
           ),
           const SizedBox(height: 32),
           Text('速度', style: _sectionLabelStyle),
-          BpmControl(
-            bpm: state.bpm,
+          StepSliderControl(
+            value: state.bpm,
             min: PlayPracticeController.minBpm,
             max: PlayPracticeController.maxBpm,
             onChanged: _controller.setBpm,

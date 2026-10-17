@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/model/tab_chart.dart';
 import '../../core/practice/tab_practice_state.dart';
-import '../../core/ui/bpm_control.dart';
+import '../../core/ui/step_slider_control.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
 import '../demo/demo_playback_controller.dart';
@@ -140,8 +140,8 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
           ),
           const SizedBox(height: 24),
           Text('速度', style: _sectionLabelStyle),
-          BpmControl(
-            bpm: state.bpm,
+          StepSliderControl(
+            value: state.bpm,
             min: TabPracticeController.minBpm,
             max: TabPracticeController.maxBpm,
             onChanged: _controller.setBpm,

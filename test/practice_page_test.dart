@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/demo/demo_playback_controller.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
@@ -22,6 +23,8 @@ void main() {
         overrides: [
           audioEngineProvider.overrideWithValue(engine),
           chordLibraryFixtureOverride(),
+          // 「默认 BPM」消费缝(工单 20):override 隔离,不触真库。
+          defaultBpmProvider.overrideWithValue(80),
         ],
         child: MaterialApp(home: const Scaffold(body: SizedBox.shrink())),
       ),
@@ -59,8 +62,16 @@ void main() {
     );
     expect(find.text('引擎就绪'), findsOneWidget);
     expect(find.byKey(const Key('pattern-island')), findsOneWidget);
-    expect(find.byKey(const Key('speed-slider')), findsOneWidget, reason: '空闲可定变速');
-    expect(find.byKey(const Key('reference-beat')), findsOneWidget, reason: '空闲可选参考音');
+    expect(
+      find.byKey(const Key('speed-slider')),
+      findsOneWidget,
+      reason: '空闲可定变速',
+    );
+    expect(
+      find.byKey(const Key('reference-beat')),
+      findsOneWidget,
+      reason: '空闲可选参考音',
+    );
     expect(
       tester
           .widget<FilledButton>(find.byKey(const Key('practice-start')))
@@ -174,8 +185,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('practice-pause')));
     await tester.pump();
-    final frozenChord = tester.widget<Text>(find.byKey(const Key('chord-name'))).data;
-    final frozenBeat = tester.widget<Text>(find.byKey(const Key('beat-number'))).data;
+    final frozenChord = tester
+        .widget<Text>(find.byKey(const Key('chord-name')))
+        .data;
+    final frozenBeat = tester
+        .widget<Text>(find.byKey(const Key('beat-number')))
+        .data;
 
     await advanceAndPump(tester, 2000); // 暂停期间引擎照走
     expect(
@@ -183,7 +198,10 @@ void main() {
       frozenChord,
       reason: '暂停画面冻结',
     );
-    expect(tester.widget<Text>(find.byKey(const Key('beat-number'))).data, frozenBeat);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('beat-number'))).data,
+      frozenBeat,
+    );
 
     await tester.tap(find.byKey(const Key('practice-pause'))); // 继续
     await advanceAndPump(tester, 2000);
@@ -204,7 +222,11 @@ void main() {
     await tester.tap(find.byKey(const Key('practice-restart')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
-    expect(find.byKey(const Key('prep-count')), findsOneWidget, reason: '重新数预备拍');
+    expect(
+      find.byKey(const Key('prep-count')),
+      findsOneWidget,
+      reason: '重新数预备拍',
+    );
     expect(tester.widget<Text>(find.byKey(const Key('prep-count'))).data, '4');
   });
 
@@ -214,11 +236,17 @@ void main() {
     await tester.tap(find.byKey(const Key('practice-start')));
     await advanceAndPump(tester, 4200); // 曲内 1200ms:第一行、Am
 
-    expect(find.byKey(const Key('preview-past')), findsNothing,
-        reason: '右侧俄罗斯方块栏已撤');
+    expect(
+      find.byKey(const Key('preview-past')),
+      findsNothing,
+      reason: '右侧俄罗斯方块栏已撤',
+    );
     expect(find.byKey(const Key('preview-upcoming-0')), findsNothing);
-    expect(find.byKey(const Key('lyric-strums')), findsNothing,
-        reason: '随行扫弦已撤(歌词对齐方案暂缓)');
+    expect(
+      find.byKey(const Key('lyric-strums')),
+      findsNothing,
+      reason: '随行扫弦已撤(歌词对齐方案暂缓)',
+    );
   });
 
   testWidgets('运行面板:参考音可切示范扫弦(拨弦声入窗)、变速滑杆生效', (tester) async {
@@ -243,7 +271,10 @@ void main() {
     );
 
     // 变速滑杆:点中点 = 75%,运行中即时重编译(视觉不炸即可,编译已测)。
-    await tester.tap(find.byKey(const Key('speed-slider')), warnIfMissed: false);
+    await tester.tap(
+      find.byKey(const Key('speed-slider')),
+      warnIfMissed: false,
+    );
     await tester.pump();
     expect(container.read(playPracticeProvider).speed, 0.75);
     expect(tester.takeException(), isNull);
@@ -263,7 +294,11 @@ void main() {
       findsOneWidget,
       reason: '曲末自动回闲',
     );
-    expect(engine.scheduleLog, hasLength(20), reason: '预备 4 声 + 曲内 16 声,曲末无幻拍声');
+    expect(
+      engine.scheduleLog,
+      hasLength(20),
+      reason: '预备 4 声 + 曲内 16 声,曲末无幻拍声',
+    );
     expect(
       engine.scheduleLog.where((e) => e.key == 'tick_count'),
       hasLength(4),
@@ -328,7 +363,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        tester.widget<OutlinedButton>(find.byKey(const Key('demo-toggle'))).onPressed,
+        tester
+            .widget<OutlinedButton>(find.byKey(const Key('demo-toggle')))
+            .onPressed,
         isNull,
         reason: '引擎未就绪不可试听',
       );
@@ -353,8 +390,9 @@ void main() {
       expect(demoState(tester).status, DemoPlaybackStatus.idle);
       final nowAtStop = engine.engineTime();
       expect(
-        engine.scheduleLog.where((c) =>
-            c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtStop),
+        engine.scheduleLog.where(
+          (c) => c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtStop,
+        ),
         isEmpty,
         reason: '未响的弦停净,无残留声',
       );
@@ -395,8 +433,10 @@ void main() {
       );
       final nowAtSwitch = engine.engineTime();
       expect(
-        engine.scheduleLog.where((c) =>
-            c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtSwitch),
+        engine.scheduleLog.where(
+          (c) =>
+              c.key.startsWith('pluck_') && !c.stopped && c.time > nowAtSwitch,
+        ),
         isEmpty,
         reason: '跟练起跑前试听未响弦已停',
       );

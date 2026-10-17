@@ -6,6 +6,7 @@ import 'package:pitch_detector_dart/pitch_detector.dart';
 
 import '../../core/tuner/tuner_filter.dart';
 import '../../core/tuner/tuner_recorder.dart';
+import '../../data/settings_providers.dart';
 
 /// 调音器页状态。
 class TunerState {
@@ -42,7 +43,9 @@ class TunerState {
   }) => TunerState(
     listening: listening ?? this.listening,
     permissionDenied: permissionDenied ?? this.permissionDenied,
-    reading: identical(reading, _sentinel) ? this.reading : reading as TunerReading?,
+    reading: identical(reading, _sentinel)
+        ? this.reading
+        : reading as TunerReading?,
     error: identical(error, _sentinel) ? this.error : error as String?,
   );
 
@@ -163,6 +166,7 @@ class TunerController extends Notifier<TunerState> {
           freq: result.pitched ? result.pitch : null,
           probability: result.probability,
           at: now.difference(_sessionStart),
+          a4: ref.read(referenceA4Provider),
         ),
       );
     } finally {

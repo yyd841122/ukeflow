@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/tuner/tuner_recorder.dart';
+import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/features/tuner/tuner_page.dart';
 
 import 'tuner_controller_test.dart';
@@ -14,7 +15,7 @@ void main() {
   late FakeRecorder recorder;
   late FakeAudioEngine engine;
 
-  Future<void> pumpPage(WidgetTester tester) async {
+  Future<void> pumpPage(WidgetTester tester, {double? a4}) async {
     recorder = FakeRecorder();
     engine = FakeAudioEngine();
     await tester.pumpWidget(
@@ -22,6 +23,7 @@ void main() {
         overrides: [
           audioEngineProvider.overrideWithValue(engine),
           tunerRecorderProvider.overrideWithValue(recorder),
+          if (a4 != null) referenceA4Provider.overrideWithValue(a4),
         ],
         child: const MaterialApp(home: Scaffold(body: TunerPage())),
       ),
@@ -53,26 +55,35 @@ void main() {
 
     // 默认目标 = G(选中态 primaryContainer);点 A 后选中迁移。
     final selectedBefore = tester
-        .widgetList<FilledButton>(find.descendant(
-          of: find.byKey(const Key('target-row')),
-          matching: find.byType(FilledButton),
-        ))
+        .widgetList<FilledButton>(
+          find.descendant(
+            of: find.byKey(const Key('target-row')),
+            matching: find.byType(FilledButton),
+          ),
+        )
         .toList();
     expect(selectedBefore, hasLength(4));
-    expect(selectedBefore[0].style?.backgroundColor, isNotNull,
-        reason: '默认 G 弦为选中样式');
+    expect(
+      selectedBefore[0].style?.backgroundColor,
+      isNotNull,
+      reason: '默认 G 弦为选中样式',
+    );
 
     await tester.tap(targetLabel('A'));
     await tester.pump();
     final after = tester
-        .widgetList<FilledButton>(find.descendant(
-          of: find.byKey(const Key('target-row')),
-          matching: find.byType(FilledButton),
-        ))
+        .widgetList<FilledButton>(
+          find.descendant(
+            of: find.byKey(const Key('target-row')),
+            matching: find.byType(FilledButton),
+          ),
+        )
         .toList();
-    expect(after[3].style?.backgroundColor,
-        selectedBefore[0].style?.backgroundColor,
-        reason: 'A 弦获得原 G 弦的选中底色');
+    expect(
+      after[3].style?.backgroundColor,
+      selectedBefore[0].style?.backgroundColor,
+      reason: 'A 弦获得原 G 弦的选中底色',
+    );
   });
 
   testWidgets('开始后拾音:440Hz 显示 A4,选 A 弦出已调准', (tester) async {
@@ -118,8 +129,10 @@ void main() {
     await tester.tap(find.text('停止'));
     await tester.pumpAndSettle();
     expect(recorder.stopCalls, 1);
-    expect(tester.widget<Text>(find.byKey(const Key('note-name'))).data,
-        isNot('A4'));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('note-name'))).data,
+      isNot('A4'),
+    );
   });
 
   testWidgets('空弦试音仍在:点弦名拨响标准音', (tester) async {
@@ -128,6 +141,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(engine.loadedKeys, hasLength(1));
     expect(engine.loadedKeys.single, startsWith('pluck_391.99'));
+  });
+
+  testWidgets('A4=432(工单 20 设置):目标频率/判准/试音/音名同源换 432 系', (tester) async {
+    await pumpPage(tester, a4: 432.0);
+
+    // 目标行 Hz 标注换 432 系:G 弦 384.87 → 385(其余弦同步换,不逐个钉)。
+    expect(find.text('385Hz'), findsOneWidget, reason: '目标频率随 A4 换算');
+
+    // 空弦试音同源:拨 G 响 432 系标准音。
+    await tester.tap(pluckLabel('G'));
+    await tester.pumpAndSettle();
+    expect(
+      engine.loadedKeys.single,
+      startsWith('pluck_384.86'),
+      reason: '试音音源与目标同源',
+    );
+
+    // 判准同源:432 系调准的 G 弦音(384.87Hz)过 ±5¢ 判准;读数音名按
+    // 432 基准标注为 G4(旧 440 系下此音距 G 目标 -31¢,不得亮已调准)。
+    await tester.tap(find.text('开始调音'));
+    await tester.pump();
+    await pluckTone(tester, 384.87);
+    expect(tester.widget<Text>(find.byKey(const Key('note-name'))).data, 'G4');
+    expect(
+      find.byKey(const Key('in-tune')),
+      findsOneWidget,
+      reason: '432 系调准音在 432 目标下应判准',
+    );
   });
 
   testWidgets('App 退后台即停麦(隐私:拾音只在页可见时进行)', (tester) async {

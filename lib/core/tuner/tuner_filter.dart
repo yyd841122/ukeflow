@@ -57,6 +57,7 @@ class TunerFilter {
     required double? freq,
     required double probability,
     required Duration at,
+    double a4 = referenceA4,
   }) {
     final valid =
         freq != null &&
@@ -66,12 +67,11 @@ class TunerFilter {
     if (!valid) return null;
 
     final f = freq;
-    final stale =
-        _lastValidAt == null || at - _lastValidAt! > holdDuration;
+    final stale = _lastValidAt == null || at - _lastValidAt! > holdDuration;
     _smoothed = stale ? f : _smoothed! + alpha * (f - _smoothed!);
     _lastValidAt = at;
 
-    final note = nearestNote(_smoothed!);
+    final note = nearestNote(_smoothed!, a4: a4);
     return TunerReading(
       freq: _smoothed!,
       midi: note.midi,
