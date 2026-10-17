@@ -4,11 +4,11 @@
 
 **Blocked by:** 15 曲库页
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 图片谱可入库、浏览、缩放平移流畅
-- [ ] 曲库标识"只读",点击不出现跟练入口
-- [ ] 相册选图的权限流程正确(拒绝授权有引导态)
+- [x] 图片谱可入库、浏览、缩放平移流畅
+- [x] 曲库标识"只读",点击不出现跟练入口
+- [x] 相册选图的权限流程正确(拒绝授权有引导态)
 
 ## Comments
 
@@ -16,3 +16,4 @@
 - 2026-10-17 (本票会话): **双轴评审(/code-review Standards+Spec)结果与处置**。Standards 零硬违规;修七处:PNG/文本测试素材三处手拼归 helpers、store() 中间人删除(UI 直调 DAO,同 text_import 形)、落库失败补 try/catch+可读引导、CustomImageChartEntry→UserImageChartEntry(cardKey custom-image-→user-image-,不借「自建谱(Custom Chart)」英文,GLOSSARY 补「用户图片谱」词条)、命名对话框控制器归 State 管(whenComplete 收早了,退场动画期 used-after-disposed,测试抓出)、注释漂移两处(三类→四类/「归工单 18」已落地)、viewer errorBuilder 补 debugPrint(缺陷可见姿态)。Spec 轴修两处:失败文案删「若弹出过权限拒绝请去系统设置」(与永不申请权限的结构事实自相矛盾,指引不可能之事)、ImagePicked.size 死载荷摘除。保留两项:sealed ImageChartEntry(与 CustomStrumEntry 同族惯例,零成本);相册图片同名重复静默保留(照片天然重名如 IMG_xxxx,无覆盖语义,与文本谱同名处置弹窗不同路,是有意差异)。
 - 2026-10-17 (本票会话): **刻意范围**:①「缩放平移流畅」无自动化覆盖——手势体验归真机验收(下条机检),自动化只锁渲染就绪/只读徽标/无跟练入口/坏图可读报错;②测试环境三连坑已沉淀记忆(FakeAsync 区引擎级图片解码不出帧、图片缓存跨测试串场假绿、真平台通道挂死非异常——fakeasync-image-decode-and-channel-tests);③LibraryContent 常驻整块图片字节,v1 量级可容忍,多图大图时再议改按需读 BLOB。
 - 2026-10-17 (本票会话): **装机机检记录(部分)+ 边界说明**。OPPO PCAM00 无线 adb 覆盖安装新构建 **Success**——与票 15 同路径,真机在库数据上跑通 schema 4→5 迁移(image_charts 幂等 createAll 无副作用);冷启后 `logcat -d` **零 E/flutter、零 FATAL**(两轮各验一次)。导航观感(图片谱区渲染、点卡进查看器、缩放平移)**脚本化未能完成**:该机 ColorOS 锁屏策略极激进(秒睡+瞬息回锁+免打扰充电屏,`cmd statusbar collapse`/BACK 均无法穿透 NotificationShade,PIN 不可脚本化,两轮设备端单脚本均被锁屏挡住——截图证实停在锁屏通知面板)。此部分**并入用户真机验收清单**:①曲库页滚到底有「图片谱」区,「Big Big World(图片版)」卡片带「图片谱 · 只读」;②点卡进查看器,标题旁「只读」徽标,双指缩放平移流畅度过目;③「相册选图」选一张真图,命名对话框预填文件名,确认后自动入列;④全程应无任何跟练入口。设备痕迹已清(/data/local/tmp 脚本与截图)。
+- 2026-10-17 (本票会话): **用户真机验收通过,转 done**。四项全过:图片谱区+「只读」标识、查看器缩放平移、相册选图→命名→自动入列、全程无跟练入口。
