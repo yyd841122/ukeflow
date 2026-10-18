@@ -1,6 +1,6 @@
 # UkeFlow v1 架构与里程碑
 
-依据：GLOSSARY.md（术语）、docs/adr/0001~0006（已定决策）、docs/research/similar-projects.md（轮子调研）、spikes/tech_validation（已验证）。
+依据：GLOSSARY.md（术语）、docs/adr/0001~0006（已定决策）、docs/research/similar-projects.md（轮子调研）。技术押注的 spike 验证记录已随工单 23 归档删除，结论沉淀于 ADR-0005/0006。
 
 ## 技术栈（spike 验证后锁定）
 

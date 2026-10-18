@@ -4,7 +4,7 @@
 
 - 术语与领域语言见 `GLOSSARY.md`，方向决策见 `docs/adr/`
 - 架构与里程碑见 `docs/architecture.md`
-- Android 先行（WSL2 下真机无线调试见 `spikes/tech_validation/README.md`）
+- Android 先行（WSL2 下真机无线调试见 `docs/device-connection.md`）
 
 ## 命令
 
