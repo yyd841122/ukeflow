@@ -51,6 +51,10 @@ lib/
 │                     # 链接/Cifra Club 导入归工单 17,同落此处
 ```
 
+## 启动路径（性能工作先读这里）
+
+`main()` 零预热直接 runApp;音频引擎**全懒**——四个会话控制器(节拍器/节奏型/弹唱/指弹)的 `ensureInitialized` 才触 Soloud 初始化,启动路径不碰音频。导航壳页签**懒挂载**(工单 23):IndexedStack 只在首访时建真页,未访问页占位——和弦库 JSON、打卡库、曲库资产都随首访走,启动窗里只有调音页;`databaseWarmupProvider` 异步预热开库,离帧路径。冷启首帧的 ~480ms 是 Flutter 引擎+老设备固定开销(`main` 之前),app 侧地板。
+
 ## 同步引擎设计（产品核心，ADR-0005 约束）
 
 - **唯一时钟** = `SoLoud.instance.getEngineTime()`。禁止挂钟参与任何音画对齐。
