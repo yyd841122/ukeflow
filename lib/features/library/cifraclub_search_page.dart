@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/ui/centered_hint.dart';
 import '../../data/chord_library.dart';
 import 'cifraclub_driver.dart';
 import 'cifraclub_import.dart';
@@ -199,22 +200,12 @@ class _CifraClubSearchPageState extends ConsumerState<CifraClubSearchPage> {
   }
 
   Widget _buildView(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     switch (_view) {
       case _SearchingView():
         return const SizedBox.shrink(); // 外层已画搜索中转圈
       case _IdleView():
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Text(
-              '输入歌名,在 Cifra Club 里搜谱。\n点结果直接导入,不用进网站。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
+        return const CenteredHint(
+          message: '输入歌名,在 Cifra Club 里搜谱。\n点结果直接导入,不用进网站。',
         );
       case _ResultsView(:final query, :final hits):
         return ListView.separated(
@@ -236,31 +227,14 @@ class _CifraClubSearchPageState extends ConsumerState<CifraClubSearchPage> {
           },
         );
       case _EmptyView(:final query):
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Text(
-              '没有找到「$query」。\n换个歌名试试,或回曲库用文本导入。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
+        return CenteredHint(
+          message: '没有找到「$query」。',
+          detail: '换个歌名试试,或回曲库用文本导入。',
         );
       case _FailureView(:final query):
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Text(
-              '搜索「$query」失败——站点可能没响应或改版了。\n'
-              '稍等重试;也可以点右上角进原站手动找,或回曲库用文本导入。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
+        return CenteredHint(
+          message: '搜索「$query」失败——站点可能没响应或改版了。',
+          detail: '稍等重试;也可以点右上角进原站手动找,或回曲库用文本导入。',
         );
     }
   }

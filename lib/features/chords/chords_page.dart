@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/ui/centered_hint.dart';
 import '../../core/ui/load_error_view.dart';
 import '../../data/chord_library.dart';
 import 'chord_detail_page.dart';
@@ -83,14 +84,7 @@ class _BrowseView extends StatelessWidget {
           ),
           Expanded(
             child: results.isEmpty
-                ? Center(
-                    child: Text(
-                      '没有匹配「$query」的和弦',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    ),
-                  )
+                ? CenteredHint(message: '没有匹配「$query」的和弦')
                 : _ChordList(results: results),
           ),
         ],

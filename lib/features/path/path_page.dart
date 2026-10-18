@@ -7,6 +7,7 @@ import '../../core/model/builtin_learning_path.dart';
 import '../../core/model/checkin.dart';
 import '../../core/model/learning_path.dart';
 import '../../data/database.dart' show CheckIn;
+import '../../core/ui/load_error_view.dart';
 import '../../data/providers.dart';
 import 'task_target_chips.dart';
 
@@ -81,7 +82,9 @@ class _PathPageState extends ConsumerState<PathPage>
     final checkInsAsync = ref.watch(checkInsProvider);
     return checkInsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _ErrorView(error: error),
+      // 共享报错壳(工单23 收拢,与曲库/和弦库同壳;此处全页居中)。
+      error: (error, _) =>
+          Center(child: LoadErrorView(title: '打卡数据加载失败', error: error)),
       data: (checkIns) => _PathView(
         checkIns: checkIns,
         onCheckIn: _checkInToday,
@@ -636,29 +639,4 @@ class _DayDetailPage extends StatelessWidget {
   }
 }
 
-/// 打卡流失败的可见报错：原文直接展示，不带病进路径页。
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error});
 
-  final Object error;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: scheme.error),
-            const SizedBox(height: 12),
-            Text('打卡数据加载失败', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('$error', textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-}

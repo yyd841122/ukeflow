@@ -220,6 +220,27 @@ void main() {
     expect(find.text('打卡'), findsOneWidget, reason: '仍在今日任务卡,可重试');
   });
 
+  testWidgets('打卡流加载失败:可见报错,原文直接展示,不带病进路径(工单23)', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          checkInsProvider.overrideWith(
+            (ref) => Stream<List<CheckIn>>.error(StateError('打卡流炸了(注入)')),
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: PathPage())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('打卡数据加载失败'), findsOneWidget);
+    expect(find.textContaining('打卡流炸了(注入)'), findsOneWidget);
+  });
+
   testWidgets('直达:今日任务卡显示目标 chips,点和弦 chip 进和弦详情(工单22)', (tester) async {
     await db.checkInsDao.checkIn(
       day: 1,
