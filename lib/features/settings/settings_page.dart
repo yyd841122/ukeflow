@@ -14,13 +14,13 @@ import 'backup_flow.dart';
 /// 改动即时写透(状态+DAO,见 [AppSettingsController]):无保存钮,
 /// 重启仍在。滑动连发即多次单行 upsert,量级无害。
 ///
-/// 备份与恢复(工单 21):全量数据导出为单个 JSON 文件(系统分享面板),
-/// 导入恢复(导入即覆盖,确认对话框明示不可撤销)。流程编排与平台
-/// 交互在 [BackupFlow](picker/share 注入缝,同工单 18 相册选图模式)。
+/// 备份与恢复(工单 21):全量数据导出为单个 JSON 文件(系统保存框
+/// 选目录落盘),导入恢复(导入即覆盖,确认对话框明示不可撤销)。
+/// 流程编排与平台交互在 [BackupFlow](picker/save 注入缝,同工单 18 相册选图模式)。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key, this.backupFlow});
 
-  /// 备份流程注入缝(测试给假 picker/share;生产走系统选择器/分享面板)。
+  /// 备份流程注入缝(测试给假 picker/save;生产走系统选择器/保存框)。
   final BackupFlow? backupFlow;
 
   @override
@@ -106,29 +106,22 @@ class SettingsPage extends ConsumerWidget {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _exportBackup(context, ref),
-                        icon: const Icon(Icons.ios_share),
+                        icon: const Icon(Icons.save_alt),
                         label: const Text('导出备份'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _exportToLocal(context, ref),
-                        icon: const Icon(Icons.save_alt),
-                        label: const Text('保存到本地'),
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.error,
+                        ),
+                        onPressed: () => _importBackup(context, ref),
+                        icon: const Icon(Icons.restore),
+                        label: const Text('导入备份'),
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                  onPressed: () => _importBackup(context, ref),
-                  icon: const Icon(Icons.restore),
-                  label: const Text('导入备份'),
                 ),
               ],
             ),
@@ -138,7 +131,8 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  /// 导出:库全量 → JSON → 系统分享面板。await 期间不碰 ref/context——
+  /// 导出:库全量 → JSON → 系统保存框由用户选目录落盘(SAF,免存储
+  /// 权限)。await 期间不碰 ref/context——
   /// 服务与 messenger 在等待前取定,反馈走 messenger(异步回调纪律)。
   Future<void> _exportBackup(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -148,39 +142,16 @@ class SettingsPage extends ConsumerWidget {
       final json = await service.collectJson();
       final outcome = await flow.export(json);
       switch (outcome) {
-        case BackupExported():
-          _show(messenger, '备份已生成,请在分享面板中保存或发送');
-        case BackupExportDismissed():
-          break; // 用户取消分享:静默,不噪。
-        case BackupExportFailed(:final message):
+        case BackupSaved():
+          _show(messenger, '备份已导出,可在文件管理器中查看');
+        case BackupSaveCancelled():
+          break; // 用户在保存框取消:静默。
+        case BackupSaveFailed(:final message):
           _show(messenger, message);
       }
     } on Object catch (error, stackTrace) {
       debugPrint('UkeFlow: 备份导出失败 $error\n$stackTrace');
       _show(messenger, '备份导出失败——请再试一次');
-    }
-  }
-
-  /// 保存到本地:库全量 → JSON → 系统保存框由用户选目录落盘(SAF,
-  /// 免存储权限)。await 期间不碰 ref/context,反馈走预取的 messenger。
-  Future<void> _exportToLocal(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final flow = backupFlow ?? BackupFlow();
-    final service = ref.read(backupServiceProvider);
-    try {
-      final json = await service.collectJson();
-      final outcome = await flow.exportToLocal(json);
-      switch (outcome) {
-        case BackupSaved():
-          _show(messenger, '已保存到本地,可在文件管理器中查看');
-        case BackupSaveFailed(:final message):
-          _show(messenger, message);
-        case BackupSaveCancelled():
-          break; // 用户在保存框取消:静默。
-      }
-    } on Object catch (error, stackTrace) {
-      debugPrint('UkeFlow: 备份保存失败 $error\n$stackTrace');
-      _show(messenger, '备份保存失败——请再试一次');
     }
   }
 

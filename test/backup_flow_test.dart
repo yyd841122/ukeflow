@@ -6,9 +6,9 @@ import 'package:ukeflow/core/backup/backup_doc.dart';
 import 'package:ukeflow/core/model/checkin.dart';
 import 'package:ukeflow/features/settings/backup_flow.dart';
 
-/// 工单 21 平台缝(同工单 18 image_pick_flow 模式):pick/share 注入,
+/// 工单 21 平台缝(同工单 18 image_pick_flow 模式):pick/save 注入,
 /// 测试不碰平台通道。取消静默、坏文件可读失败、好文件出待还原文档、
-/// 导出走 share 缝带文件名与字节。
+/// 导出走 save 缝(系统保存框)带文件名与字节。
 void main() {
   final validJson = jsonEncode(
     BackupDoc(
@@ -62,56 +62,7 @@ void main() {
     expect(ready.doc.checkIns.single.day, 1);
   });
 
-  test('导出:share 缝收到默认文件名(带日期)与 UTF-8 字节', () async {
-    String? sharedName;
-    Uint8List? sharedBytes;
-    final flow = BackupFlow(
-      share: (name, bytes) async {
-        sharedName = name;
-        sharedBytes = bytes;
-        return BackupShareResult.shared;
-      },
-    );
-
-    final outcome = await flow.export(validJson);
-
-    expect(outcome, isA<BackupExported>());
-    expect(sharedName, matches(RegExp(r'^ukeflow-backup-\d{4}-\d{2}-\d{2}\.json$')));
-    expect(utf8.decode(sharedBytes!), validJson);
-  });
-
-  test('导出被用户取消(分享面板 dismissed):独立结果,不冒充成功', () async {
-    final flow = BackupFlow(
-      share: (name, bytes) async => BackupShareResult.dismissed,
-    );
-
-    final outcome = await flow.export(validJson);
-
-    expect(outcome, isA<BackupExportDismissed>());
-  });
-
-  test('导出结果不可知(旧设备 unavailable):按已生成反馈', () async {
-    final flow = BackupFlow(
-      share: (name, bytes) async => BackupShareResult.unavailable,
-    );
-
-    final outcome = await flow.export(validJson);
-
-    expect(outcome, isA<BackupExported>());
-  });
-
-  test('导出失败(平台层抛错):可读失败不崩溃', () async {
-    final flow = BackupFlow(
-      share: (name, bytes) async => throw Exception('分享面板没了'),
-    );
-
-    final outcome = await flow.export(validJson);
-
-    expect(outcome, isA<BackupExportFailed>());
-    expect((outcome as BackupExportFailed).message, isNotEmpty);
-  });
-
-  test('保存到本地:save 缝收到文件名与字节,返回已保存', () async {
+  test('导出:save 缝(系统保存框)收到文件名与字节,返回已保存', () async {
     String? savedName;
     Uint8List? savedBytes;
     final flow = BackupFlow(
@@ -122,27 +73,27 @@ void main() {
       },
     );
 
-    final outcome = await flow.exportToLocal(validJson);
+    final outcome = await flow.export(validJson);
 
     expect(outcome, isA<BackupSaved>());
     expect(savedName, matches(RegExp(r'^ukeflow-backup-\d{4}-\d{2}-\d{2}\.json$')));
     expect(utf8.decode(savedBytes!), validJson);
   });
 
-  test('保存到本地:用户在保存框取消,独立结果不冒充成功', () async {
+  test('导出:用户在保存框取消,独立结果不冒充成功', () async {
     final flow = BackupFlow(save: (name, bytes) async => const BackupSaveCancelled());
 
-    final outcome = await flow.exportToLocal(validJson);
+    final outcome = await flow.export(validJson);
 
     expect(outcome, isA<BackupSaveCancelled>());
   });
 
-  test('保存到本地:平台层抛错,可读失败不崩溃', () async {
+  test('导出:平台层抛错,可读失败不崩溃', () async {
     final flow = BackupFlow(
       save: (name, bytes) async => throw Exception('存储没了'),
     );
 
-    final outcome = await flow.exportToLocal(validJson);
+    final outcome = await flow.export(validJson);
 
     expect(outcome, isA<BackupSaveFailed>());
     expect((outcome as BackupSaveFailed).message, isNotEmpty);
