@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/providers.dart';
 import '../../core/model/builtin_strum_patterns.dart';
+import '../../core/model/strum_pattern.dart';
 import '../../core/practice/rhythm_state.dart';
 import '../../core/ui/arrow_strip.dart';
 import '../../core/ui/step_slider_control.dart';
@@ -17,7 +18,10 @@ import 'rhythm_trainer_controller.dart';
 /// [rhythmPracticeAt] 纯函数算出(工单 08 练习状态函数的最小先行版),
 /// 页内无任何挂钟;轮询随运行启停,空闲页零定时器。
 class RhythmTrainerPage extends ConsumerStatefulWidget {
-  const RhythmTrainerPage({super.key});
+  const RhythmTrainerPage({super.key, this.initialPattern});
+
+  /// 进页即选的节奏型(工单 22 路径页带型直达);空 = 保持现状/默认。
+  final StrumPattern? initialPattern;
 
   @override
   ConsumerState<RhythmTrainerPage> createState() => _RhythmTrainerPageState();
@@ -40,7 +44,14 @@ class _RhythmTrainerPageState extends ConsumerState<RhythmTrainerPage> {
     _controller = ref.read(rhythmTrainerProvider.notifier);
     // 引擎预热;离开页面即停:不留后台节拍声。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _controller.warmup();
+      if (!mounted) return;
+      // 带型直达:进页即定型再预热(Riverpod 3 禁止 build 生命周期内改
+      // 状态,与 warmup 同一个帧末回调);同型重设无害,不做值比较。
+      final initial = widget.initialPattern;
+      if (initial != null) {
+        _controller.setPattern(initial);
+      }
+      _controller.warmup();
     });
   }
 

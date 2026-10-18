@@ -8,10 +8,11 @@ import '../../core/model/checkin.dart';
 import '../../core/model/learning_path.dart';
 import '../../data/database.dart' show CheckIn;
 import '../../data/providers.dart';
+import 'task_target_chips.dart';
 
 /// 路径页：30 天练习路径全貌 + 今日任务 + 打卡（工单 14）。
 /// 路径推进按完成顺序（spec 故事 37）：今日任务 = 第一个未打卡天；
-/// 任务目标以文字呈现，一键直达归工单 22。
+/// 任务目标可一键直达（工单 22），缺失降级见 TaskTargetChips。
 class PathPage extends ConsumerStatefulWidget {
   const PathPage({super.key});
 
@@ -157,10 +158,9 @@ class _PathView extends StatelessWidget {
       for (final row in checkIns) row.day: row.checkedOnDay,
     };
     final nextDay = builtinLearningPath.nextTaskDay(checkedDays);
-    final streak = streakDays(
-      checkedOnDays: {for (final row in checkIns) row.checkedOnDay},
-      today: epochDayOf(DateTime.now()),
-    );
+    final checkedOnDays = {for (final row in checkIns) row.checkedOnDay};
+    final today = epochDayOf(DateTime.now());
+    final streak = streakDays(checkedOnDays: checkedOnDays, today: today);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
@@ -202,6 +202,12 @@ class _PathView extends StatelessWidget {
             task: builtinLearningPath.tasks[nextDay - 1],
             onCheckIn: onCheckIn,
             checking: checking,
+            // 打卡前预告种类(工单 22 补卡体验):隔日以上回来,钮标「补卡」,
+            // 与写入路径 _checkInToday 的 checkInKindFor 同一判定。
+            nextKind: checkInKindFor(
+              checkedOnDays: checkedOnDays,
+              today: today,
+            ),
           )
         else
           _GraduatedCard(streak: streak),
@@ -289,12 +295,13 @@ class _ProgressHeader extends StatelessWidget {
   }
 }
 
-/// 今日任务卡：学什么 + 练什么 + 打卡钮。
+/// 今日任务卡：学什么 + 练什么 + 直达目标 + 打卡钮。
 class _TodayTaskCard extends StatelessWidget {
   const _TodayTaskCard({
     required this.task,
     required this.onCheckIn,
     required this.checking,
+    required this.nextKind,
   });
 
   final DailyTask task;
@@ -303,9 +310,13 @@ class _TodayTaskCard extends StatelessWidget {
   /// 写入进行中:打卡钮禁用(双击防抖)。
   final bool checking;
 
+  /// 本次打卡的预告种类(补卡体验,工单 22):隔日以上=补卡。
+  final CheckInKind nextKind;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final madeUp = nextKind == CheckInKind.madeUp;
     return Card(
       margin: EdgeInsets.zero,
       color: scheme.primaryContainer,
@@ -330,14 +341,32 @@ class _TodayTaskCard extends StatelessWidget {
             _LabeledText(label: '学', text: task.learn),
             const SizedBox(height: 8),
             _LabeledText(label: '练', text: task.practice),
+            const SizedBox(height: 8),
+            TaskTargetChips(targets: task.targets),
             const SizedBox(height: 16),
+            if (madeUp) ...[
+              Text(
+                '隔了几日,这次打卡记为补卡',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 key: const Key('path-checkin'),
                 onPressed: checking ? null : onCheckIn,
+                style: madeUp
+                    // 补卡次次与全貌「补卡」徽章同色(tertiary),性质一眼可辨。
+                    ? FilledButton.styleFrom(
+                        backgroundColor: scheme.tertiary,
+                        foregroundColor: scheme.onTertiary,
+                      )
+                    : null,
                 icon: const Icon(Icons.flag),
-                label: const Text('打卡'),
+                label: Text(madeUp ? '补卡' : '打卡'),
               ),
             ),
           ],
@@ -459,8 +488,14 @@ class _DayTile extends StatelessWidget {
         scheme.outline,
       ),
     };
+    final today = state == _DayState.today;
     final tile = ListTile(
       dense: true,
+      // 视觉收尾(工单 22):今日任务行淡色高亮,一眼定位全貌中的「现在」。
+      tileColor: today ? scheme.secondaryContainer.withValues(alpha: 0.4) : null,
+      shape: today
+          ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+          : null,
       leading: CircleAvatar(
         radius: 14,
         backgroundColor: circleColor,
@@ -475,11 +510,20 @@ class _DayTile extends StatelessWidget {
           color: state == _DayState.upcoming ? scheme.onSurfaceVariant : null,
         ),
       ),
-      trailing: Text(
-        badgeText,
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: badgeColor),
+      // 状态徽章=淡底胶囊(视觉收尾:裸文字不醒目,补卡/完成一眼可分)。
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: badgeColor.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: badgeColor.withValues(alpha: 0.55)),
+        ),
+        child: Text(
+          badgeText,
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: badgeColor),
+        ),
       ),
     );
     if (state != _DayState.checked || kind == null || checkedOnDay == null) {
@@ -518,6 +562,9 @@ class _DayDetailPage extends StatelessWidget {
     return '${date.year}-${two(date.month)}-${two(date.day)}';
   }
 
+  /// 日期名随种类(工单 22 补卡体验收口):补卡天记的是补练日期。
+  String get _dateCaption => kind == CheckInKind.madeUp ? '补练日期' : '打卡日期';
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -548,7 +595,7 @@ class _DayDetailPage extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '打卡日期 $_dateLabel',
+                        '$_dateCaption $_dateLabel',
                         style: Theme.of(context).textTheme.labelMedium
                             ?.copyWith(color: scheme.onPrimaryContainer),
                       ),
@@ -581,6 +628,8 @@ class _DayDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(task.practice),
+          const SizedBox(height: 16),
+          TaskTargetChips(targets: task.targets),
         ],
       ),
     );

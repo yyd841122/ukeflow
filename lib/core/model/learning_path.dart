@@ -3,8 +3,10 @@
 // 第一个未打卡的每日任务,见 [PracticePath.nextTaskDay]。
 // 内置内容坏数据当场抛 [PathDataError],不带病入库(同 ChordDataError 哲学)。
 
+import 'task_target.dart';
+
 /// 每日任务:路径中一天的学习单元(学什么 + 练什么 + 打卡)。
-// 任务目标 v1 以文字呈现,一键直达归工单 22。
+/// 可直达目标见 [targets](工单 22)。
 class DailyTask {
   const DailyTask({
     required this.day,
@@ -12,6 +14,7 @@ class DailyTask {
     required this.title,
     required this.learn,
     required this.practice,
+    this.targets = const [],
   });
 
   /// 天数,从 1 起连续递增。
@@ -28,6 +31,10 @@ class DailyTask {
 
   /// 练什么(今日练习动作,指向 App 内具体页面或曲目)。
   final String practice;
+
+  /// 直达目标(工单 22):学/练文案点名的和弦/节奏型/曲目,可一键
+  /// 直达对应页;缺省 = 当日无可直达目标(文案指名才配链,守护测试锁)。
+  final List<TaskTarget> targets;
 }
 
 /// 一条练习路径:逐日任务序列。
@@ -51,6 +58,10 @@ class PracticePath {
         if (text.trim().isEmpty) {
           throw PathDataError('第 ${task.day} 天的$label文案为空');
         }
+      }
+      final targetLabels = task.targets.map((t) => t.label).toSet();
+      if (targetLabels.length != task.targets.length) {
+        throw PathDataError('第 ${task.day} 天的直达目标标签重复');
       }
     }
   }

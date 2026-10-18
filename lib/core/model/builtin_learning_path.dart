@@ -1,4 +1,5 @@
 import 'learning_path.dart';
+import 'task_target.dart';
 
 /// 内置 30 天练习路径(GLOSSARY「练习路径」):从认识和弦、右手稳定,
 /// 经节奏型,到完整跟练成曲的完整学习弧线(工单 14 内容本体)。
@@ -10,8 +11,21 @@ import 'learning_path.dart';
 /// - 节奏型名与 core/model/builtin_strum_patterns.dart 的 name 逐字一致;
 /// - 每条「练什么」必须落到 App 内具体页面(调音器/和弦库/节拍器/
 ///   节奏型训练/跟练/示范试听/曲库),测试守护;
+/// - 直达目标(targets,工单 22)只配「当日动作的落点」:节奏型训练日
+///   配型、跟练日配曲、和弦学习日配和弦;文案里顺带点名的其他对象不配链
+///   (chips 不塞满)。守护测试锁「有链必有文」(标签逐字在当天文案),
+///   反向(点名必有链)有意不锁——配链按上口径裁量;
 /// - 教学例曲 =《沧海一声笑》(C/Am/Dm/G,tempo 80,内置谱歌词已录齐);
 ///   第 29 天起交给用户点名目标曲(五首内置谱和弦词汇全覆盖)。
+
+/// 复用的直达目标(标签与内置节奏型名/谱面标题逐字一致,守护测试锁)。
+const _song = SongTarget('cang-hai-yi-sheng-xiao', label: '沧海一声笑');
+const _pAllDown = PatternTarget('all-down', label: '下 下 下 下');
+const _pEighthDu = PatternTarget('eighth-du', label: '下上 下上 下上 下上');
+const _pDDuD = PatternTarget('d-du-d-du', label: '下 下上 下 下上');
+const _pIsland = PatternTarget('island', label: '下 下上 上下上');
+
+/// 30 天内容本体(逐日任务,见上部内容纪律)。
 final builtinLearningPath = PracticePath.fromTasks([
   // ── 第一阶段 · 认识和弦(1–8):调音起手,五和弦逐一按响 ──
   DailyTask(
@@ -27,6 +41,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '第一个和弦 C',
     learn: 'C 指法:④G、③C、②E 弦空,无名指按①A弦3品,指尖立直。',
     practice: '「和弦库」打开 C 详情看指法图:慢按→逐弦拨响→点试听对照,直到四根弦都清亮。',
+    targets: const [ChordTarget('C')],
   ),
   DailyTask(
     day: 3,
@@ -34,6 +49,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '第二个和弦 Am',
     learn: 'Am 只按④G弦2品(中指),其余全空;和 C 一样是单指和弦:抬起 C 的无名指,换中指按④弦。',
     practice: '「和弦库」查 Am 按响,再练 C↔Am 慢切:手指贴弦滑换,一分钟十次不算慢。',
+    targets: const [ChordTarget('Am')],
   ),
   DailyTask(
     day: 4,
@@ -41,6 +57,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '第一道坎 F',
     learn: 'F:食指按②E弦1品、中指按④G弦2品;④G弦闷音是初学最常见问题。',
     practice: '「和弦库」按响 F:中指指尖立直逐弦检查,响了再回 C,练 C↔F 慢切。',
+    targets: const [ChordTarget('F')],
   ),
   DailyTask(
     day: 5,
@@ -55,6 +72,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: 'G7 与 G',
     learn: 'G7:食指②E弦1品、中指③C弦2品、无名指①A弦2品;G 只差②E弦换 3 品,手指分工整体轮换。',
     practice: '「和弦库」逐弦核对两个指法,专项慢切 G7↔G,别沿用旧手型直接按。',
+    targets: const [ChordTarget('G7'), ChordTarget('G')],
   ),
   DailyTask(
     day: 7,
@@ -62,6 +80,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '四和弦套件',
     learn: '流行歌最常用的四和弦循环:C→Am→F→G7,一半的歌都装得下。',
     practice: '「节拍器」60 BPM 四拍一换走四和弦,连续 8 圈不破;「和弦库」逐个试听校音色。',
+    targets: const [ChordTarget('C'), ChordTarget('Am'), ChordTarget('F'), ChordTarget('G7')],
   ),
   DailyTask(
     day: 8,
@@ -84,6 +103,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '扫弦配上和弦',
     learn: '左右手分工:左手只想和弦,右手只想节拍,互不等待。',
     practice: '「节奏型训练」选「下 下 下 下」配 C 和弦,4 小节一换 Am→F→G7。',
+    targets: const [_pAllDown, ChordTarget('C')],
   ),
   DailyTask(
     day: 11,
@@ -91,6 +111,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '学会下上下上',
     learn: '上扫用食指指甲腹,声音比下扫轻是正常的,拍点齐就行。',
     practice: '「节奏型训练」空扫「下上 下上 下上 下上」60 BPM 稳住,再配 C↔Am 循环。',
+    targets: const [_pEighthDu],
   ),
   DailyTask(
     day: 12,
@@ -98,6 +119,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '手腕放松检查',
     learn: '酸的是手腕前臂、僵的是握紧的手掌——紧了就停一拍再走。',
     practice: '「节奏型训练」把「下上 下上 下上 下上」提到 80 BPM,练到每一下力度都一样轻。',
+    targets: const [_pEighthDu],
   ),
   DailyTask(
     day: 13,
@@ -105,13 +127,15 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '循环里换和弦',
     learn: '换和弦发生在小节第 1 拍之前,不在拍子中间偷偷换。',
     practice: '「节奏型训练」「下上 下上 下上 下上」配四和弦循环,80 BPM 每和弦 2 小节。',
+    targets: const [_pEighthDu],
   ),
   DailyTask(
     day: 14,
     phase: '右手稳定',
     title: '听自己的音色',
     learn: '闷音来自没立直的指尖,杂音来自蹭弦的手指——耳朵是验收员。',
-    practice: '「节奏型训练」逐和弦扫 4 下听:哪根弦闷?回「和弦库」对照常见错误修。',
+    practice: '「节奏型训练」「下上 下上 下上 下上」逐和弦扫 4 下听:哪根弦闷?回「和弦库」对照常见错误修。',
+    targets: const [_pEighthDu],
   ),
   DailyTask(
     day: 15,
@@ -119,6 +143,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '第二周复盘',
     learn: '稳定的标准:不看右手,扫弦也落在拍上。',
     practice: '「节奏型训练」80 BPM「下上 下上 下上 下上」四和弦循环 4 圈不断拍;「和弦库」复查薄弱和弦。',
+    targets: const [_pEighthDu],
   ),
   // ── 第三阶段 · 节奏型(16–23):三个节奏型,从空扫到开口唱 ──
   DailyTask(
@@ -127,6 +152,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '下 下上 下 下上',
     learn: '经典节奏型:第 2、4 拍后半拍有「上」,手全程连续摆动。',
     practice: '「节奏型训练」60 BPM 慢练「下 下上 下 下上」,数「下 空 下上 下 空 下上」。',
+    targets: const [_pDDuD],
   ),
   DailyTask(
     day: 17,
@@ -134,6 +160,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '节奏型装进和弦',
     learn: '节奏型是固定的右手,和弦是换着按的左手,两者各走各的。',
     practice: '「节奏型训练」「下 下上 下 下上」配 C↔Am 每和弦 2 小节,稳了提到 72;再加 F→G7。',
+    targets: const [_pDDuD],
   ),
   DailyTask(
     day: 18,
@@ -141,41 +168,47 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '岛国节奏型',
     learn: '「下 下上 上下上」诀窍在第 3 拍空过:手照摆、不触弦,摆动不停节奏就不停。',
     practice: '「节奏型训练」60 BPM 慢练,眼睛专门盯第 3 拍空过,多扫一下就重来。',
+    targets: const [_pIsland],
   ),
   DailyTask(
     day: 19,
     phase: '节奏型',
     title: '岛国配四和弦',
     learn: '先保第 3 拍空过,再谈速度;漏空(多扫)就退回 60 BPM。',
-    practice: '「节奏型训练」岛国节奏型配四和弦循环,72→84 BPM,每和弦 2 小节。',
+    practice: '「节奏型训练」岛国节奏型「下 下上 上下上」配四和弦循环,72→84 BPM,每和弦 2 小节。',
+    targets: const [_pIsland],
   ),
   DailyTask(
     day: 20,
     phase: '节奏型',
     title: '边扫边数拍',
     learn: '嘴里数拍是弹唱的桥:手扫嘴数,两件事各自独立又同拍。',
-    practice: '「节奏型训练」岛国节奏型扫 C↔Am 循环,嘴数「1 2 3 4」,数乱就降速。',
+    practice: '「节奏型训练」岛国节奏型「下 下上 上下上」扫 C↔Am 循环,嘴数「1 2 3 4」,数乱就降速。',
+    targets: const [_pIsland],
   ),
   DailyTask(
     day: 21,
     phase: '节奏型',
     title: '数拍换哼唱',
     learn: '把数拍换成哼旋律,手继续扫——唱和扫开始合体。',
-    practice: '「节奏型训练」岛国节奏型扫 C↔Am,哼《沧海一声笑》开头一句的旋律,哼断手不停。',
+    practice: '「节奏型训练」岛国节奏型「下 下上 上下上」扫 C↔Am,哼《沧海一声笑》开头一句的旋律,哼断手不停。',
+    targets: const [_pIsland],
   ),
   DailyTask(
     day: 22,
     phase: '节奏型',
     title: '第一句歌词',
     learn: '弹唱的第一个字落在第 1 拍上,先对齐「字头」,其余随旋律走。',
-    practice: '「节奏型训练」岛国节奏型配 F→G 循环,唱「沧海一声笑」五字对四拍,慢速多遍。',
+    practice: '「节奏型训练」岛国节奏型「下 下上 上下上」配 F→G 循环,唱「沧海一声笑」五字对四拍,慢速多遍。',
+    targets: const [_pIsland],
   ),
   DailyTask(
     day: 23,
     phase: '节奏型',
     title: '第三周复盘',
     learn: '三个节奏型是同一次手腕摆动,区别只在哪些点触弦。',
-    practice: '「节奏型训练」同一段四和弦,三个节奏型各两圈,切换不降速;「和弦库」试听收尾。',
+    practice: '「节奏型训练」同一段四和弦,「下上 下上 下上 下上」「下 下上 下 下上」「下 下上 上下上」各两圈,切换不降速;「和弦库」试听收尾。',
+    targets: const [_pEighthDu, _pDDuD, _pIsland],
   ),
   // ── 第四阶段 · 跟练成曲(24–30):沧海一声笑毕业,开自己的目标曲 ──
   DailyTask(
@@ -184,6 +217,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '认识跟练页',
     learn: '跟练页:歌词滚动、扫弦箭头、预备数拍、参考音(节拍声/示范扫弦)。',
     practice: '「曲库」打开《沧海一声笑》——只用 C、Am、Dm、G 四个和弦,先「示范试听」整曲一遍。',
+    targets: const [_song],
   ),
   DailyTask(
     day: 25,
@@ -191,27 +225,31 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '主歌跟练 70%',
     learn: '变速练习不是作弊:速度调低,先把「不断拍」练成肌肉记忆。',
     practice: '「跟练」《沧海一声笑》主歌,变速 70%,参考音节拍声,目标:主歌跟完不断拍。',
+    targets: const [_song],
   ),
   DailyTask(
     day: 26,
     phase: '跟练成曲',
     title: '全曲跟练 85%',
     learn: '断拍就退回 70% 过掉那段再来——回退是手段,不是失败。',
-    practice: '「跟练」全曲 85%,哪里断退哪里练那段,目标:85% 全曲无断。',
+    practice: '「跟练」《沧海一声笑》全曲 85%,哪里断退哪里练那段,目标:85% 全曲无断。',
+    targets: const [_song],
   ),
   DailyTask(
     day: 27,
     phase: '跟练成曲',
     title: '全曲跟练 100%',
     learn: '参考音换「示范扫弦」:跟着和弦声走,更接近真弹。',
-    practice: '「跟练」100% 速度全曲,参考音示范扫弦,连过 3 遍再收工。',
+    practice: '「跟练」《沧海一声笑》100% 速度全曲,参考音示范扫弦,连过 3 遍再收工。',
+    targets: const [_song],
   ),
   DailyTask(
     day: 28,
     phase: '跟练成曲',
     title: '少看屏多听琴',
     learn: '参考音是给耳朵的扶手:先扶着走,最后要不扶着站。',
-    practice: '「跟练」参考音用节拍声全曲一遍,眼睛少看屏幕多听自己;断了不重来,接着往下走。',
+    practice: '「跟练」《沧海一声笑》参考音用节拍声全曲一遍,眼睛少看屏幕多听自己;断了不重来,接着往下走。',
+    targets: const [_song],
   ),
   DailyTask(
     day: 29,
@@ -219,6 +257,7 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '开自己的目标曲',
     learn: '毕业=自己开新谱:曲库里你点名的目标曲,走同样的四段路。',
     practice: '「曲库」选你的目标曲先「示范试听」;陌生和弦(如 Dm/Em/C7/Am7)进「和弦库」逐个补课。',
+    targets: const [ChordTarget('Dm'), ChordTarget('Em'), ChordTarget('C7'), ChordTarget('Am7')],
   ),
   DailyTask(
     day: 30,
@@ -226,5 +265,6 @@ final builtinLearningPath = PracticePath.fromTasks([
     title: '毕业:从跟到弹',
     learn: '最后 10% 是把眼睛从屏幕抬起来——弹唱是唱给人听的。',
     practice: '「跟练」《沧海一声笑》100% 一遍过,再脱谱不看屏弹一遍;打卡毕业,回 29 天继续目标曲。',
+    targets: const [_song],
   ),
 ]);
