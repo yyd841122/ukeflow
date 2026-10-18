@@ -22,10 +22,12 @@ void main() {
   BackupFlow fakeFlow({
     Future<Uint8List?> Function()? pick,
     Future<BackupShareResult> Function(String, Uint8List)? share,
+    Future<BackupSaveOutcome> Function(String, Uint8List)? save,
   }) => BackupFlow(
     pick: pick ??
         () async => throw StateError('测试未预期选文件'),
     share: share ?? (name, bytes) async => BackupShareResult.shared,
+    save: save ?? (name, bytes) async => const BackupSaved(),
   );
 
   /// 种子:「另一台设备」的旧数据——A4=440、一条打卡、一首谱。
@@ -91,6 +93,8 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.text('导出备份'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导出备份'));
     await tester.pumpAndSettle();
 
@@ -108,6 +112,8 @@ void main() {
       flow: fakeFlow(pick: () async => backupBytes()),
     );
 
+    await tester.ensureVisible(find.text('导入备份'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导入备份'));
     await tester.pumpAndSettle();
     // 确认对话框:覆盖警示与不可撤销都在明面上。
@@ -138,6 +144,8 @@ void main() {
       flow: fakeFlow(pick: () async => backupBytes()),
     );
 
+    await tester.ensureVisible(find.text('导入备份'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导入备份'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('取消'));
@@ -156,6 +164,8 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.text('导入备份'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导入备份'));
     await tester.pumpAndSettle();
 
@@ -163,5 +173,50 @@ void main() {
     expect((await db.checkInsDao.getAll()), hasLength(1));
     // 坏文件不进确认对话框(没得恢复,谈不上确认)。
     expect(find.text('覆盖导入'), findsNothing);
+  });
+
+  testWidgets('保存到本地:按钮在,保存成功给反馈', (tester) async {
+    await seedOld();
+    await pumpPage(tester, flow: fakeFlow());
+
+    expect(find.text('保存到本地'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已保存'), findsOneWidget);
+  });
+
+  testWidgets('保存到本地:用户在保存框取消,静默', (tester) async {
+    await pumpPage(
+      tester,
+      flow: fakeFlow(save: (name, bytes) async => const BackupSaveCancelled()),
+    );
+
+    await tester.ensureVisible(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已保存'), findsNothing);
+    expect(find.textContaining('失败'), findsNothing);
+  });
+
+  testWidgets('保存到本地:失败给可读反馈', (tester) async {
+    await pumpPage(
+      tester,
+      flow: fakeFlow(
+        save: (name, bytes) async => const BackupSaveFailed('保存没成功——请再试一次'),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存到本地'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存没成功——请再试一次'), findsOneWidget);
   });
 }

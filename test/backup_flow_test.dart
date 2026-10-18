@@ -110,4 +110,41 @@ void main() {
     expect(outcome, isA<BackupExportFailed>());
     expect((outcome as BackupExportFailed).message, isNotEmpty);
   });
+
+  test('保存到本地:save 缝收到文件名与字节,返回已保存', () async {
+    String? savedName;
+    Uint8List? savedBytes;
+    final flow = BackupFlow(
+      save: (name, bytes) async {
+        savedName = name;
+        savedBytes = bytes;
+        return const BackupSaved();
+      },
+    );
+
+    final outcome = await flow.exportToLocal(validJson);
+
+    expect(outcome, isA<BackupSaved>());
+    expect(savedName, matches(RegExp(r'^ukeflow-backup-\d{4}-\d{2}-\d{2}\.json$')));
+    expect(utf8.decode(savedBytes!), validJson);
+  });
+
+  test('保存到本地:用户在保存框取消,独立结果不冒充成功', () async {
+    final flow = BackupFlow(save: (name, bytes) async => const BackupSaveCancelled());
+
+    final outcome = await flow.exportToLocal(validJson);
+
+    expect(outcome, isA<BackupSaveCancelled>());
+  });
+
+  test('保存到本地:平台层抛错,可读失败不崩溃', () async {
+    final flow = BackupFlow(
+      save: (name, bytes) async => throw Exception('存储没了'),
+    );
+
+    final outcome = await flow.exportToLocal(validJson);
+
+    expect(outcome, isA<BackupSaveFailed>());
+    expect((outcome as BackupSaveFailed).message, isNotEmpty);
+  });
 }

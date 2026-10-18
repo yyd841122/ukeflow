@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/backup/backup_doc.dart';
@@ -62,20 +63,48 @@ class BackupExportFailed extends BackupExportOutcome {
 /// 分享面板动作结果(评审 2026-10-17:取消不得冒充成功)。
 enum BackupShareResult { shared, dismissed, unavailable }
 
+/// 保存到本地的结果族(独立于分享族:两通道的中间态不同形)。
+sealed class BackupSaveOutcome {
+  const BackupSaveOutcome();
+}
+
+/// 用户在系统保存框选定位置,字节写入完成。
+class BackupSaved extends BackupSaveOutcome {
+  const BackupSaved();
+}
+
+/// 用户在保存框里取消返回:独立结果,页面静默。
+class BackupSaveCancelled extends BackupSaveOutcome {
+  const BackupSaveCancelled();
+}
+
+/// 保存失败:可读文案。
+class BackupSaveFailed extends BackupSaveOutcome {
+  const BackupSaveFailed(this.message);
+
+  final String message;
+}
+
 typedef BackupPickerFn = Future<Uint8List?> Function();
 typedef BackupShareFn =
     Future<BackupShareResult> Function(String fileName, Uint8List bytes);
+typedef BackupSaveFn =
+    Future<BackupSaveOutcome> Function(String fileName, Uint8List bytes);
 
 class BackupFlow {
-  BackupFlow({BackupPickerFn? pick, BackupShareFn? share})
+  BackupFlow({BackupPickerFn? pick, BackupShareFn? share, BackupSaveFn? save})
     : pick = pick ?? pickBackupFileFromDevice,
-      share = share ?? shareBackupAsFile;
+      share = share ?? shareBackupAsFile,
+      save = save ?? saveBackupToDevice;
 
   /// 选文件来源(注入缝:测试给假 picker,生产走系统文件选择器)。
   final BackupPickerFn pick;
 
   /// 分享出口(注入缝:测试捕获,生产走系统分享面板)。
   final BackupShareFn share;
+
+  /// 本地保存出口(注入缝:测试捕获,生产走系统保存框/SAF)。
+  final BackupSaveFn save;
 
   /// 选文件并解析成待还原文档。取消静默;坏文件带编解码层的
   /// 可读中文错误返回,不崩溃。
@@ -105,12 +134,8 @@ class BackupFlow {
   /// 导出备份:编码为 UTF-8 字节,带日期文件名唤起系统分享面板。
   /// 用户取消(dismissed)是独立结果,不冒充成功。
   Future<BackupExportOutcome> export(String json) async {
-    final now = DateTime.now();
-    final month = now.month.toString().padLeft(2, '0');
-    final day = now.day.toString().padLeft(2, '0');
-    final fileName = 'ukeflow-backup-${now.year}-$month-$day.json';
     try {
-      final result = await share(fileName, utf8.encode(json));
+      final result = await share(backupFileName(), utf8.encode(json));
       return switch (result) {
         BackupShareResult.shared ||
         BackupShareResult.unavailable => const BackupExported(),
@@ -120,6 +145,24 @@ class BackupFlow {
       debugPrint('UkeFlow: 备份分享失败 $error');
       return const BackupExportFailed('分享没成功——请再试一次');
     }
+  }
+
+  /// 保存到本地:同一份编码字节,走系统保存框(SAF)由用户选目录落盘。
+  Future<BackupSaveOutcome> exportToLocal(String json) async {
+    try {
+      return await save(backupFileName(), utf8.encode(json));
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 备份保存失败 $error');
+      return const BackupSaveFailed('保存没成功——请再试一次');
+    }
+  }
+
+  /// 备份文件名(分享/保存共用):带日期,ASCII 安全。
+  static String backupFileName() {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return 'ukeflow-backup-${now.year}-$month-$day.json';
   }
 }
 
@@ -152,4 +195,20 @@ Future<BackupShareResult> shareBackupAsFile(
     case ShareResultStatus.unavailable:
       return BackupShareResult.unavailable;
   }
+}
+
+/// 生产保存:系统保存框(ACTION_CREATE_DOCUMENT,经 MainActivity 的
+/// 平台通道,见 android/…/MainActivity.kt)。返回 null = 用户取消;
+/// 成功返回写入完成的 content:// uri。免存储权限(SAF 按次授权)。
+Future<BackupSaveOutcome> saveBackupToDevice(
+  String fileName,
+  Uint8List bytes,
+) async {
+  final channel = MethodChannel('ukeflow/save_file');
+  final uri = await channel.invokeMethod<String>('saveJsonFile', {
+    'fileName': fileName,
+    'bytes': bytes,
+  });
+  if (uri == null) return const BackupSaveCancelled();
+  return const BackupSaved();
 }
