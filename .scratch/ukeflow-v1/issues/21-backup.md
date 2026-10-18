@@ -4,7 +4,7 @@
 
 **Blocked by:** 14 练习路径+每日任务+打卡, 15 曲库页
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 导出→清数据→导入→状态完整还原
 - [ ] 导入坏文件给可读错误,不崩溃
@@ -19,3 +19,4 @@
 - 2026-10-18 (机检记录,release 装机): 覆盖安装成功(10:14,数据保留,含今日打卡),冷启+logcat 干净(无 E/flutter/FATAL)。已验:①设置页备份卡渲染完整;②导出→系统分享面板拉起,文件名 `ukeflow-backup-2026-10-18.json` 正确上板;③面板 BACK 取消→无「已生成」假提示,静默回 App(dismissed 结果路径真机证实);④导入→系统文件选择器(documentsui)拉起,选择器取消返回 App 无恙。**机检受限**:ColorOS documentsui 网格卡对 adb 注入点按全盲(怪癖已记忆),坏文件/选文件的真手指操作并入用户验收(坏文件路径有 15 编解码单测+5 UI 测试锁底)。**发现待议**:OPPO 分享面板无「保存到文件」类目标(云盘/互传/邮件/蓝牙/自由收藏五选一)——评审预告的 partial 实锤,用户验收时选顺手的通道完成存取,若都不顺手再立 SAF 小票。
 - 2026-10-18 (工单21 会话,补保存通道): 用户验收时证实 OPPO 分享面板无「保存到文件」目标,当场上补**「保存到本地」通道**——票面「系统分享/保存」的保存半边。Dart 侧 BackupFlow 第三注入缝 save + exportToLocal(独立 BackupSaveOutcome 族:Saved/Cancelled/Failed);生产走 MethodChannel ukeflow/save_file → MainActivity 的 ACTION_CREATE_DOCUMENT(SAF,免存储权限,同权限姿态;FlutterActivity 非 ComponentActivity,用经典 startActivityForResult/onActivityResult)。UI 备份卡改三钮:导出备份|保存到本地 一行,导入备份 独占整行(error 色强化危险感)。测试 625 绿(新增 flow 3 + UI 3);机检:保存框真机拉起、取消静默返回、logcat 干净。真机验收:保存框里选 Download → 文件落地 → 导入回环。
 - 2026-10-18 (用户决策,导出通道定型): 用户定——**导出只留「保存到本地」一条通道,升格为「导出备份」;分享面板通道整个撤除**(OPPO 面板无「保存到文件」目标,分享路径对备份场景是绕路)。share_plus 依赖移除;BackupFlow 撤 share 缝与分享结果族,export() 即保存框落盘,文件名/失败文案不变;备份卡回到两钮(导出备份|导入备份,导入保持 error 色)。GLOSSARY 备份词条同步。620 测试绿;机检:导出钮→保存框拉起、建议文件名预填、取消返回、logcat 干净。用户真机验收清单不变:保存框选 Download 落盘→导入回环→坏文件。
+- 2026-10-18 (用户真机验收): 导出(保存框落盘)→导入回环通过,转 done。
