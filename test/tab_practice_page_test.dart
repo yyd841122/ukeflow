@@ -130,6 +130,26 @@ void main() {
     // 滑块点击落到中点附近即 75%:状态可调即可,精确值归控制器测试。
     expect(find.byKey(const Key('speed-value')), findsOneWidget);
   });
+
+  testWidgets('单曲循环:遍末自动接下一遍;关循环曲末回闲', (tester) async {
+    await pumpPage(tester);
+    await tester.tap(find.byKey(const Key('tab-practice-start')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tab-practice-loop')));
+    await tester.pump();
+    expect(find.text('第 1 遍'), findsOneWidget);
+
+    await advanceAndPump(tester, 3200); // 遍 1 预备
+    await advanceAndPump(tester, 3000); // 遍 1 曲末 → nextPass
+    await advanceAndPump(tester, 3200); // 遍 2 预备喂完
+    expect(find.text('第 2 遍'), findsOneWidget, reason: '循环开:自动接下一遍');
+    expect(find.byKey(const Key('tab-practice-stop')), findsOneWidget, reason: '仍在会话中');
+
+    await tester.tap(find.byKey(const Key('tab-practice-loop')));
+    await tester.pump();
+    await advanceAndPump(tester, 3000); // 遍 2 曲末
+    expect(find.byKey(const Key('tab-practice-start')), findsOneWidget, reason: '循环关:曲末回闲');
+  });
 }
 
 /// 变速测试里给滑块动画一帧的时间。

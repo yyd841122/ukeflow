@@ -34,6 +34,8 @@ class PlayPracticeState {
     required this.running,
     required this.paused,
     required this.reference,
+    this.loop = false,
+    this.pass = 1,
     this.error,
   });
 
@@ -45,6 +47,8 @@ class PlayPracticeState {
     running: false,
     paused: false,
     reference: ReferenceSound.beat,
+    loop: false,
+    pass: 1,
   );
 
   /// 当前 BPM（进谱默认取谱面 tempo,页内可调;运行中固定）。
@@ -69,6 +73,13 @@ class PlayPracticeState {
   /// 引擎错误文案(初始化失败/运行中引擎异常);null = 正常。
   final String? error;
 
+  /// 单曲循环:开则遍末自动接下一遍(预备数拍即遍间停顿)。会话级开关,
+  /// start 复位,遍中可切;passEnd 重启时由控制器显式续上。
+  final bool loop;
+
+  /// 当前遍数(第 N 遍,循环开启时随 passEnd 递增;start/回到开头复位 1)。
+  final int pass;
+
   PlayPracticeState copyWith({
     int? bpm,
     double? speed,
@@ -77,6 +88,8 @@ class PlayPracticeState {
     bool? running,
     bool? paused,
     ReferenceSound? reference,
+    bool? loop,
+    int? pass,
     Object? error = _sentinel,
   }) => PlayPracticeState(
     bpm: bpm ?? this.bpm,
@@ -86,6 +99,8 @@ class PlayPracticeState {
     running: running ?? this.running,
     paused: paused ?? this.paused,
     reference: reference ?? this.reference,
+    loop: loop ?? this.loop,
+    pass: pass ?? this.pass,
     error: identical(error, _sentinel) ? this.error : error as String?,
   );
 
@@ -391,8 +406,42 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     );
     if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地,不宣布运行。
     _adoptSchedulerAnchor();
-    state = state.copyWith(running: true, paused: false, error: null);
+    // 新会话:循环与遍数复位(passEnd 重启后由控制器显式续上)。
+    state = state.copyWith(
+      running: true,
+      paused: false,
+      error: null,
+      loop: false,
+      pass: 1,
+    );
     _restartStrumScheduler(); // 参考音=扫弦时随会话起跑(空闲预选不丢)
+  }
+
+  /// 单曲循环开关(遍中可切,对当前遍无感,自下一遍起效;空闲无效)。
+  void toggleLoop() {
+    if (!state.running) return;
+    state = state.copyWith(loop: !state.loop);
+  }
+
+  /// 曲末(节拍网格走出最后一拍,页面轮询判得):循环开→干净重启接下一遍
+  /// (预备数拍即遍间停顿,遍数+1;循环由这里显式续上——start 复位它);
+  /// 关→回闲。暂停中视觉时钟冻结,轮询到不了曲末,此守卫只是双保险。
+  void passEnd() {
+    if (!state.running || state.paused) return;
+    if (!state.loop) {
+      stop();
+      return;
+    }
+    final chart = _chart;
+    if (chart == null || !state.engineReady) {
+      stop();
+      return;
+    }
+    final wasLoop = state.loop;
+    final next = state.pass + 1;
+    stop();
+    start(chart: chart, chords: _chords);
+    if (state.running) state = state.copyWith(loop: wasLoop, pass: next);
   }
 
   /// 回读调度器锚点（t0 的唯一来源:启动/重锚后各一次,保证与声同一刻）。

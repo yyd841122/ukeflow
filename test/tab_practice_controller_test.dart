@@ -489,6 +489,29 @@ void main() {
       );
     });
   });
+  test('单曲循环:passEnd 循环关→回闲;循环开→接第 2 遍(遍数+1,预备数拍再起)', () async {
+    final c = controller();
+    await c.warmup();
+    // BPM 208(拍周期 288ms):启动首过窗(400ms)恒含预备拍 0、1,计数确定。
+    c.setBpm(208);
+    c.start(chart: tabFixtureChart);
+    c.passEnd();
+    expect(container.read(tabPracticeProvider).running, isFalse, reason: '循环关:曲末回闲');
+
+    c.start(chart: tabFixtureChart);
+    c.toggleLoop();
+    expect(container.read(tabPracticeProvider).loop, isTrue);
+
+    c.passEnd();
+    final state = container.read(tabPracticeProvider);
+    expect(state.running, isTrue, reason: '循环开:遍末即接下一遍,不停机');
+    expect(state.pass, 2, reason: '遍数+1');
+    expect(
+      engine.scheduleLog.where((e) => e.key == 'tick_count'),
+      hasLength(6),
+      reason: '三次启动各含预备拍 0、1(首启+回闲后再启+循环重启),重启即预备数拍再起',
+    );
+  });
 }
 
 /// loadMem 可闸住的假引擎:预载在途与换谱的竞态用。
@@ -502,5 +525,5 @@ class GatedLoadEngine extends FakeAudioEngine {
     }
     return super.loadMem(key, wavBytes);
   }
-}
 
+}

@@ -74,7 +74,9 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
       now: now,
     );
     if (practice == null) {
-      _controller.stop(); // 曲末(节拍网格走出最后一拍):回闲,轮询随之自停。
+      // 曲末(节拍网格走出最后一拍):循环开→接下一遍(预备数拍即遍间停顿);
+      // 关→回闲,轮询随之自停。
+      _controller.passEnd();
       return;
     }
     // 拍/动作/行/段落任一推进才重绘(薄渲染纪律)。
@@ -302,6 +304,24 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 单曲循环行:遍中可切,自下一遍起效;开则显示当前遍数。
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FilterChip(
+                key: const Key('practice-loop'),
+                selected: state.loop,
+                onSelected: (_) => _controller.toggleLoop(),
+                avatar: const Icon(Icons.repeat, size: 18),
+                label: const Text('单曲循环'),
+              ),
+              if (state.loop) ...[
+                const SizedBox(width: 12),
+                Text('第 ${state.pass} 遍', style: _sectionLabelStyle),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(

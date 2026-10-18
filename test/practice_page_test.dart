@@ -468,4 +468,36 @@ void main() {
       expect(engine.scheduleLog, hasLength(countAfterPop), reason: '弹回即停');
     });
   });
+
+  testWidgets('单曲循环:遍末自动接下一遍,预备数拍即遍间停顿;关循环曲末回闲', (tester) async {
+    await pumpPage(tester);
+    await tester.ensureVisible(find.byKey(const Key('practice-start')));
+    await tester.tap(find.byKey(const Key('practice-start')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('practice-loop')));
+    await tester.pump();
+    expect(find.text('第 1 遍'), findsOneWidget);
+
+    // 遍 1:预备 3s + 全曲 12s = 15s;多推 1s 喂完尾拍触发 nextPass。
+    await advanceAndPump(tester, 16000);
+    await advanceAndPump(tester, 3000); // 遍 2 预备数拍喂完
+    expect(find.text('第 2 遍'), findsOneWidget, reason: '循环开:自动接下一遍');
+    expect(find.byKey(const Key('practice-stop')), findsOneWidget, reason: '仍在会话中');
+    expect(
+      engine.scheduleLog.where((e) => e.key == 'tick_count'),
+      hasLength(8),
+      reason: '两遍预备各 4 声',
+    );
+
+    // 遍 2 中关循环:本遍曲末回闲,不再续。
+    await tester.ensureVisible(find.byKey(const Key('practice-loop')));
+    await tester.tap(find.byKey(const Key('practice-loop')));
+    await tester.pump();
+    await advanceAndPump(tester, 14000); // 遍 2 曲长 12s+1s
+    expect(find.byKey(const Key('practice-start')), findsOneWidget, reason: '循环关:曲末回闲');
+    final count = engine.scheduleLog.length;
+    await advanceAndPump(tester, 2000);
+    expect(engine.scheduleLog, hasLength(count), reason: '回闲后不再调度');
+  });
+
 }

@@ -69,7 +69,9 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
       now: now,
     );
     if (practice == null) {
-      _controller.stop(); // 曲末(节拍网格走出最后一拍):回闲,轮询随之自停。
+      // 曲末(节拍网格走出最后一拍):循环开→接下一遍(预备数拍即遍间停顿);
+      // 关→回闲,轮询随之自停。
+      _controller.passEnd();
       return;
     }
     // 当前音/拍/预告窗任一推进才重绘(预告窗入窗不必等拍翻转——预亮
@@ -222,7 +224,7 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
     );
   }
 
-  /// 运行控制:暂停/继续、回到开头、停止(一行);变速(一行)。
+  /// 运行控制:单曲循环(一行);暂停/继续、回到开头、停止(一行);变速(一行)。
   Widget _controls(TabSessionState state) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -230,6 +232,25 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 单曲循环行:遍中可切,自下一遍起效;开则显示当前遍数。
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FilterChip(
+                key: const Key('tab-practice-loop'),
+                selected: state.loop,
+                onSelected: (_) => _controller.toggleLoop(),
+                avatar: const Icon(Icons.repeat, size: 18),
+                label: const Text('单曲循环'),
+              ),
+              if (state.loop) ...[
+                const SizedBox(width: 12),
+                Text('第 ${state.pass} 遍',
+                    style: Theme.of(context).textTheme.labelLarge),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(

@@ -741,4 +741,51 @@ void main() {
       });
     });
   });
+
+  test('单曲循环:passEnd 循环关→回闲(曲末既有行为收编)', () async {
+    final c = controller();
+    await c.warmup();
+    c.start(chart: practiceFixtureChart);
+    c.passEnd();
+    final state = container.read(playPracticeProvider);
+    expect(state.running, isFalse, reason: '循环关:曲末回闲');
+  });
+
+  test('单曲循环:passEnd 循环开→自动接第 2 遍(遍数+1,预备数拍再起)', () async {
+    final c = controller();
+    await c.warmup();
+    // BPM 208(拍周期 288ms):重启首过窗即含新预备拍 0、1,计数确定。
+    c.setBpm(208);
+    c.start(chart: practiceFixtureChart);
+    c.toggleLoop();
+    expect(container.read(playPracticeProvider).loop, isTrue);
+
+    c.passEnd();
+    final state = container.read(playPracticeProvider);
+    expect(state.running, isTrue, reason: '循环开:遍末即接下一遍,不停机');
+    expect(state.pass, 2, reason: '遍数+1');
+    expect(
+      engine.scheduleLog.where((e) => e.key == 'tick_count'),
+      hasLength(4),
+      reason: '第 2 遍预备拍 0、1 又入队(第 1 遍 2 声 + 第 2 遍 2 声)',
+    );
+  });
+
+  test('单曲循环:toggleLoop 空闲无效;回到开头复位循环与遍数', () async {
+    final c = controller();
+    c.toggleLoop();
+    expect(container.read(playPracticeProvider).loop, isFalse, reason: '空闲不开循环');
+
+    await c.warmup();
+    c.setBpm(208);
+    c.start(chart: practiceFixtureChart);
+    c.toggleLoop();
+    c.passEnd();
+    c.restart(); // 回到开头 = 重开会话
+    final state = container.read(playPracticeProvider);
+    expect(state.running, isTrue);
+    expect(state.pass, 1, reason: '回到开头遍数复位');
+    expect(state.loop, isFalse, reason: '回到开头循环复位(重开再点)');
+  });
+
 }
