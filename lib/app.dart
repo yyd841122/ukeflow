@@ -58,6 +58,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   int _index = 0;
 
+  /// 已访问过的页签:懒挂载(工单 23 启动提速)。IndexedStack 会挂载全部
+  /// 子页——和弦库 JSON、打卡库、曲库资产原本全被牵进启动窗;未访问页
+  /// 先以占位挂载,首访即真建,建后照旧保活(_tabs 是 const 页实例,
+  /// 占位换成真页后 widget 恒等,State 不丢)。
+  final _mounted = <int>{0};
+
   @override
   Widget build(BuildContext context) {
     // 启动即预热数据库（见 databaseWarmupProvider）。
@@ -65,12 +71,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: [for (final tab in _tabs) tab.page],
+        children: [
+          for (var i = 0; i < _tabs.length; i++)
+            _mounted.contains(i) ? _tabs[i].page : const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() {
           _index = index;
+          _mounted.add(index);
           ref.read(activeTabIndexProvider.notifier).set(index);
         }),
         destinations: [

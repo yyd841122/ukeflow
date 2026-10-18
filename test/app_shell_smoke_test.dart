@@ -20,7 +20,8 @@ void main() {
   // 共享 executor 的竞态，按 drift 给出的口径关掉该警告。
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  // 工单 02 起和弦页启动即加载和弦资产：注入 fixture 数据替代（见 helper 注释）。
+  // 工单 02 起和弦页访问即加载和弦资产：注入 fixture 数据替代（见 helper 注释）;
+  // 工单 23 起页签懒挂载,首访和弦页才加载。
   // 工单 09 起加载内置曲库(工单 15 起归曲库页):同为 fixture 谱。传 engine 时一并注入假引擎。
   // 工单 14 起路径页读打卡库：内存库注入（关库纪律见 path_page_test 注释）。
   Widget app([FakeAudioEngine? engine, FakeRecorder? recorder]) {
@@ -65,6 +66,38 @@ void main() {
     // (页题即底栏页签,与和弦/路径/曲库页一致)。
     expect(find.text('调音器'), findsOneWidget);
     expect(find.text('曲库'), findsOneWidget);
+  });
+
+  testWidgets('页签懒挂载:启动只建当前页,首访即建,建后保活(工单23 启动提速)', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    // 未访问的四页不预建(此前 IndexedStack 启动即挂载五页,和弦库 JSON、
+    // 打卡库、曲库资产全被牵进启动窗)。skipOffstage:false 是本测试的
+    // 关键:IndexedStack 未选中页「挂载但离台」,默认 finder 看不见它们,
+    // 断言会假绿——带 skipOffstage 才能区分「离台」与「从未挂载」。
+    const otherMarkers = ['常用', '总进度', '节拍器', 'A4 参考音'];
+    for (final marker in otherMarkers) {
+      expect(
+        find.text(marker, skipOffstage: false),
+        findsNothing,
+        reason: '$marker 页未访问不应挂载(离台的也算预建)',
+      );
+    }
+
+    // 首访即建。
+    await tester.tap(navLabel('和弦'));
+    await tester.pumpAndSettle();
+    expect(find.text('常用'), findsWidgets);
+
+    // 建后保活:切走(离台)仍挂载,再切回照常显示——IndexedStack 语义不变。
+    await tester.tap(navLabel('调音器'));
+    await tester.pumpAndSettle();
+    expect(find.text('常用', skipOffstage: false), findsWidgets,
+        reason: '保活:切走不卸载');
+    await tester.tap(navLabel('和弦'));
+    await tester.pumpAndSettle();
+    expect(find.text('常用'), findsWidgets);
   });
 
   testWidgets('点击页签可在五个页面间切换', (tester) async {
