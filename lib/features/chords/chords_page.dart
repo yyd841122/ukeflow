@@ -24,27 +24,14 @@ class _ChordsPageState extends ConsumerState<ChordsPage> {
     final libraryAsync = ref.watch(chordLibraryProvider);
     return libraryAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _ErrorView(error: error),
+      // 共享报错壳(工单19 提取,与曲库/路径页同壳;此处居中),评审后内联。
+      error: (error, _) =>
+          Center(child: LoadErrorView(title: '和弦库加载失败', error: error)),
       data: (library) => _BrowseView(
         chords: library.chords,
         query: _query,
         onQueryChanged: (q) => setState(() => _query = q),
       ),
-    );
-  }
-}
-
-/// 坏数据/加载失败的可见报错：原文直接展示，不带病进浏览页。
-/// 面板本体走共享 LoadErrorView(工单 19 提取,与曲库页同壳),这里只管居中。
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error});
-
-  final Object error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: LoadErrorView(title: '和弦库加载失败', error: error),
     );
   }
 }

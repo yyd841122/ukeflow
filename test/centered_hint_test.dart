@@ -7,11 +7,6 @@ import 'package:ukeflow/core/ui/centered_hint.dart';
 /// 弱化色(onSurfaceVariant——M3 弱化可读文本,替代原先 chords 空态
 /// 误用的 outline)。
 void main() {
-  Future<Color> hintColorOf(WidgetTester tester) async {
-    final context = tester.element(find.byType(CenteredHint));
-    return Theme.of(context).colorScheme.onSurfaceVariant;
-  }
-
   testWidgets('主提示整段居中渲染', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -36,8 +31,8 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: CenteredHint(message: '提示'))),
     );
+    final context = tester.element(find.byType(CenteredHint));
     final text = tester.widget<Text>(find.text('提示'));
-    final expected = await hintColorOf(tester);
-    expect(text.style?.color, expected);
+    expect(text.style?.color, Theme.of(context).colorScheme.onSurfaceVariant);
   });
 }

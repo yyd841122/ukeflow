@@ -205,7 +205,8 @@ class _CifraClubSearchPageState extends ConsumerState<CifraClubSearchPage> {
         return const SizedBox.shrink(); // 外层已画搜索中转圈
       case _IdleView():
         return const CenteredHint(
-          message: '输入歌名,在 Cifra Club 里搜谱。\n点结果直接导入,不用进网站。',
+          message: '输入歌名,在 Cifra Club 里搜谱。',
+          detail: '点结果直接导入,不用进网站。',
         );
       case _ResultsView(:final query, :final hits):
         return ListView.separated(

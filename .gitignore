@@ -23,3 +23,6 @@ android/key.properties
 *.iws
 .vscode/
 error.log
+
+# 工单23 spike 归档:tracked 已删,盘上残留待用户 rm -rf,忽略防误入
+spikes/
