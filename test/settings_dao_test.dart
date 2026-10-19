@@ -41,4 +41,27 @@ void main() {
         .insert(SettingsCompanion.insert(key: 'future_str', value: 'hello'));
     expect(await dao.getInt('future_str'), isNull);
   });
+
+
+  // ── 工单 32:字符串设置(隐藏内置谱 id 集的存放面)──
+
+  test('字符串 set 后 get 回读同值,重写覆盖', () async {
+    expect(await dao.getString(SettingsKeys.hiddenBuiltinStrums), isNull);
+    await dao.setString(SettingsKeys.hiddenBuiltinStrums, 'a,b');
+    expect(await dao.getString(SettingsKeys.hiddenBuiltinStrums), 'a,b');
+    await dao.setString(SettingsKeys.hiddenBuiltinStrums, 'a');
+    expect(await dao.getString(SettingsKeys.hiddenBuiltinStrums), 'a');
+  });
+
+  test('watchString:写库即推送,清空(空串)也推送', () async {
+    // drift distinct 流抑制与内部初值相同的 null 首帧:订阅先于写入,
+    // 只断言两次写入的两帧(无行→null 的面由 parseHiddenIds 测兜)。
+    final expectation = expectLater(
+      dao.watchString(SettingsKeys.hiddenBuiltinStrums),
+      emitsInOrder(['a', '']),
+    );
+    await dao.setString(SettingsKeys.hiddenBuiltinStrums, 'a');
+    await dao.setString(SettingsKeys.hiddenBuiltinStrums, '');
+    await expectation;
+  });
 }

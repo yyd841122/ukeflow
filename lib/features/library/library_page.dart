@@ -83,6 +83,15 @@ class LibraryPage extends ConsumerWidget {
                 title: entry.chart.title,
                 subtitle: chartMetaLine(entry.chart),
                 onTap: () => _openStrumPractice(context, entry.chart),
+                onDelete: () => _hideBuiltin(
+                  context,
+                  ref,
+                  title: entry.chart.title,
+                  hide: () =>
+                      ref.read(builtinChartVisibilityProvider).hideStrum(
+                            entry.id,
+                          ),
+                ),
               ),
             for (final entry in library.customStrum)
               switch (entry) {
@@ -91,12 +100,14 @@ class LibraryPage extends ConsumerWidget {
                   title: entry.title,
                   subtitle: chartMetaLine(entry.chart),
                   onTap: () => _openStrumPractice(context, entry.chart),
+                  onDelete: () => _deleteCustom(context, ref, entry),
                 ),
                 BrokenCustomStrum() => _ChartCard(
                   cardKey: 'custom-chart-${entry.id}',
                   title: entry.title,
                   subtitle: '谱面读不出,暂不可跟练',
                   enabled: false,
+                  onDelete: () => _deleteCustom(context, ref, entry),
                 ),
               },
             if (library.customStrum.isEmpty) const _CustomEmptyHint(),
@@ -112,6 +123,15 @@ class LibraryPage extends ConsumerWidget {
                   MaterialPageRoute<void>(
                     builder: (_) => TabChartPage(chart: entry.chart),
                   ),
+                ),
+                onDelete: () => _hideBuiltin(
+                  context,
+                  ref,
+                  title: entry.chart.title,
+                  hide: () =>
+                      ref.read(builtinChartVisibilityProvider).hideTab(
+                            entry.id,
+                          ),
                 ),
               ),
             const SizedBox(height: 24),
@@ -133,6 +153,19 @@ class LibraryPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+                onDelete: switch (entry) {
+                  BuiltinImageChartEntry() => () => _hideBuiltin(
+                    context,
+                    ref,
+                    title: entry.title,
+                    hide: () =>
+                        ref.read(builtinChartVisibilityProvider).hideImage(
+                              entry.id,
+                            ),
+                  ),
+                  UserImageChartEntry() => () =>
+                      _deleteUserImage(context, ref, entry),
+                },
               ),
           ],
         ),
@@ -175,6 +208,114 @@ class LibraryPage extends ConsumerWidget {
             const SnackBar(content: Text('没存进曲库——请再试一次')),
           );
         }
+    }
+  }
+
+  /// 删除确认框(工单 32):[confirmLabel] 定按钮词(真删「删除」/
+  /// 隐藏「隐藏」),[dialogText] 讲清语义。返回 true = 用户确认。
+  Future<bool> _confirmDelete(
+    BuildContext context, {
+    required String title,
+    required String dialogText,
+    required String confirmLabel,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(dialogText),
+        actions: [
+          TextButton(
+            key: const Key('delete-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('delete-confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  /// 内置谱删除 = 隐藏出曲库(工单 32):确认文案讲清「可恢复」,
+  /// 恢复口在设置页。失败给可读 SnackBar,不静默。
+  Future<void> _hideBuiltin(
+    BuildContext context,
+    WidgetRef ref, {
+    required String title,
+    required Future<void> Function() hide,
+  }) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: '把「$title」移出曲库?',
+      dialogText: '内置谱只是从曲库隐藏,不删内容;可随时在设置页恢复。',
+      confirmLabel: '隐藏',
+    );
+    if (!confirmed) return;
+    try {
+      await hide();
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 内置谱隐藏失败 $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没移成——请再试一次')));
+    }
+  }
+
+  /// 自建谱删除 = 数据库行硬删(工单 32;损坏条目同口,补齐工单 16
+  /// 留下的自救路径)。确认文案明示不可恢复。
+  Future<void> _deleteCustom(
+    BuildContext context,
+    WidgetRef ref,
+    CustomStrumEntry entry,
+  ) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: '删除「${entry.title}」?',
+      dialogText: '自建谱删除后不可恢复;备份文件里如有,可导入找回。',
+      confirmLabel: '删除',
+    );
+    if (!confirmed) return;
+    try {
+      await ref.read(customChartsDaoProvider).deleteById(entry.id);
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 自建谱删除失败 $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没删成——请再试一次')));
+    }
+  }
+
+  /// 用户图片谱删除 = 数据库行硬删(工单 32)。
+  Future<void> _deleteUserImage(
+    BuildContext context,
+    WidgetRef ref,
+    UserImageChartEntry entry,
+  ) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: '删除「${entry.title}」?',
+      dialogText: '图片谱删除后不可恢复;备份文件里如有,可导入找回。',
+      confirmLabel: '删除',
+    );
+    if (!confirmed) return;
+    try {
+      await ref.read(imageChartsDaoProvider).deleteById(entry.id);
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 图片谱删除失败 $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没删成——请再试一次')));
     }
   }
 
@@ -312,6 +453,7 @@ class _ChartCard extends StatelessWidget {
     this.subtitle,
     this.enabled = true,
     this.onTap,
+    this.onDelete,
   });
 
   final String cardKey;
@@ -319,6 +461,11 @@ class _ChartCard extends StatelessWidget {
   final String? subtitle;
   final bool enabled;
   final VoidCallback? onTap;
+
+  /// 删除入口(工单 32):非 null 才出删除钮——三类语义(真删/隐藏)
+  /// 由调用方确认后处置,卡片只管呈现。key 取 delete-<卡片 key>,
+  /// 机检/测试按同一前缀定位。
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -328,13 +475,26 @@ class _ChartCard extends StatelessWidget {
       child: ListTile(
         title: Text(title),
         subtitle: subtitle != null ? Text(subtitle!) : null,
-        trailing:
-            enabled
-                ? const Icon(Icons.chevron_right)
-                : Icon(
-                  Icons.error_outline,
-                  color: Theme.of(context).colorScheme.error,
-                ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onDelete != null)
+              IconButton(
+                key: Key('delete-$cardKey'),
+                tooltip: '移出曲库',
+                icon: const Icon(Icons.delete_outline),
+                color: Theme.of(context).colorScheme.error,
+                onPressed: onDelete,
+              ),
+            if (enabled)
+              const Icon(Icons.chevron_right)
+            else
+              Icon(
+                Icons.error_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+          ],
+        ),
         onTap: onTap,
       ),
     );

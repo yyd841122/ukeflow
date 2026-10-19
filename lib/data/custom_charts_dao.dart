@@ -42,6 +42,11 @@ class CustomChartsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// 按 id 硬删(工单 32 删除入口;流订阅端卡片即时退场)。
+  Future<void> deleteById(int id) {
+    return (delete(customCharts)..where((row) => row.id.equals(id))).go();
+  }
+
   /// 全部自建谱,按入库序(id 升序)。
   Future<List<CustomChart>> getAll() {
     return (select(customCharts)..orderBy([(row) => OrderingTerm.asc(row.id)]))

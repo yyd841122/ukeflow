@@ -91,4 +91,26 @@ void main() {
       reason: '覆盖只动目标行',
     );
   });
+
+
+  // ── 工单 32:删除(曲库页删除钮的落库口)──
+
+  test('deleteById:按 id 硬删,其余行不动,流同步少一行', () async {
+    final a = await dao.add(title: '留下的', source: '[C]词\n');
+    final b = await dao.add(title: '删掉的', source: '[Am]词\n');
+    await dao.deleteById(b);
+    final rows = await dao.getAll();
+    expect(rows, hasLength(1));
+    expect(rows.single.id, a);
+    expect(rows.single.title, '留下的');
+    await expectLater(
+      dao.watchAll(),
+      emits(
+        predicate<List<CustomChart>>(
+          (rows) => rows.single.title == '留下的',
+          '流推送删除后的库态',
+        ),
+      ),
+    );
+  });
 }

@@ -11,6 +11,7 @@ import '../core/model/strum_chart.dart';
 import 'chord_library.dart';
 import 'database.dart';
 import 'providers.dart';
+import 'settings_dao.dart';
 
 export '../core/chart/builtin_charts.dart'
     show BuiltInChart, builtinChartCatalog;
@@ -87,6 +88,9 @@ final customStrumChartsProvider = StreamProvider<List<CustomStrumEntry>>((
   ref,
 ) async* {
   final library = await ref.watch(chordLibraryProvider.future);
+  // 初载竞速期容器被回收:不再订阅,否则弃用 Ref 上 watch 即抛
+  // (工单 32 测试拆容器时暴露;与设置控制器的 mounted 纪律同源)。
+  if (!ref.mounted) return;
   yield* ref.watch(customChartsDaoProvider).watchAll().map(
     (rows) => [
       for (final row in rows) _parseCustomEntry(row, library.labels),
@@ -179,6 +183,75 @@ final imageChartsProvider = StreamProvider<List<UserImageChartEntry>>((ref) {
       );
 });
 
+/// 逗号并 id 集解析(工单 32 隐藏集的存放格式):空/缺行 = 空集。
+Set<String> parseHiddenIds(String? raw) =>
+    raw == null || raw.isEmpty ? <String>{} : raw.split(',').toSet();
+
+/// 隐藏内置谱 id 集(工单 32,GLOSSARY「隐藏内置谱」):每类一个
+/// settings 键,流驱动——隐藏/恢复写库即推送,曲库页与设置页同源刷新。
+final hiddenBuiltinStrumsProvider = StreamProvider<Set<String>>(
+  (ref) => ref
+      .watch(settingsDaoProvider)
+      .watchString(SettingsKeys.hiddenBuiltinStrums)
+      .map(parseHiddenIds),
+);
+
+/// 隐藏内置指弹谱 id 集(工单 32)。
+final hiddenBuiltinTabsProvider = StreamProvider<Set<String>>(
+  (ref) => ref
+      .watch(settingsDaoProvider)
+      .watchString(SettingsKeys.hiddenBuiltinTabs)
+      .map(parseHiddenIds),
+);
+
+/// 隐藏内置图片谱 id 集(工单 32)。
+final hiddenBuiltinImagesProvider = StreamProvider<Set<String>>(
+  (ref) => ref
+      .watch(settingsDaoProvider)
+      .watchString(SettingsKeys.hiddenBuiltinImages)
+      .map(parseHiddenIds),
+);
+
+/// 内置谱隐藏/恢复的写入口(工单 32):读改写对应 settings 单行,
+/// 流订阅端(曲库/设置页)自动跟进。删除语义在 UI 层确认后走这里。
+class BuiltinChartVisibility {
+  BuiltinChartVisibility(this._dao);
+
+  final SettingsDao _dao;
+
+  Future<void> _change(
+    String key,
+    String id,
+    bool add,
+  ) async {
+    final current = parseHiddenIds(await _dao.getString(key));
+    final next = {...current};
+    add ? next.add(id) : next.remove(id);
+    if (next.length == current.length && add) return; // 已在集内,免写。
+    await _dao.setString(key, next.join(','));
+  }
+
+  /// 隐藏内置弹唱谱/指弹谱/图片谱(按曲库目录 id)。
+  Future<void> hideStrum(String id) =>
+      _change(SettingsKeys.hiddenBuiltinStrums, id, true);
+  Future<void> hideTab(String id) =>
+      _change(SettingsKeys.hiddenBuiltinTabs, id, true);
+  Future<void> hideImage(String id) =>
+      _change(SettingsKeys.hiddenBuiltinImages, id, true);
+
+  /// 恢复(设置页管理区):从对应集合移除。
+  Future<void> restoreStrum(String id) =>
+      _change(SettingsKeys.hiddenBuiltinStrums, id, false);
+  Future<void> restoreTab(String id) =>
+      _change(SettingsKeys.hiddenBuiltinTabs, id, false);
+  Future<void> restoreImage(String id) =>
+      _change(SettingsKeys.hiddenBuiltinImages, id, false);
+}
+
+final builtinChartVisibilityProvider = Provider<BuiltinChartVisibility>(
+  (ref) => BuiltinChartVisibility(ref.watch(settingsDaoProvider)),
+);
+
 /// 曲库数据源(工单 15):四类曲目合流为一处 AsyncValue,曲库页
 /// 统一呈现加载/错误/数据。自建谱与用户图片谱走流,导入后本 provider
 /// 自动重建,新谱即出现在列表(「同一列表」验收的数据面)。
@@ -187,19 +260,31 @@ final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   final customStrum = await ref.watch(customStrumChartsProvider.future);
   final tab = await ref.watch(builtinTabChartsProvider.future);
   final customImages = await ref.watch(imageChartsProvider.future);
+  if (!ref.mounted) {
+    throw StateError('libraryProvider 在启动中被回收');
+  }
+  // 隐藏集过滤(工单 32):内置谱三类按 settings id 集出列,自建谱与
+  // 用户图片谱走真删不经此(数据库行删了流即少一行)。
+  final hiddenStrums = await ref.watch(hiddenBuiltinStrumsProvider.future);
+  final hiddenTabs = await ref.watch(hiddenBuiltinTabsProvider.future);
+  final hiddenImages = await ref.watch(hiddenBuiltinImagesProvider.future);
   final imageCharts = [
     for (final chart in builtinImageChartCatalog)
-      BuiltinImageChartEntry(
-        id: chart.id,
-        title: chart.title,
-        assetPath: chart.assetPath,
-      ),
+      if (!hiddenImages.contains(chart.id))
+        BuiltinImageChartEntry(
+          id: chart.id,
+          title: chart.title,
+          assetPath: chart.assetPath,
+        ),
     ...customImages,
   ];
   return (
-    builtinStrum: builtinStrum,
+    builtinStrum: [
+      for (final chart in builtinStrum)
+        if (!hiddenStrums.contains(chart.id)) chart,
+    ],
     customStrum: customStrum,
-    tab: tab,
+    tab: [for (final t in tab) if (!hiddenTabs.contains(t.id)) t],
     imageCharts: imageCharts,
   );
 });

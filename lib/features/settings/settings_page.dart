@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/backup/backup_doc.dart';
 import '../../core/ui/step_slider_control.dart';
+import '../../data/chart_providers.dart';
 import '../../data/providers.dart';
 import '../../data/settings_providers.dart';
 import 'backup_flow.dart';
@@ -127,6 +128,7 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
         ),
+        const _HiddenChartsCard(),
       ],
     );
   }
@@ -207,5 +209,123 @@ class SettingsPage extends ConsumerWidget {
 
   void _show(ScaffoldMessengerState messenger, String message) {
     messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+
+/// 隐藏的内置谱管理区(工单 32):曲库页删除内置谱 = 隐藏,恢复口在
+/// 此。三类隐藏集非空才出卡;每条给曲名(目录解析,目录里已删的陈年
+/// id 以原样 id 呈现,恢复即清)与「恢复」钮,写回即曲库页回流。
+class _HiddenChartsCard extends ConsumerWidget {
+  const _HiddenChartsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Riverpod 3 AsyncValue.value 在 error 态返回 null:隐藏集读不到
+    // 按空集呈现(恢复区退场,曲库页照旧),不在设置页顶错误。
+    final hiddenStrums =
+        ref.watch(hiddenBuiltinStrumsProvider).value ?? const <String>{};
+    final hiddenTabs =
+        ref.watch(hiddenBuiltinTabsProvider).value ?? const <String>{};
+    final hiddenImages =
+        ref.watch(hiddenBuiltinImagesProvider).value ?? const <String>{};
+    if (hiddenStrums.isEmpty && hiddenTabs.isEmpty && hiddenImages.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final strumTitles = {
+      for (final c in ref.watch(builtinChartsProvider).value ?? const [])
+        c.id: c.chart.title,
+    };
+    final tabTitles = {
+      for (final t in ref.watch(builtinTabChartsProvider).value ?? const [])
+        t.id: t.chart.title,
+    };
+    final imageTitles = {
+      for (final c in builtinImageChartCatalog) c.id: c.title,
+    };
+    final visibility = ref.read(builtinChartVisibilityProvider);
+
+    final rows = <Widget>[
+      for (final id in hiddenStrums)
+        _HiddenRow(
+          key: Key('hidden-strum-$id'),
+          restoreKey: Key('restore-strum-$id'),
+          title: strumTitles[id] ?? id,
+          kind: '弹唱谱',
+          onRestore: () => visibility.restoreStrum(id),
+        ),
+      for (final id in hiddenTabs)
+        _HiddenRow(
+          key: Key('hidden-tab-$id'),
+          restoreKey: Key('restore-tab-$id'),
+          title: tabTitles[id] ?? id,
+          kind: '指弹谱',
+          onRestore: () => visibility.restoreTab(id),
+        ),
+      for (final id in hiddenImages)
+        _HiddenRow(
+          key: Key('hidden-image-$id'),
+          restoreKey: Key('restore-image-$id'),
+          title: imageTitles[id] ?? id,
+          kind: '图片谱',
+          onRestore: () => visibility.restoreImage(id),
+        ),
+    ];
+
+    return Card(
+      key: const Key('hidden-charts-card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('隐藏的内置谱', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              '在曲库页点删除移出的内置谱都在这里,点「恢复」回到曲库',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 隐藏条目行:类型前缀 + 曲名 + 恢复钮。
+class _HiddenRow extends StatelessWidget {
+  const _HiddenRow({
+    super.key,
+    required this.restoreKey,
+    required this.title,
+    required this.kind,
+    required this.onRestore,
+  });
+
+  /// 恢复钮 key(与行 key 分开,测试与机检定位用)。
+  final Key restoreKey;
+  final String title;
+  final String kind;
+  final Future<void> Function() onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text('$kind · $title', overflow: TextOverflow.ellipsis),
+        ),
+        TextButton(
+          key: restoreKey,
+          onPressed: onRestore,
+          child: const Text('恢复'),
+        ),
+      ],
+    );
   }
 }

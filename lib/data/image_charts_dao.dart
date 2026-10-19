@@ -19,6 +19,11 @@ class ImageChartsDao extends DatabaseAccessor<AppDatabase>
     ).insert(ImageChartsCompanion.insert(title: title, image: image));
   }
 
+  /// 按 id 硬删(工单 32 删除入口;流订阅端卡片即时退场)。
+  Future<void> deleteById(int id) {
+    return (delete(imageCharts)..where((row) => row.id.equals(id))).go();
+  }
+
   /// 全部图片谱,按入库序(id 升序)。
   Future<List<ImageChart>> getAll() {
     return (select(imageCharts)..orderBy([(row) => OrderingTerm.asc(row.id)]))

@@ -10,6 +10,7 @@ import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
+import 'package:ukeflow/data/settings_dao.dart';
 import 'package:ukeflow/features/library/image_chart_viewer_page.dart';
 import 'package:ukeflow/features/library/image_pick_flow.dart';
 import 'package:ukeflow/features/library/library_page.dart';
@@ -199,6 +200,133 @@ void main() {
 
     expect(find.text('曲库加载失败'), findsOneWidget);
     expect(find.textContaining('内置谱炸了'), findsOneWidget);
+  });
+
+  // ── 工单 32:删除(自建谱/用户图片谱真删,内置谱隐藏)──
+
+  testWidgets('三类曲目卡都带删除钮,内置卡删除钮与进入钮并存', (tester) async {
+    await pumpLibrary(tester);
+
+    expect(find.byKey(const Key('delete-chart-test-chart-a')), findsOneWidget);
+    expect(
+      find.byKey(const Key('delete-tab-chart-xiao-xing-xing')),
+      findsOneWidget,
+    );
+    // 删除钮不顶掉进入:点卡仍直达跟练。
+    await tester.tap(find.byKey(const Key('chart-test-chart-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('开始跟练'), findsOneWidget);
+  });
+
+  testWidgets('内置弹唱谱删除=隐藏:确认后退场,settings 行落库', (tester) async {
+    await pumpLibrary(tester);
+
+    await tester.tap(find.byKey(const Key('delete-chart-test-chart-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('把「测试曲」移出曲库?'), findsOneWidget);
+    expect(find.textContaining('可随时在设置页恢复'), findsOneWidget,
+        reason: '文案讲清是隐藏不是真删');
+
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-test-chart-a')), findsNothing,
+        reason: '卡片即时退场(流推送)');
+    expect(find.byKey(const Key('chart-test-chart-b')), findsOneWidget,
+        reason: '其余内置谱不受牵连');
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenBuiltinStrums),
+      'test-chart-a',
+    );
+  });
+
+  testWidgets('内置谱删除确认框取消:留在曲库,不落库', (tester) async {
+    await pumpLibrary(tester);
+
+    await tester.tap(find.byKey(const Key('delete-chart-test-chart-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-test-chart-a')), findsOneWidget);
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenBuiltinStrums),
+      isNull,
+    );
+  });
+
+  testWidgets('自建谱删除=数据库行硬删:确认后卡片退场', (tester) async {
+    await pumpLibrary(tester);
+
+    await db.customChartsDao.add(
+      title: '曲库自建歌',
+      source: '{title: 曲库自建歌}\n[C]词\n',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('custom-chart-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delete-custom-chart-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('删除「曲库自建歌」?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('custom-chart-1')), findsNothing);
+    expect(await db.customChartsDao.getAll(), isEmpty);
+    expect(find.textContaining('还没有自建谱'), findsOneWidget,
+        reason: '空态提示回场');
+  });
+
+  testWidgets('损坏自建谱同样可删(自救路径补齐,工单 16 遗留)', (tester) async {
+    await pumpLibrary(tester);
+
+    await db.customChartsDao.add(title: '坏谱歌', source: '{start_of_verse}\n[C]词');
+    await tester.pumpAndSettle();
+    expect(find.text('谱面读不出,暂不可跟练'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delete-custom-chart-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('坏谱歌'), findsNothing);
+    expect(await db.customChartsDao.getAll(), isEmpty);
+  });
+
+  testWidgets('指弹谱删除=隐藏:确认后退场(其余指弹曲不动)', (tester) async {
+    await pumpLibrary(tester);
+
+    await tester.tap(find.byKey(const Key('delete-tab-chart-xiao-xing-xing')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('tab-chart-xiao-xing-xing')), findsNothing);
+    expect(find.byKey(const Key('tab-chart-huan-le-song')), findsOneWidget);
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenBuiltinTabs),
+      'xiao-xing-xing',
+    );
+  });
+
+  testWidgets('用户图片谱删除=数据库行硬删', (tester) async {
+    await pumpLibrary(tester);
+
+    await db.imageChartsDao.add(title: '用户图片谱', image: tinyPngBytes);
+    await tester.pumpAndSettle();
+    // 图片谱区在长列表底部:滚到可见再断言/点按(ListView 懒构建)。
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('user-image-1')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const Key('user-image-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delete-user-image-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('user-image-1')), findsNothing);
+    expect(await db.imageChartsDao.getAll(), isEmpty);
   });
 
   testWidgets('窄屏(360dp)列表不溢出', (tester) async {

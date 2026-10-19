@@ -50,4 +50,17 @@ void main() {
     await dao.add(title: '第一张', image: Uint8List.fromList([1]));
     await expectation;
   });
+
+
+  // ── 工单 32:删除(曲库页删除钮的落库口)──
+
+  test('deleteById:按 id 硬删,其余行不动', () async {
+    final a = await dao.add(title: '留下的', image: Uint8List.fromList([1, 2]));
+    final b = await dao.add(title: '删掉的', image: Uint8List.fromList([3]));
+    await dao.deleteById(b);
+    final rows = await dao.getAll();
+    expect(rows, hasLength(1));
+    expect(rows.single.id, a);
+    expect(rows.single.title, '留下的');
+  });
 }

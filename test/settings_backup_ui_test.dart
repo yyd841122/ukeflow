@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -66,7 +67,14 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    // 工单 32 起设置页订阅隐藏集流:widget 测试走 closeStreamsSynchronously
+    // 关库纪律(见 settings_page_test 同批注释)。
+    db = AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
     addTearDown(db.close);
   });
 

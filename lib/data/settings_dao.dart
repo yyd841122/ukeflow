@@ -11,6 +11,15 @@ abstract final class SettingsKeys {
 
   /// 默认 BPM(节拍器初始值/跟练无 tempo 谱的回退值消费)。
   static const defaultBpm = 'default_bpm';
+
+  /// 隐藏的内置弹唱谱 id 集,逗号并(工单 32,GLOSSARY「隐藏内置谱」)。
+  static const hiddenBuiltinStrums = 'hidden_builtin_strum_ids';
+
+  /// 隐藏的内置指弹谱 id 集(工单 32)。
+  static const hiddenBuiltinTabs = 'hidden_builtin_tab_ids';
+
+  /// 隐藏的内置图片谱 id 集(工单 32)。
+  static const hiddenBuiltinImages = 'hidden_builtin_image_ids';
 }
 
 /// 设置表(工单 20):键值对,key 主键——每键至多一行,重写即覆盖
@@ -48,6 +57,29 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
     return into(settings).insertOnConflictUpdate(
       SettingsCompanion.insert(key: key, value: '$value'),
     );
+  }
+
+  /// 读文本设置;缺行返回 null(工单 32:隐藏集等串值键)。
+  Future<String?> getString(String key) async {
+    final row = await (select(
+      settings,
+    )..where((r) => r.key.equals(key))).getSingleOrNull();
+    return row?.value;
+  }
+
+  /// 写文本设置(key 主键,存在即覆盖)。
+  Future<void> setString(String key, String value) {
+    return into(
+      settings,
+    ).insertOnConflictUpdate(SettingsCompanion.insert(key: key, value: value));
+  }
+
+  /// 文本设置流:该键行增删改即推送,无行推 null(工单 32:隐藏集
+  /// 变化驱动曲库页/设置页同源刷新)。
+  Stream<String?> watchString(String key) {
+    return (select(settings)..where((r) => r.key.equals(key)))
+        .watchSingleOrNull()
+        .map((row) => row?.value);
   }
 
   /// 全部设置行原样读出(工单 21 备份导出:全量搬运,不筛已知键)。
