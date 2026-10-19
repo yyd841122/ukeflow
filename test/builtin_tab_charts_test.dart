@@ -5,14 +5,48 @@ import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
 /// 音位期望值是独立真值(入门 C 调第一把位的标准指位:①3=C5、②3=G4、
 /// ③0=C4、③2=D4),逐音抽查旋律走向,渲染「对照谱面数据」的数据面在此锁死。
 void main() {
-  test('清单按序产出两首入门曲,id 与曲名对应', () {
+  test('清单按序产出十首曲,id 与曲名对应', () {
     final charts = loadBuiltinTabCharts();
 
     expect(charts, hasLength(builtinTabChartCatalog.length));
     for (var i = 0; i < charts.length; i++) {
       expect(charts[i].id, builtinTabChartCatalog[i].id);
     }
-    expect([for (final c in charts) c.chart.title], ['小星星', '欢乐颂']);
+    expect([for (final c in charts) c.chart.title], [
+      '小星星', '欢乐颂',
+      // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
+      '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
+      '卡农', '绿袖子', '划小船', '老麦克唐纳',
+    ]);
+  });
+
+  group('迁移谱数据面抽查(转录自 demo,拍位自曲头累计、域内合法)', () {
+    final migrated = loadBuiltinTabCharts()
+        .where((c) => c.id != 'xiao-xing-xing' && c.id != 'huan-le-song')
+        .toList();
+
+    test('迁移谱恰好 8 首', () {
+      expect(migrated, hasLength(8));
+    });
+
+    for (final entry in migrated) {
+      test('${entry.id}:音域/品位/拍位合法且按拍不倒退', () {
+        final song = entry.chart;
+        expect(song.tempo, greaterThan(0));
+        expect(song.notes, isNotEmpty);
+        var lastBeat = -1.0;
+        for (final n in song.notes) {
+          expect(n.string, inInclusiveRange(1, 4), reason: '$n');
+          expect(n.fret, greaterThanOrEqualTo(0), reason: '$n');
+          expect(n.beat, greaterThan(lastBeat),
+              reason: '${entry.id} 拍位须严格递增,见 $n');
+          expect(n.beat * 4, (n.beat * 4).round(),
+              reason: '${entry.id} 拍位落在 1/16 拍网格,见 $n');
+          if (n.lyric != null) expect(n.lyric, isNotEmpty);
+          lastBeat = n.beat;
+        }
+      });
+    }
   });
 
   test('小星星:42 音 12 小节,乐句走向与指位抽查', () {

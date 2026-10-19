@@ -7,6 +7,8 @@ import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/chord_library.dart';
 
 /// 工单 07 验收：5 首目标曲全部解析、过校验、可被后续工单取用。
+/// 2026-10-18 起清单并入 19 首旧项目迁移谱（ukulele-demo/glm 转录，
+/// 自由段/示意段落形态），加载与白名单契约对全清单生效。
 /// 真实资产 + 真实和弦库白名单，普通 test()（rootBundle 在非 widget
 /// 测试里可用）。
 
@@ -32,11 +34,12 @@ void main() {
     );
   });
 
-  test('清单与资产一一对应，5 首全部加载成功', () {
-    expect(charts, hasLength(5));
+  test('清单与资产一一对应，${builtinChartCatalog.length} 首全部加载成功', () {
+    expect(charts, hasLength(builtinChartCatalog.length));
+    expect(charts, hasLength(24), reason: '5 首目标曲 + 19 首旧项目迁移谱');
     expect(
       charts.map((c) => c.id).toSet(),
-      hasLength(5),
+      hasLength(builtinChartCatalog.length),
       reason: '曲目 id 不得重复',
     );
   });
@@ -83,6 +86,39 @@ void main() {
     }
   });
 
+  group('旧项目迁移谱的内容契约（自由段/示意段落，只锁可用性）', () {
+    final migrated = {
+      'song-bie', 'you-yi-di-jiu-tian-chang', 'mo-li-hua',
+      'xiao-xing-xing-strum', 'sheng-ri-kuai-le', 'liang-zhi-lao-hu',
+      'huan-le-song-strum', 'fen-shua-jiang', 'chun-tian-lai-le',
+      'ling-er-xiang-ding-dang', 'oh-susanna', 'yao-lan-qu', 'tong-nian',
+      'yin-xing-de-chi-bang', 'you-are-my-sunshine', 'london-bridge',
+      'row-row-row', 'xin-nian-hao', 'kang-kang-wu-qu',
+    };
+
+    test('迁移谱 id 齐全且不多不少', () {
+      expect(
+        charts.map((c) => c.id).where(migrated.contains).toSet(),
+        migrated,
+      );
+    });
+
+    for (final id in migrated) {
+      test('$id：元数据齐全、至少一段、有和弦', () {
+        final built = charts.singleWhere((c) => c.id == id);
+        expect(built.chart.title, isNot(StrumChart.untitled));
+        expect(built.chart.artist, isNotNull);
+        expect(built.chart.key, isNotNull);
+        expect(built.chart.tempo, isNotNull);
+        expect(built.chart.sections, hasLength(greaterThanOrEqualTo(1)));
+        final chords = chordNamesOf(built);
+        expect(chords, isNotEmpty);
+        expect(chords, everyElement(isNot(contains('/'))),
+            reason: 'v1 和弦库无斜杠和弦指法');
+      });
+    }
+  });
+
   test('全部谱内和弦名都在和弦库白名单内（校验已保证，此处显式复核）', () async {
     final lib = ChordLibrary.parse(
       await rootBundle.loadString('assets/chords/ukulele.json'),
@@ -93,7 +129,7 @@ void main() {
     expect(used.intersection(lib.labels), used);
   });
 
-  test('builtinChartsProvider 经真实资产解析出 5 首弹唱谱', () async {
+  test('builtinChartsProvider 经真实资产解析出全部弹唱谱', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 

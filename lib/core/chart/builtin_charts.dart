@@ -22,6 +22,42 @@ const builtinChartCatalog = <({String id, String asset})>[
     asset: 'assets/charts/love-you-more-than-i-can-say.pro',
   ),
   (id: 'yesterday-once-more', asset: 'assets/charts/yesterday-once-more.pro'),
+
+  // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo / ukulele-glm 转录)──
+  // demo 三首(段落结构齐全):送别 / 友谊地久天长 / 茉莉花;
+  // glm 十六首(自由段,歌词+和弦位转录):
+  // 小星星 生日快乐 两只老虎 欢乐颂 粉刷匠 春天来了 铃儿响叮当
+  // Oh Susanna 摇篮曲 童年 隐形的翅膀 You Are My Sunshine
+  // London Bridge Row Row Row 新年好 康康舞曲。
+  // 与内置指弹曲同曲不同谱的 id 加 -strum 后缀区分(xiao-xing-xing-strum 等)。
+  (id: 'song-bie', asset: 'assets/charts/song-bie.pro'),
+  (
+    id: 'you-yi-di-jiu-tian-chang',
+    asset: 'assets/charts/you-yi-di-jiu-tian-chang.pro',
+  ),
+  (id: 'mo-li-hua', asset: 'assets/charts/mo-li-hua.pro'),
+  (id: 'xiao-xing-xing-strum', asset: 'assets/charts/xiao-xing-xing-strum.pro'),
+  (id: 'sheng-ri-kuai-le', asset: 'assets/charts/sheng-ri-kuai-le.pro'),
+  (id: 'liang-zhi-lao-hu', asset: 'assets/charts/liang-zhi-lao-hu.pro'),
+  (id: 'huan-le-song-strum', asset: 'assets/charts/huan-le-song-strum.pro'),
+  (id: 'fen-shua-jiang', asset: 'assets/charts/fen-shua-jiang.pro'),
+  (id: 'chun-tian-lai-le', asset: 'assets/charts/chun-tian-lai-le.pro'),
+  (
+    id: 'ling-er-xiang-ding-dang',
+    asset: 'assets/charts/ling-er-xiang-ding-dang.pro',
+  ),
+  (id: 'oh-susanna', asset: 'assets/charts/oh-susanna.pro'),
+  (id: 'yao-lan-qu', asset: 'assets/charts/yao-lan-qu.pro'),
+  (id: 'tong-nian', asset: 'assets/charts/tong-nian.pro'),
+  (id: 'yin-xing-de-chi-bang', asset: 'assets/charts/yin-xing-de-chi-bang.pro'),
+  (
+    id: 'you-are-my-sunshine',
+    asset: 'assets/charts/you-are-my-sunshine.pro',
+  ),
+  (id: 'london-bridge', asset: 'assets/charts/london-bridge.pro'),
+  (id: 'row-row-row', asset: 'assets/charts/row-row-row.pro'),
+  (id: 'xin-nian-hao', asset: 'assets/charts/xin-nian-hao.pro'),
+  (id: 'kang-kang-wu-qu', asset: 'assets/charts/kang-kang-wu-qu.pro'),
 ];
 
 /// 内置曲库加载：逐份解析+校验，任何坏谱当场抛错（内置内容必须完美，
