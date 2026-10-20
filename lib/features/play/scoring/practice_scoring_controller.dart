@@ -34,7 +34,6 @@ enum ScoringStatus {
 
 class PracticeScoringState {
   const PracticeScoringState({
-    this.enabled = false,
     this.status = ScoringStatus.idle,
     this.suspended = false,
     this.report,
@@ -42,8 +41,6 @@ class PracticeScoringState {
     this.error,
   });
 
-  /// 空闲面板的评分开关(会话级,不落库)。
-  final bool enabled;
   final ScoringStatus status;
 
   /// 暂停挂起中:采集照跑(音频照存),onset 不收——恢复后时间轴重锚,
@@ -61,14 +58,12 @@ class PracticeScoringState {
   final String? error;
 
   PracticeScoringState copyWith({
-    bool? enabled,
     ScoringStatus? status,
     bool? suspended,
     Object? report = _sentinel,
     Object? reportLatencySec = _sentinel,
     Object? error = _sentinel,
   }) => PracticeScoringState(
-    enabled: enabled ?? this.enabled,
     status: status ?? this.status,
     suspended: suspended ?? this.suspended,
     report: identical(report, _sentinel)
@@ -162,17 +157,12 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     return const PracticeScoringState();
   }
 
-  /// 空闲面板开关。会话中不可切(页面只在空闲面板露开关,这里再兜)。
-  void setEnabled(bool value) {
-    if (state.status != ScoringStatus.idle) return;
-    state = state.copyWith(enabled: value, error: null);
-  }
-
-  /// 起评分会话:权限 → 开麦 → 复位 → listening,并给跟练会话接上
-  /// 评分嘀声。返回 false = 开不了(权限拒/开麦失败),跟练照常开始
-  /// 不评分(错误文案在 [PracticeScoringState.error])。
+  /// 起评分会话(跟练每次开始自动调;参考音=示范扫弦的遍由页面跳过
+  /// 不调——示范声进麦会被判成「全弹对了」):权限 → 开麦 → 复位 →
+  /// listening,并给跟练会话接上评分嘀声。返回 false = 开不了(权限拒/
+  /// 开麦失败),跟练照常开始不评分(错误文案在 [PracticeScoringState.error])。
   Future<bool> startSession() async {
-    if (!state.enabled || state.status != ScoringStatus.idle) return false;
+    if (state.status != ScoringStatus.idle) return false;
     final recorder = ref.read(tunerRecorderProvider);
     final granted = await recorder.hasPermission(request: true);
     if (!ref.mounted) return false;

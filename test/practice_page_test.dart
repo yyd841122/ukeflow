@@ -22,8 +22,11 @@ import 'helpers/scoring_fixtures.dart';
 void main() {
   late FakeAudioEngine engine;
 
+  late FakeRecorder pageRecorder;
+
   Future<void> pumpPage(WidgetTester tester) async {
     engine = FakeAudioEngine();
+    pageRecorder = FakeRecorder();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -31,6 +34,9 @@ void main() {
           chordLibraryFixtureOverride(),
           // 「默认 BPM」消费缝(工单 20):override 隔离,不触真库。
           defaultBpmProvider.overrideWithValue(80),
+          // 评分自动开(工单 36 调整):两条评分缝一并隔离,不触真麦/真库。
+          tunerRecorderProvider.overrideWithValue(pageRecorder),
+          scoringLatencyMsProvider.overrideWithValue(100),
         ],
         child: MaterialApp(home: const Scaffold(body: SizedBox.shrink())),
       ),
@@ -255,14 +261,15 @@ void main() {
     );
   });
 
-  testWidgets('运行面板:参考音可切示范扫弦(拨弦声入窗)、变速滑杆生效', (tester) async {
+  testWidgets('参考音=示范扫弦(空闲选型):该遍不评分,拨弦声入窗、常规 tick 静默', (tester) async {
     await pumpPage(tester);
-    await tester.ensureVisible(find.byKey(const Key('practice-start')));
-    await tester.tap(find.byKey(const Key('practice-start')));
-    await advanceAndPump(tester, 3700); // 曲内 700ms
-
+    // 空闲面板选示范扫弦(评分自动开的时代,参考音是进页选型;
+    // 评分会话的拾音纯度要求会话内锁定,运行面板不再提供切换)。
+    await tester.ensureVisible(find.byKey(const Key('reference-strum')));
     await tester.tap(find.byKey(const Key('reference-strum')));
     await tester.pump();
+    expect(find.byKey(const Key('no-scoring-hint')), findsOneWidget);
+
     final container = ProviderScope.containerOf(
       tester.element(find.byKey(const Key('reference-strum'))),
     );
@@ -270,12 +277,26 @@ void main() {
       container.read(playPracticeProvider).reference,
       ReferenceSound.strum,
     );
+
+    await tester.ensureVisible(find.byKey(const Key('practice-start')));
+    await tester.tap(find.byKey(const Key('practice-start')));
+    await advanceAndPump(tester, 4200); // 预备 3s + 曲内 900ms
+
     expect(
       engine.scheduleLog.any((e) => e.key.startsWith('pluck_')),
       isTrue,
-      reason: '切扫弦后窗内事件预定拨弦声',
+      reason: '示范扫弦遍:窗内事件预定拨弦声',
     );
-
+    expect(
+      engine.scheduleLog.where((e) => e.key.startsWith('tick_scoring')),
+      isEmpty,
+      reason: '不评分遍:无评分嘀声(常规强弱拍也不响,正曲拍由拨弦声接管)',
+    );
+    // 正曲拍静默(参考音=扫弦接管),预备仍数拍(专用音源)。
+    expect(
+      engine.scheduleLog.where((e) => e.key == 'tick_count'),
+      hasLength(4),
+    );
     // 变速滑杆:点中点 = 75%,运行中即时重编译(视觉不炸即可,编译已测)。
     await tester.tap(
       find.byKey(const Key('speed-slider')),
@@ -303,12 +324,17 @@ void main() {
     expect(
       engine.scheduleLog,
       hasLength(20),
-      reason: '预备 4 声 + 曲内 16 声,曲末无幻拍声',
+      reason: '预备 4 声 + 曲内 16 声(评分嘀声逐拍),曲末无幻拍声',
     );
     expect(
-      engine.scheduleLog.where((e) => e.key == 'tick_count'),
-      hasLength(4),
-      reason: '预备数拍专用音源',
+      engine.scheduleLog.where((e) => e.key == 'tick_scoring_accent'),
+      hasLength(4 + 4),
+      reason: '预备 4 声 + 每小节拍头 4 声走重音嘀声',
+    );
+    expect(
+      engine.scheduleLog.where((e) => e.key == 'tick_scoring_beep'),
+      hasLength(12),
+      reason: '非拍头 12 拍走普通嘀声',
     );
     for (final call in engine.scheduleLog) {
       expect(call.time.inMilliseconds, lessThan(15000), reason: '都在预备+曲长内');
@@ -494,9 +520,9 @@ void main() {
       reason: '仍在会话中',
     );
     expect(
-      engine.scheduleLog.where((e) => e.key == 'tick_count'),
-      hasLength(8),
-      reason: '两遍预备各 4 声',
+      engine.scheduleLog.where((e) => e.key == 'tick_scoring_accent'),
+      hasLength(13),
+      reason: '遍 1:预备 4 + 拍头 4;遍 2:预备 4 + 首拍头 1(引擎 18s 恰入窗)',
     );
 
     // 遍 2 中关循环:本遍曲末回闲,不再续。
@@ -593,40 +619,8 @@ void main() {
       }
     }
 
-    testWidgets('评分开关:开启隐藏参考音选择并强制节拍声,错误文案可见', (tester) async {
-      await pumpScoringPage(tester);
-      expect(find.byKey(const Key('scoring-toggle')), findsOneWidget);
-      expect(find.byKey(const Key('reference-beat')), findsOneWidget);
-
-      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
-      await tester.tap(find.byKey(const Key('scoring-toggle')));
-      await tester.pump();
-      expect(
-        find.byKey(const Key('reference-beat')),
-        findsNothing,
-        reason: '评分开:参考音选择器隐藏(强制节拍声)',
-      );
-
-      // 权限拒:错误文案可见,开关保持开(下一轮可再试),开始不评分。
-      recorder.granted = false;
-      await tester.ensureVisible(find.byKey(const Key('practice-start')));
-      await tester.tap(find.byKey(const Key('practice-start')));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.textContaining('需要麦克风权限'), findsOneWidget);
-      expect(
-        scoringOf(tester).status,
-        ScoringStatus.idle,
-        reason: '起不来:回闲,跟练照常开始',
-      );
-      expect(containerOf(tester).read(playPracticeProvider).running, isTrue);
-    });
-
     testWidgets('弹了再停:报告页弹出,轨道可重听,滑块在,看完即弃', (tester) async {
       await pumpScoringPage(tester);
-      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
-      await tester.tap(find.byKey(const Key('scoring-toggle')));
-      await tester.pump();
       await tester.ensureVisible(find.byKey(const Key('practice-start')));
       await tester.tap(find.byKey(const Key('practice-start')));
       await tester.pump();
@@ -682,9 +676,6 @@ void main() {
 
     testWidgets('评分中弹回:弃评不弹报告,麦已停,评分接线已拆', (tester) async {
       await pumpScoringPage(tester);
-      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
-      await tester.tap(find.byKey(const Key('scoring-toggle')));
-      await tester.pump();
       await tester.ensureVisible(find.byKey(const Key('practice-start')));
       await tester.tap(find.byKey(const Key('practice-start')));
       await tester.pump();

@@ -197,25 +197,21 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
           const SizedBox(height: 8),
           _patternPicker(state),
           const SizedBox(height: 16),
-          // 评分开关(GLOSSARY「跟练评分」):开则参考音强制节拍声
-          // (评分听用户的琴,示范扫弦声会污染拾音),选择器随之隐藏。
-          SwitchListTile(
-            key: const Key('scoring-toggle'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('跟练评分'),
-            subtitle: const Text('数拍时照常扫四下,结束后出报告'),
-            value: scoring.enabled,
-            onChanged: (value) {
-              _scoring.setEnabled(value);
-              if (value) _controller.setReference(ReferenceSound.beat);
-            },
+          // 评分自动开(GLOSSARY「跟练评分」):节拍声参考音的会话每次
+          // 都评分,无开关。参考音=示范扫弦的那遍不评分(示范声进麦会被
+          // 判成「全弹对了」),选择一行提示言明。
+          Text('参考音', style: _sectionLabelStyle),
+          const SizedBox(height: 8),
+          _ReferenceToggle(
+            reference: state.reference,
+            onChanged: _controller.setReference,
           ),
-          if (!scoring.enabled) ...[
-            Text('参考音', style: _sectionLabelStyle),
-            const SizedBox(height: 8),
-            _ReferenceToggle(
-              reference: state.reference,
-              onChanged: _controller.setReference,
+          if (state.reference == ReferenceSound.strum) ...[
+            const SizedBox(height: 4),
+            Text(
+              '示范扫弦模式下不评分',
+              key: const Key('no-scoring-hint'),
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           ],
           const SizedBox(height: 32),
@@ -256,11 +252,12 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
     );
   }
 
-  /// 开始跟练:评分开着先起评分会话(权限/开麦;失败不拦跟练,只留
-  /// 错误文案),再起跟练会话(评分嘀声接线已就位 → 强制节拍声)。
+  /// 开始跟练:参考音=节拍声时自动起评分会话(权限/开麦;失败不拦跟练,
+  /// 只留错误文案);参考音=示范扫弦的那遍不评分(示范声进麦必假分),
+  /// 跟练会话照常(常规强弱拍 tick 回归)。
   Future<void> _startPractice() async {
     _demo.stop();
-    if (ref.read(practiceScoringProvider).enabled) {
+    if (ref.read(playPracticeProvider).reference == ReferenceSound.beat) {
       final ok = await _scoring.startSession();
       if (!mounted) return; // 权限弹窗期间弹回:dispose 已收尾,不得再起会话。
       if (!ok) {

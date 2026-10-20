@@ -140,15 +140,7 @@ void main() {
     return signal;
   }
 
-  test('空闲开关:setEnabled 换 enabled', () {
-    controller().setEnabled(true);
-    expect(container.read(practiceScoringProvider).enabled, isTrue);
-    controller().setEnabled(false);
-    expect(container.read(practiceScoringProvider).enabled, isFalse);
-  });
-
   test('权限拒:startSession false + 错误文案,不接评分嘀声', () async {
-    controller().setEnabled(true);
     recorder.granted = false;
     final ok = await controller().startSession();
     expect(ok, isFalse);
@@ -157,7 +149,6 @@ void main() {
   });
 
   test('开麦失败:startSession false + 错误文案', () async {
-    controller().setEnabled(true);
     recorder.startOk = false;
     final ok = await controller().startSession();
     expect(ok, isFalse);
@@ -165,7 +156,6 @@ void main() {
   });
 
   test('完整会话:预备校准吸收 +80ms 偏移,全曲判准,接线拆净', () async {
-    controller().setEnabled(true);
     armHandle();
     expect(await controller().startSession(), isTrue);
     expect(handle.scoringTicksCalls, [true]);
@@ -203,7 +193,6 @@ void main() {
       pattern: builtinStrumPatterns.first,
       bpm: 80,
     );
-    c2.setEnabled(true);
     expect(await c2.startSession(), isTrue);
 
     // 预备期静默(校准采不到);正曲噪声扫弦 +130ms 偏移(恰为持久化值)。
@@ -226,7 +215,6 @@ void main() {
   });
 
   test('暂停挂起:挂起期弹的不收(判漏),恢复后照常判', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -254,7 +242,6 @@ void main() {
   });
 
   test('循环清零:第二遍只弹一半,报告只反映第二遍', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
 
@@ -277,7 +264,6 @@ void main() {
   });
 
   test('变速 50%:后半拍周期翻倍,按各自检出周期折秒照样判准', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -297,7 +283,6 @@ void main() {
   });
 
   test('「错」:弹了别的和弦 → wrong;滑块重算不丢', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -316,7 +301,6 @@ void main() {
   });
 
   test('重听:命中点装载一次性音源,再听卸掉上一条;漏点听期望位', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -341,7 +325,6 @@ void main() {
   });
 
   test('abort:弃评回 idle、拆接线、无报告、麦停过', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -357,7 +340,6 @@ void main() {
   });
 
   test('一开播就停(无 onset):不弹报告直接回 idle', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -373,7 +355,6 @@ void main() {
   });
 
   test('closeReport:看完即弃回 idle,开关保留', () async {
-    controller().setEnabled(true);
     armHandle();
     await controller().startSession();
     controller().onPassStart();
@@ -389,6 +370,5 @@ void main() {
     final state = container.read(practiceScoringProvider);
     expect(state.status, ScoringStatus.idle);
     expect(state.report, isNull);
-    expect(state.enabled, isTrue);
   });
 }
