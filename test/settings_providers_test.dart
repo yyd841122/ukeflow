@@ -120,4 +120,34 @@ void main() {
     expect(container.read(referenceA4Provider), 432.0);
     expect(container.read(defaultBpmProvider), 96);
   });
+
+  test('评分延迟(工单 33):空库缺省 100ms,种子库落库值', () async {
+    await pumpContainer();
+    await container.read(settingsProvider.notifier).ready;
+    expect(container.read(scoringLatencyMsProvider), 100,
+        reason: '真机链路常见量级 ~0.1s');
+
+    await pumpContainer(
+      seed: (db) async =>
+          db.settingsDao.setInt(SettingsKeys.scoringLatencyMs, 130),
+    );
+    await container.read(settingsProvider.notifier).ready;
+    expect(container.read(scoringLatencyMsProvider), 130);
+  });
+
+  test('setScoringLatencyMs:状态即时换、写透落库、钳制 ±200', () async {
+    await pumpContainer();
+    final notifier = container.read(settingsProvider.notifier);
+    await notifier.ready;
+
+    await notifier.setScoringLatencyMs(150);
+    expect(container.read(scoringLatencyMsProvider), 150);
+    expect(await db.settingsDao.getInt(SettingsKeys.scoringLatencyMs), 150,
+        reason: '重启仍在(跨会话生效)');
+
+    await notifier.setScoringLatencyMs(500);
+    expect(container.read(scoringLatencyMsProvider), 200);
+    await notifier.setScoringLatencyMs(-999);
+    expect(container.read(scoringLatencyMsProvider), -200);
+  });
 }

@@ -92,6 +92,68 @@ void main() {
     expect(engine.loadedKeys, containsAll(['tick_strong', 'tick_weak']));
   });
 
+  test('warmup:评分嘀声对一并注入(工单 33)', () async {
+    await controller().warmup();
+    expect(
+      engine.loadedKeys,
+      containsAll(['tick_scoring_beep', 'tick_scoring_accent']),
+    );
+  });
+
+  test('setScoringTicks:开启后节拍声走评分嘀声对,预备拍与拍头重音', () async {
+    final c = controller();
+    await c.warmup();
+    c.setScoringTicks(true);
+    expect(container.read(playPracticeProvider).scoringTicks, isTrue);
+    c.start(chart: practiceFixtureChart);
+    // 启动首过窗:预备第 0 拍 → 重音嘀声(不是 tick_count)。
+    expect(engine.scheduleLog.single.key, 'tick_scoring_accent');
+  });
+
+  test('setScoringTicks:开则 start 强制参考音=节拍声(整曲仍嘀声,不静默)', () async {
+    final c = controller();
+    await c.warmup();
+    c.setReference(ReferenceSound.strum);
+    c.setScoringTicks(true);
+    c.start(chart: practiceFixtureChart);
+    expect(container.read(playPracticeProvider).reference, ReferenceSound.beat);
+    // BPM 208(拍周期 288ms)首过窗多拍:全部走评分嘀声而非静默+扫弦声
+    // ——参考音若没被强制成节拍声,正曲拍将一个 tick 都没有。
+    c.setBpm(208);
+    c.stop();
+    c.start(chart: practiceFixtureChart);
+    expect(
+      engine.scheduleLog.map((call) => call.key),
+      everyElement(startsWith('tick_scoring')),
+    );
+    expect(engine.scheduleLog, isNotEmpty);
+  });
+
+  test('评分缝:scheduleAnchor/periodMs/chords 运行中可读,空闲 null', () async {
+    final c = controller();
+    await c.warmup();
+    expect(c.scheduleAnchor, isNull, reason: '未运行');
+    final library = uiFixtureLibrary;
+    final chords = {for (final chord in library.chords) chord.label: chord};
+    // start 以入参登记会话和弦表(页面传当前库面)。
+    c.start(chart: practiceFixtureChart, chords: chords);
+    // 启动锚定引擎当前时刻(本容器未推进过 → 零点),即预备第 0 拍。
+    expect(c.scheduleAnchor, Duration.zero);
+    expect(c.periodMs, closeTo(60000 / 80, 1e-9));
+    expect(c.chords, isNotEmpty);
+    c.stop();
+    expect(c.scheduleAnchor, isNull, reason: '回闲即失效');
+  });
+
+  test('setScoringTicks(false):节拍声回常规 tick', () async {
+    final c = controller();
+    await c.warmup();
+    c.setScoringTicks(true);
+    c.setScoringTicks(false);
+    c.start(chart: practiceFixtureChart);
+    expect(engine.scheduleLog.single.key, 'tick_count');
+  });
+
   test('并发 warmup 共享同一次在途初始化:音源不重复注入', () async {
     await Future.wait([controller().warmup(), controller().warmup()]);
     expect(engine.loadedKeys.where((k) => k == 'tick_strong'), hasLength(1));

@@ -76,6 +76,12 @@ class PlayStrumEvent extends PlayEvent {
   /// 该扫弦落在和弦库里的和弦名（可查指法/示范音）；
   /// 谱开头还没出现任何和弦记号时为 null（右手照扫，无和弦可依）。
   final String? chord;
+
+  /// 调度拍位：自调度 t0（预备第 0 拍）起的拍序号 = [prepBeats] +
+  /// 小节×4 + 槽位/2。评分期望点（工单 33）与测试夹具共用这一定义，
+  /// 不各处手拼——拍域判定(GLOSSARY「跟练评分」)的单一来源。
+  double scheduleBeat(int prepBeats) =>
+      prepBeats + barIndex * beatsPerBar + slotInBar / 2;
 }
 
 /// 一首谱编译出的动作事件时间轴。

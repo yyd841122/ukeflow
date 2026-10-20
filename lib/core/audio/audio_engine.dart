@@ -30,6 +30,10 @@ abstract interface class AudioEngine {
   /// 停止一个 voice;已响完则为无害空操作。
   void stop(EngineVoice voice);
 
+  /// 释放一个音源(停止其全部在响实例并回收内存;工单 33 评分重听的
+  /// 一次性音源用)。释放后再 play 是程序错误;引擎已关时无害返回。
+  Future<void> unload(EngineSound sound);
+
   /// 关闭引擎(应用退出时)。
   void dispose();
 }

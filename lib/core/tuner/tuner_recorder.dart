@@ -20,7 +20,10 @@ abstract interface class TunerRecorder {
   void dispose();
 }
 
-/// record 包的真实实现(调音链路:PCM16/44.1kHz/单声道,spike A 验证参数)。
+/// record 包的真实实现(调音链路:PCM16/44.1kHz/单声道,spike A 验证参数;
+/// 工单 33 评分复用同一配置——AGC/回声消除/降噪须全关,record_platform_
+/// interface 2.1.0 三字段 Dart 缺省即 false,这里显式钉死:AGC 动幅度毁
+/// 安静门、降噪动频谱毁色度,平台侧是否照办真机机检兜底)。
 class RecordTunerRecorder implements TunerRecorder {
   final AudioRecorder _recorder = AudioRecorder();
 
@@ -28,6 +31,9 @@ class RecordTunerRecorder implements TunerRecorder {
     encoder: AudioEncoder.pcm16bits,
     sampleRate: 44100,
     numChannels: 1,
+    autoGain: false,
+    echoCancel: false,
+    noiseSuppress: false,
   );
 
   @override

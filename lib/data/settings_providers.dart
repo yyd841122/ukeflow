@@ -16,22 +16,38 @@ const int maxDefaultBpm = 208;
 /// 节拍器原独立缺省 120 收拢归一(工单 20)。
 const int settingsDefaultBpm = 80;
 
+/// 评分链路延迟范围(毫秒,可负;报告滑块同域,工单 33)。
+const int minScoringLatencyMs = -200;
+const int maxScoringLatencyMs = 200;
+
+/// 评分链路延迟缺省(毫秒):真机常见量级 ~0.1s(demo 前史);
+/// 预备数拍校准采到前与采不到时的回退值。
+const int settingsDefaultScoringLatencyMs = 100;
+
 /// 设置状态(工单 20):内存当前值。启动为缺省,异步加载落库值后替换,
 /// setter 即时换状态并写透 DAO。
 class AppSettings {
-  const AppSettings({required this.referenceA4, required this.defaultBpm});
+  const AppSettings({
+    required this.referenceA4,
+    required this.defaultBpm,
+    this.scoringLatencyMs = settingsDefaultScoringLatencyMs,
+  });
 
   /// 缺省:A4=440(pitch_math 全库换算常量,测试双源锚定)、
-  /// 默认 BPM=[settingsDefaultBpm]。
+  /// 默认 BPM=[settingsDefaultBpm]、评分延迟 100ms(工单 33)。
   const AppSettings.defaults()
     : referenceA4 = 440,
-      defaultBpm = settingsDefaultBpm;
+      defaultBpm = settingsDefaultBpm,
+      scoringLatencyMs = settingsDefaultScoringLatencyMs;
 
   /// A4 参考音 Hz(调音器消费,GLOSSARY「参考音」)。
   final int referenceA4;
 
   /// 默认 BPM(节拍器初始值/跟练无 tempo 谱的回退值)。
   final int defaultBpm;
+
+  /// 评分链路延迟毫秒(可负;跟练评分的报告初值与校准回退,工单 33)。
+  final int scoringLatencyMs;
 }
 
 final settingsProvider = NotifierProvider<AppSettingsController, AppSettings>(
@@ -47,6 +63,11 @@ final referenceA4Provider = Provider<double>(
 /// 默认 BPM(节拍器初始值/跟练无 tempo 谱回退)。同上,测试 override 隔离。
 final defaultBpmProvider = Provider<int>(
   (ref) => ref.watch(settingsProvider).defaultBpm,
+);
+
+/// 评分链路延迟毫秒(可负;跟练评分消费,工单 33)。同上,测试 override 隔离。
+final scoringLatencyMsProvider = Provider<int>(
+  (ref) => ref.watch(settingsProvider).scoringLatencyMs,
 );
 
 /// 设置控制器(工单 20):一次异步加载 + 写透。
@@ -72,10 +93,15 @@ class AppSettingsController extends Notifier<AppSettings> {
       final dao = ref.read(settingsDaoProvider);
       final a4 = await dao.getInt(SettingsKeys.referenceA4);
       final bpm = await dao.getInt(SettingsKeys.defaultBpm);
+      final latency = await dao.getInt(SettingsKeys.scoringLatencyMs);
       if (!ref.mounted) return;
       state = AppSettings(
         referenceA4: a4 ?? state.referenceA4,
         defaultBpm: bpm ?? state.defaultBpm,
+        scoringLatencyMs: (latency ?? state.scoringLatencyMs).clamp(
+          minScoringLatencyMs,
+          maxScoringLatencyMs,
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('UkeFlow: 设置加载失败,用缺省 $error\n$stackTrace');
@@ -101,8 +127,21 @@ class AppSettingsController extends Notifier<AppSettings> {
     state = AppSettings(
       referenceA4: state.referenceA4,
       defaultBpm: bpm.clamp(minDefaultBpm, maxDefaultBpm),
+      scoringLatencyMs: state.scoringLatencyMs,
     );
     await _persist(SettingsKeys.defaultBpm, state.defaultBpm);
+  }
+
+  /// 设评分链路延迟(毫秒,钳制 ±200;报告滑块保存入口,工单 33)。
+  Future<void> setScoringLatencyMs(int ms) async {
+    await ready;
+    if (!ref.mounted) return;
+    state = AppSettings(
+      referenceA4: state.referenceA4,
+      defaultBpm: state.defaultBpm,
+      scoringLatencyMs: ms.clamp(minScoringLatencyMs, maxScoringLatencyMs),
+    );
+    await _persist(SettingsKeys.scoringLatencyMs, state.scoringLatencyMs);
   }
 
   /// 重读落库值(工单 21:导入备份把设置行整表换掉,内存状态须跟着

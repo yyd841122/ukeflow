@@ -55,4 +55,11 @@ void main() {
     expect(engine.scheduleLog[0].stopped, isTrue);
     expect(engine.scheduleLog[1].stopped, isFalse);
   });
+
+  test('unload 记录释放的音源键(工单 33 重听音源的释放缝)', () async {
+    final engine = FakeAudioEngine();
+    final sound = await engine.loadMem('replay-1', Uint8List(4));
+    engine.unload(sound);
+    expect(engine.unloadedKeys, ['replay-1']);
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +16,8 @@ import 'chart_meta.dart';
 import 'play_practice_controller.dart';
 import 'practice_session_shell.dart';
 import 'practice_view.dart';
+import 'scoring/practice_scoring_controller.dart';
+import 'scoring/scoring_report_page.dart';
 
 /// 跟练会话页(GLOSSARY「跟练」):一首内置弹唱谱的完整练习现场。
 ///
@@ -36,12 +40,14 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   // dispose 里不能用 ref(Riverpod 3):notifier 在 initState 缓存成字段。
   late final PlayPracticeController _controller;
   late final DemoPlaybackController _demo;
+  late final PracticeScoringController _scoring;
 
   @override
   void initState() {
     super.initState();
     _controller = ref.read(playPracticeProvider.notifier);
     _demo = ref.read(demoPlaybackProvider.notifier);
+    _scoring = ref.read(practiceScoringProvider.notifier);
     // 定参+预热都在帧末:Riverpod 3 禁止 build 生命周期内改 provider 状态。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -52,7 +58,8 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   }
 
   /// 和弦名 → 和弦(谱面和弦已过白名单,恒可查;库未就绪给空表降级)。
-  Map<String, Chord> _chords() => _chordMap(ref.read(chordLibraryProvider).value);
+  Map<String, Chord> _chords() =>
+      _chordMap(ref.read(chordLibraryProvider).value);
 
   @override
   void resetVisual() => _visual = null;
@@ -75,8 +82,14 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
     );
     if (practice == null) {
       // 曲末(节拍网格走出最后一拍):循环开→接下一遍(预备数拍即遍间停顿);
-      // 关→回闲,轮询随之自停。
+      // 关→回闲,轮询随之自停。评分随遍终结算:循环则清零接下一遍,
+      // 否则收尾出报告(弹报告由状态监听驱动,见 build 的 ref.listen)。
       _controller.passEnd();
+      if (ref.read(playPracticeProvider).running) {
+        _scoring.onPassStart();
+      } else {
+        _scoring.finishSession();
+      }
       return;
     }
     // 拍/动作/行/段落任一推进才重绘(薄渲染纪律)。
@@ -90,18 +103,29 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
 
   @override
   void dispose() {
-    stopSessionOnUnmount([_controller.stop, _demo.stop]);
+    // 弹回即停(弃评:评分会话停麦、清数据,不弹报告)。
+    stopSessionOnUnmount([_controller.stop, _demo.stop, _scoring.abort]);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(playPracticeProvider);
+    final scoring = ref.watch(practiceScoringProvider);
     final demo = ref.watch(demoPlaybackProvider);
     // 运行状态翻转时启停轮询(ref.listen 须在 build 内注册)。
     ref.listen(playPracticeProvider, (previous, next) {
       if (previous?.running != next.running) {
         next.running ? startPolling() : stopPolling();
+      }
+    });
+    // 评分报告出刊即推页(状态翻转驱动,不在轮询里导航)。
+    ref.listen(practiceScoringProvider, (previous, next) {
+      if (previous?.status != ScoringStatus.finished &&
+          next.status == ScoringStatus.finished) {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ScoringReportPage()),
+        );
       }
     });
     // 和弦库异步就绪后推给控制器(预备扫弦音源;进页时多半还没就绪)。
@@ -115,14 +139,18 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
       body: SafeArea(
         child: state.running
             ? _runningBody(state, ref.watch(chordLibraryProvider))
-            : _idleBody(state, demo),
+            : _idleBody(state, demo, scoring),
       ),
     );
   }
 
-  // ── 空闲面板:定 BPM/变速/节奏型/参考音,示范试听,开始 ────────────
+  // ── 空闲面板:定 BPM/变速/节奏型/参考音,评分开关,示范试听,开始 ──
 
-  Widget _idleBody(PlayPracticeState state, DemoPlaybackState demo) {
+  Widget _idleBody(
+    PlayPracticeState state,
+    DemoPlaybackState demo,
+    PracticeScoringState scoring,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: Column(
@@ -140,6 +168,14 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
             error: state.error,
             onRetry: () => _controller.warmup(),
           ),
+          if (scoring.error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              scoring.error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
           const SizedBox(height: 32),
           Text('速度', style: _sectionLabelStyle),
           StepSliderControl(
@@ -161,12 +197,27 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
           const SizedBox(height: 8),
           _patternPicker(state),
           const SizedBox(height: 16),
-          Text('参考音', style: _sectionLabelStyle),
-          const SizedBox(height: 8),
-          _ReferenceToggle(
-            reference: state.reference,
-            onChanged: _controller.setReference,
+          // 评分开关(GLOSSARY「跟练评分」):开则参考音强制节拍声
+          // (评分听用户的琴,示范扫弦声会污染拾音),选择器随之隐藏。
+          SwitchListTile(
+            key: const Key('scoring-toggle'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('跟练评分'),
+            subtitle: const Text('数拍时照常扫四下,结束后出报告'),
+            value: scoring.enabled,
+            onChanged: (value) {
+              _scoring.setEnabled(value);
+              if (value) _controller.setReference(ReferenceSound.beat);
+            },
           ),
+          if (!scoring.enabled) ...[
+            Text('参考音', style: _sectionLabelStyle),
+            const SizedBox(height: 8),
+            _ReferenceToggle(
+              reference: state.reference,
+              onChanged: _controller.setReference,
+            ),
+          ],
           const SizedBox(height: 32),
           // 示范试听(工单 11):弹前一键,按当前节奏型+BPM 听整曲扫弦。
           // 试听中参数控件照常可调(在途按开始一刻的快照,再点即听新的)。
@@ -195,10 +246,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
             key: const Key('practice-start'),
             // 引擎未就绪不可启;空谱(无段落)不可启;试听即停不叠声。
             onPressed: state.engineReady && widget.chart.sections.isNotEmpty
-                ? () {
-                    _demo.stop();
-                    _controller.start(chart: widget.chart, chords: _chords());
-                  }
+                ? () => unawaited(_startPractice())
                 : null,
             icon: const Icon(Icons.play_arrow),
             label: const Text('开始跟练'),
@@ -206,6 +254,30 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
         ],
       ),
     );
+  }
+
+  /// 开始跟练:评分开着先起评分会话(权限/开麦;失败不拦跟练,只留
+  /// 错误文案),再起跟练会话(评分嘀声接线已就位 → 强制节拍声)。
+  Future<void> _startPractice() async {
+    _demo.stop();
+    if (ref.read(practiceScoringProvider).enabled) {
+      final ok = await _scoring.startSession();
+      if (!mounted) return; // 权限弹窗期间弹回:dispose 已收尾,不得再起会话。
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ref.read(practiceScoringProvider).error ?? '评分起不来,本轮不评分',
+            ),
+          ),
+        );
+      }
+    }
+    _controller.start(chart: widget.chart, chords: _chords());
+    if (ref.read(playPracticeProvider).running &&
+        ref.read(practiceScoringProvider).status == ScoringStatus.listening) {
+      _scoring.onPassStart();
+    }
   }
 
   /// 试听钮的回调:发声中=停止;空闲且可启(引擎就绪+有段落)=开试听;
@@ -242,11 +314,12 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
     PlayPracticeState state,
     AsyncValue<ChordLibrary> libraryAsync,
   ) {
+    final scoring = ref.watch(practiceScoringProvider);
     return Column(
       children: [
         Expanded(
           child: prepCount != null
-              ? _prepPanel(prepCount!)
+              ? _prepPanel(prepCount!, scoring)
               : _songBody(libraryAsync, state.pattern),
         ),
         _controls(state),
@@ -255,8 +328,14 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   }
 
   /// 预备数拍面板:大字倒计 + 提示。预备拍的声音由调度器管(专用音源),
-  /// 这里只读 [prepStateAt] 的倒计。
-  Widget _prepPanel(int prepCount) {
+  /// 这里只读 [prepStateAt] 的倒计。评分开着加一句校准引导(预备数拍
+  /// 期间用户照常扫四下,GLOSSARY「延迟校准」)。
+  Widget _prepPanel(int prepCount, PracticeScoringState scoring) {
+    final hint = scoring.status == ScoringStatus.listening
+        ? '跟着拍子扫四下,我在校准延迟'
+        : prepCount > 2
+        ? '跟着拍子数,准备手指'
+        : '马上开弹';
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -264,20 +343,26 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
           '$prepCount',
           key: const Key('prep-count'),
           style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
         const SizedBox(height: 12),
         Text(
-          prepCount > 2 ? '跟着拍子数,准备手指' : '马上开弹',
+          hint,
+          key: scoring.status == ScoringStatus.listening
+              ? const Key('prep-scoring-hint')
+              : null,
           style: TextStyle(color: Theme.of(context).colorScheme.outline),
         ),
       ],
     );
   }
 
-  Widget _songBody(AsyncValue<ChordLibrary> libraryAsync, StrumPattern pattern) {
+  Widget _songBody(
+    AsyncValue<ChordLibrary> libraryAsync,
+    StrumPattern pattern,
+  ) {
     final timeline = _controller.timeline;
     final visual = _visual;
     if (timeline == null || visual == null) {
@@ -297,7 +382,10 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   }
 
   /// 运行控制:暂停/继续、回到开头、停止(一行);变速与参考音(两行)。
+  /// 评分接线中:暂停/继续挂起评分采集,停止收尾出报告,参考音选择器
+  /// 隐藏(会话强制节拍声)。
   Widget _controls(PlayPracticeState state) {
+    final scoringOn = state.scoringTicks;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Column(
@@ -328,8 +416,14 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
                 child: FilledButton.tonalIcon(
                   key: const Key('practice-pause'),
                   onPressed: state.paused
-                      ? _controller.resume
-                      : _controller.pause,
+                      ? () {
+                          _controller.resume();
+                          _scoring.onResume();
+                        }
+                      : () {
+                          _controller.pause();
+                          _scoring.onPause();
+                        },
                   icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
                   label: Text(state.paused ? '继续' : '暂停'),
                 ),
@@ -337,14 +431,20 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 key: const Key('practice-restart'),
-                onPressed: _controller.restart,
+                onPressed: () {
+                  _controller.restart();
+                  _scoring.onPassStart();
+                },
                 icon: const Icon(Icons.replay),
                 label: const Text('回到开头'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
                 key: const Key('practice-stop'),
-                onPressed: _controller.stop,
+                onPressed: () {
+                  _controller.stop();
+                  _scoring.finishSession();
+                },
                 icon: const Icon(Icons.stop),
                 label: const Text('停止'),
               ),
@@ -357,10 +457,12 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
             max: PlayPracticeController.maxSpeed,
             onChanged: _controller.setSpeed,
           ),
-          _ReferenceToggle(
-            reference: state.reference,
-            onChanged: _controller.setReference,
-          ),
+          // 评分会话中隐藏参考音切换(强制节拍声,页面同步隐藏防切)。
+          if (!scoringOn)
+            _ReferenceToggle(
+              reference: state.reference,
+              onChanged: _controller.setReference,
+            ),
         ],
       ),
     );

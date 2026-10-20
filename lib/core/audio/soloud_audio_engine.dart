@@ -72,6 +72,18 @@ class SoloudAudioEngine implements AudioEngine {
   }
 
   @override
+  Future<void> unload(EngineSound sound) async {
+    if (!SoLoud.instance.isInitialized) return;
+    try {
+      // disposeSource 停全部 handle 并回收内存;失败(引擎竞态关停等)
+      // 只吞不抛:释放是善后动作,失败路径不得再炸调用方。
+      await SoLoud.instance.disposeSource((sound as SoloudSound).source);
+    } on Object {
+      // 吞掉:见上。
+    }
+  }
+
+  @override
   void dispose() => _lifecycle.dispose();
 }
 

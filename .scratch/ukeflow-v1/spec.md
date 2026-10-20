@@ -184,3 +184,12 @@ UkeFlow：一款纯自用的尤克里里弹唱学习 App（Android 先行）。
 - spike 留下的工程教训：Dart 3.12 移除了 Duration.difference()（只能用 - 运算符）；pub 缓存在国内镜像路径（pub.flutter-io.cn）。
 - 真机为 OPPO PCAM00，WSL2 经无线调试 adb connect 连接（方法见 spikes/tech_validation/README.md）。
 - UI 语言中文；写码、命名、工单一律使用 GLOSSARY.md 的词汇（弹唱/跟练/节奏型/和弦指法/每日任务/打卡等），避免术语漂移。
+
+## 后续修订（2026-10-19 拷问共识，工单 33–35）
+
+v1 主线收官后，跟练评分与取谱源经三轮拷问定案，冲突处以此节为准：
+
+- **实时评判**（Out of Scope 第 2 条）拆开：事后评分进入范围（工单 33，GLOSSARY「跟练评分」——麦克风听音、结束后报告、看完即弃、仅弹唱扫弦、判定 ✓/早/晚/漏/错）；跟练中的**实时**评判提示仍留 v2。
+- **图片谱→文本谱转换**（Out of Scope 第 3 条）提前落地为「AI 转谱」（工单 35，GLOSSARY）：手动触发、人工校对后才入库，仅弹唱谱图片；图片谱只读查看器不变。
+- **搜索源换血**（Out of Scope 第 8 条作废；用户故事 42/43 的 Cifra Club 通道退役删除）：改接 Guitarians（中文文本谱，直解析）+ UkuTabs（英文文本谱，直解析，Cloudflare 真机验证不过即砍）+ 曲谱图网（中文图片谱，经 AI 转谱）——工单 34/35。谱友圈进观察名单（定期查 /api/pub/scores total）。
+- 仍不做：指弹谱在线搜索/导入、App 端移调 UI（Guitarians 服务端移调参数已探明，App 侧后置小票）、评分持久化、实时提示、自由弹奏识别、边唱评分。

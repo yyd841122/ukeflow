@@ -1,15 +1,21 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/data/settings_providers.dart';
+import 'package:ukeflow/core/tuner/tuner_recorder.dart';
 import 'package:ukeflow/features/demo/demo_playback_controller.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
+import 'package:ukeflow/core/scoring/strum_scorer.dart' show StrumJudgment;
+import 'package:ukeflow/features/play/scoring/practice_scoring_controller.dart';
 
 import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
+import 'helpers/scoring_fixtures.dart';
 
 /// 跟练会话页:引擎一律注入 FakeAudioEngine,时间用 engine.advance 推进
 /// (真定时器靠 tester.pump(duration) 喂)。
@@ -482,7 +488,11 @@ void main() {
     await advanceAndPump(tester, 16000);
     await advanceAndPump(tester, 3000); // 遍 2 预备数拍喂完
     expect(find.text('第 2 遍'), findsOneWidget, reason: '循环开:自动接下一遍');
-    expect(find.byKey(const Key('practice-stop')), findsOneWidget, reason: '仍在会话中');
+    expect(
+      find.byKey(const Key('practice-stop')),
+      findsOneWidget,
+      reason: '仍在会话中',
+    );
     expect(
       engine.scheduleLog.where((e) => e.key == 'tick_count'),
       hasLength(8),
@@ -494,10 +504,205 @@ void main() {
     await tester.tap(find.byKey(const Key('practice-loop')));
     await tester.pump();
     await advanceAndPump(tester, 14000); // 遍 2 曲长 12s+1s
-    expect(find.byKey(const Key('practice-start')), findsOneWidget, reason: '循环关:曲末回闲');
+    expect(
+      find.byKey(const Key('practice-start')),
+      findsOneWidget,
+      reason: '循环关:曲末回闲',
+    );
     final count = engine.scheduleLog.length;
     await advanceAndPump(tester, 2000);
     expect(engine.scheduleLog, hasLength(count), reason: '回闲后不再调度');
   });
 
+  group('跟练评分(工单 33)', () {
+    late FakeRecorder recorder;
+
+    // 挂 Navigator 元素:弹回后 PracticePage 已出树,容器仍要可取。
+    ProviderContainer containerOf(WidgetTester tester) =>
+        ProviderScope.containerOf(tester.element(find.byType(Navigator)));
+
+    PlayPracticeController controllerOf(WidgetTester tester) =>
+        containerOf(tester).read(playPracticeProvider.notifier);
+
+    PracticeScoringState scoringOf(WidgetTester tester) =>
+        containerOf(tester).read(practiceScoringProvider);
+
+    /// 带评分件的开页:假录音器 + 延迟缺省 override(不触真库)。
+    Future<void> pumpScoringPage(WidgetTester tester) async {
+      engine = FakeAudioEngine();
+      recorder = FakeRecorder();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            audioEngineProvider.overrideWithValue(engine),
+            chordLibraryFixtureOverride(),
+            defaultBpmProvider.overrideWithValue(80),
+            tunerRecorderProvider.overrideWithValue(recorder),
+            scoringLatencyMsProvider.overrideWithValue(100),
+          ],
+          child: MaterialApp(home: const Scaffold(body: SizedBox.shrink())),
+        ),
+      );
+      // 经路由压栈打开:会话页在产品里是 push 页(带返回钮)。
+      tester
+          .state<NavigatorState>(find.byType(Navigator))
+          .push(
+            MaterialPageRoute<void>(
+              builder: (_) => PracticePage(chart: practiceFixtureChart),
+            ),
+          );
+      await tester.pumpAndSettle();
+    }
+
+    /// 标准 20 声弹奏信号(预备 4 下 +80ms 链路延迟,正曲 16 下准点),
+    /// 与页面引擎钟同步逐段灌入假麦。80BPM 全曲 15s。
+    Future<void> playAlong(WidgetTester tester, double untilSec) async {
+      const sr = scoringTestSampleRate;
+      final signal = Float64List(sr * 30);
+      void mix(Float64List src, double atSec) {
+        final start = (atSec * sr).round();
+        for (var i = 0; i < src.length && start + i < signal.length; i++) {
+          signal[start + i] += src[i];
+        }
+      }
+
+      final timeline = controllerOf(tester).timeline!;
+      for (var k = 0; k < 4; k++) {
+        mix(strumBurst(atSec: 0, totalSamples: sr), k * 0.75 + 0.08);
+      }
+      for (final strum in timeline.strums) {
+        mix(
+          chordBurst(
+            strum.chord == 'C'
+                ? const [60, 64, 67, 72]
+                : const [57, 60, 64, 69],
+            atSec: 0,
+            totalSamples: sr,
+          ),
+          strum.scheduleBeat(4) * 0.75 + 0.08,
+        );
+      }
+      // 250ms 一段:引擎钟推进与 chunk 到达同刻(打戳即钟值)。
+      const chunkSec = 0.25;
+      var posSec = 0.0;
+      while (posSec < untilSec) {
+        engine.advance(const Duration(milliseconds: 250));
+        recorder.push(pcm16Bytes(slice(signal, posSec, posSec + chunkSec)));
+        await tester.pump(const Duration(milliseconds: 60));
+        posSec += chunkSec;
+      }
+    }
+
+    testWidgets('评分开关:开启隐藏参考音选择并强制节拍声,错误文案可见', (tester) async {
+      await pumpScoringPage(tester);
+      expect(find.byKey(const Key('scoring-toggle')), findsOneWidget);
+      expect(find.byKey(const Key('reference-beat')), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
+      await tester.tap(find.byKey(const Key('scoring-toggle')));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('reference-beat')),
+        findsNothing,
+        reason: '评分开:参考音选择器隐藏(强制节拍声)',
+      );
+
+      // 权限拒:错误文案可见,开关保持开(下一轮可再试),开始不评分。
+      recorder.granted = false;
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('需要麦克风权限'), findsOneWidget);
+      expect(
+        scoringOf(tester).status,
+        ScoringStatus.idle,
+        reason: '起不来:回闲,跟练照常开始',
+      );
+      expect(containerOf(tester).read(playPracticeProvider).running, isTrue);
+    });
+
+    testWidgets('弹了再停:报告页弹出,轨道可重听,滑块在,看完即弃', (tester) async {
+      await pumpScoringPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
+      await tester.tap(find.byKey(const Key('scoring-toggle')));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('prep-scoring-hint')),
+        findsOneWidget,
+        reason: '预备面板带校准引导',
+      );
+
+      // 弹预备 4 下 + 前 4 正曲点(6 秒),再弹 1 秒,停止收尾。
+      await playAlong(tester, 7.0);
+      await tester.ensureVisible(find.byKey(const Key('practice-stop')));
+      await tester.tap(find.byKey(const Key('practice-stop')));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('跟练评分报告'), findsOneWidget, reason: '停止出报告');
+      expect(scoringOf(tester).status, ScoringStatus.finished);
+      final report = scoringOf(tester).report!;
+      expect(report.result.total, 16);
+      // 7 秒 = 预备 4 下 + 正曲前 6 点(拍 4..9);预备校准吸收链路延迟。
+      expect(report.result.matched, 6);
+      expect(
+        report.spots.take(6).map((s) => s.judgment),
+        everyElement(StrumJudgment.onTime),
+      );
+
+      // 点格重听:一次性音源装载 + 预定播放(轨道在页底,滚到位)。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('strum-cell-0')),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.tap(find.byKey(const Key('strum-cell-0')));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(
+        engine.loadedKeys.where((k) => k.startsWith('scoring-replay')),
+        hasLength(1),
+      );
+      expect(engine.scheduleLog, isNotEmpty);
+      expect(find.byKey(const Key('latency-slider')), findsOneWidget);
+      expect(find.byKey(const Key('latency-save')), findsOneWidget);
+
+      // 看完即弃:弹回报告即清,回空闲面板。
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('跟练评分报告'), findsNothing);
+      expect(scoringOf(tester).status, ScoringStatus.idle);
+      expect(scoringOf(tester).report, isNull);
+      expect(find.byKey(const Key('practice-start')), findsOneWidget);
+    });
+
+    testWidgets('评分中弹回:弃评不弹报告,麦已停,评分接线已拆', (tester) async {
+      await pumpScoringPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('scoring-toggle')));
+      await tester.tap(find.byKey(const Key('scoring-toggle')));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+      await playAlong(tester, 5.0);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(scoringOf(tester).status, ScoringStatus.idle);
+      expect(scoringOf(tester).report, isNull, reason: '弃评:不出报告');
+      // 停麦是 fire-and-forget(fake zone 的 cancel Future 不被 pump 驱动,
+      // 见记忆 stream-cancel-fake-zone-undriven),停麦计数不在此断言,
+      // 停麦路径由控制器测试覆盖。
+      expect(
+        containerOf(tester).read(playPracticeProvider).scoringTicks,
+        isFalse,
+        reason: '评分接线已拆',
+      );
+    });
+  });
 }

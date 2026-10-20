@@ -20,6 +20,9 @@ abstract final class SettingsKeys {
 
   /// 隐藏的内置图片谱 id 集(工单 32)。
   static const hiddenBuiltinImages = 'hidden_builtin_image_ids';
+
+  /// 跟练评分的链路延迟(毫秒,可负;工单 33,GLOSSARY「延迟校准」)。
+  static const scoringLatencyMs = 'scoring_latency_ms';
 }
 
 /// 设置表(工单 20):键值对,key 主键——每键至多一行,重写即覆盖
@@ -84,7 +87,8 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
 
   /// 全部设置行原样读出(工单 21 备份导出:全量搬运,不筛已知键)。
   Future<List<Setting>> getAll() {
-    return (select(settings)..orderBy([(row) => OrderingTerm.asc(row.key)]))
-        .get();
+    return (select(
+      settings,
+    )..orderBy([(row) => OrderingTerm.asc(row.key)])).get();
   }
 }

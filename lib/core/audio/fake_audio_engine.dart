@@ -23,6 +23,7 @@ class FakeAudioEngine implements AudioEngine {
   bool failStop = false;
 
   final List<String> loadedKeys = [];
+  final List<String> unloadedKeys = [];
   final List<FakeScheduledCall> scheduleLog = [];
 
   Duration _now = Duration.zero;
@@ -67,7 +68,9 @@ class FakeAudioEngine implements AudioEngine {
   EngineVoice playClocked(EngineSound sound, Duration when) {
     if (failNow) throw Exception('FakeAudioEngine: 模拟运行中引擎异常');
     final voice = FakeVoice(_nextVoiceId++);
-    scheduleLog.add(FakeScheduledCall(key: sound.key, time: when, voice: voice));
+    scheduleLog.add(
+      FakeScheduledCall(key: sound.key, time: when, voice: voice),
+    );
     return voice;
   }
 
@@ -77,6 +80,11 @@ class FakeAudioEngine implements AudioEngine {
     for (final call in scheduleLog) {
       if (identical(call.voice, voice)) call.stopped = true;
     }
+  }
+
+  @override
+  Future<void> unload(EngineSound sound) async {
+    unloadedKeys.add(sound.key);
   }
 
   @override

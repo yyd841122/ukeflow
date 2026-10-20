@@ -12,6 +12,7 @@ import '../../core/practice/play_timeline.dart';
 import '../../data/settings_providers.dart';
 import '../../core/practice/practice_state.dart';
 import '../../data/chord_library.dart' show Chord;
+import 'scoring/practice_session_handle.dart';
 import 'strum_scheduler.dart';
 import 'strum_voicing.dart';
 
@@ -36,6 +37,7 @@ class PlayPracticeState {
     required this.reference,
     this.loop = false,
     this.pass = 1,
+    this.scoringTicks = false,
     this.error,
   });
 
@@ -80,6 +82,12 @@ class PlayPracticeState {
   /// 当前遍数(第 N 遍,循环开启时随 passEnd 递增;start/回到开头复位 1)。
   final int pass;
 
+  /// 评分会话接线中(工单 33):节拍声走评分专用嘀声对(可滤),参考音
+  /// 强制节拍声(示范扫弦声静音)。由评分控制器在会话起止时经
+  /// [PlayPracticeController.setScoringTicks] 置位/复位;**不随 start/循环
+  /// 重启复位**(跨遍存续,生命周期=整个评分会话,页面在空闲面板挂开关)。
+  final bool scoringTicks;
+
   PlayPracticeState copyWith({
     int? bpm,
     double? speed,
@@ -90,6 +98,7 @@ class PlayPracticeState {
     ReferenceSound? reference,
     bool? loop,
     int? pass,
+    bool? scoringTicks,
     Object? error = _sentinel,
   }) => PlayPracticeState(
     bpm: bpm ?? this.bpm,
@@ -101,6 +110,7 @@ class PlayPracticeState {
     reference: reference ?? this.reference,
     loop: loop ?? this.loop,
     pass: pass ?? this.pass,
+    scoringTicks: scoringTicks ?? this.scoringTicks,
     error: identical(error, _sentinel) ? this.error : error as String?,
   );
 
@@ -126,7 +136,12 @@ final playPracticeProvider =
 ///   恢复无错位是结构保证;
 /// - 变速 = 重编译时间轴 + 调度器换拍周期（同一周期值,无双公式分叉）,
 ///   冻结/进行中的拍位按「拍数守恒」换算。
-class PlayPracticeController extends Notifier<PlayPracticeState> {
+///
+/// 评分会话取用(工单 33):本控制器实现 [PracticeSessionHandle]——
+/// 评分经它读拍域换算所需的时间轴/锚点/周期/和弦表,并在会话起止时
+/// 接/拆评分嘀声([setScoringTicks])。
+class PlayPracticeController extends Notifier<PlayPracticeState>
+    implements PracticeSessionHandle {
   static const minBpm = 40;
   static const maxBpm = 208;
 
@@ -144,6 +159,8 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   EngineSound? _strong;
   EngineSound? _weak;
   EngineSound? _count;
+  EngineSound? _scoringBeep;
+  EngineSound? _scoringAccent;
   BeatScheduler? _scheduler;
   StrumScheduler? _strumScheduler;
   PlayTimeline? _timeline;
@@ -158,8 +175,31 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   StrumChart? _chart;
   Map<String, Chord> _chords = const {};
 
+  // ── PracticeSessionHandle(工单 33,评分侧窄缝)──────────────────
+
   /// 运行中的动作事件时间轴;未运行 null。
+  @override
   PlayTimeline? get timeline => _timeline;
+
+  /// 调度网格原点(预备第 0 拍):评分把麦 onset 换算成拍位的锚。
+  /// 运行中(含暂停)有效;暂停期返回的仍是旧锚——挂起期 onset 由评分
+  /// 侧丢弃,恢复重锚后新 onset 自然按新锚换算。
+  @override
+  Duration? get scheduleAnchor =>
+      _timeline == null || !state.running ? null : _t0;
+
+  @override
+  double get periodMs => _periodMs;
+
+  @override
+  Map<String, Chord> get chords => _chords;
+
+  /// 评分嘀声接线开关(评分控制器在会话起止时调)。运行中即时生效于
+  /// 后续拍的选音;不重建调度器(选音是逐拍回调,下一拍自然切换)。
+  @override
+  void setScoringTicks(bool value) {
+    state = state.copyWith(scoringTicks: value);
+  }
 
   /// 视觉层锚点:**曲头**时刻（预备数拍之后）与拍周期;未运行 null。
   ({Duration t0, double periodMs})? get visualAnchor {
@@ -222,16 +262,21 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
       if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
+      // 评分嘀声对(工单 33)一并注入:评分会话开启时节拍声换它(可滤),
+      // 常开注入免条件 warmup(两支 30ms WAV,内存量级无关紧要)。
       final ticks = await TickSounds.load(
         engine,
         strong: true,
         weak: true,
         count: true,
+        scoring: true,
       );
       if (!ref.mounted) return;
       _strong = ticks.strong;
       _weak = ticks.weak;
       _count = ticks.count;
+      _scoringBeep = ticks.scoringBeep;
+      _scoringAccent = ticks.scoringAccent;
       // 扫弦音源注入失败只降级(参考音=扫弦时无声),不进 error 状态。
       await _ensureStrumSounds();
       if (!ref.mounted) return;
@@ -406,13 +451,18 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
     );
     if (_scheduler != scheduler) return; // 首过即抛:错误状态已落地,不宣布运行。
     _adoptSchedulerAnchor();
-    // 新会话:循环与遍数复位(passEnd 重启后由控制器显式续上)。
+    // 评分会话(工单 33):嘀声接线中强制节拍参考音——评分听的是用户的
+    // 琴,示范扫弦声会污染拾音与封闭验证,整个评分会话静音示范扫弦。
+    if (state.scoringTicks) _reference = ReferenceSound.beat;
+    // 新会话:循环与遍数复位(passEnd 重启后由控制器显式续上);
+    // reference 回写是评分强制后的落盘(平时与 _reference 本就同值)。
     state = state.copyWith(
       running: true,
       paused: false,
       error: null,
       loop: false,
       pass: 1,
+      reference: _reference,
     );
     _restartStrumScheduler(); // 参考音=扫弦时随会话起跑(空闲预选不丢)
   }
@@ -554,10 +604,16 @@ class PlayPracticeController extends Notifier<PlayPracticeState> {
   StrumVoicer get _voicer =>
       StrumVoicer(chords: _chords, player: ref.read(pluckPlayerProvider));
 
-  /// 节拍声选音:预备拍恒用预备音源（数拍不是参考音,任何模式都响）;
-  /// 正曲拍按参考音模式——节拍声给 4/4 强弱,扫弦声模式静默(由扫弦
-  /// 调度器接管)。返回 null 表示该拍静默。
+  /// 节拍声选音:评分嘀声接线中恒走评分嘀声对(预备拍与拍头重音 1320,
+  /// 其余 880——两支都在麦端陷波缝上,GLOSSARY「跟练评分」的承重墙);
+  /// 否则预备拍恒用预备音源(数拍不是参考音,任何模式都响),正曲拍按
+  /// 参考音模式——节拍声给 4/4 强弱,扫弦声模式静默(由扫弦调度器接管)。
+  /// 返回 null 表示该拍静默。
   EngineSound? _pick(int beat) {
+    if (state.scoringTicks) {
+      final accent = beat < prepBeats || (beat - prepBeats) % beatsPerBar == 0;
+      return accent ? _scoringAccent : _scoringBeep;
+    }
     if (beat < prepBeats) return _count;
     if (_reference != ReferenceSound.beat) return null;
     return (beat - prepBeats) % beatsPerBar == 0 ? _strong : _weak;
