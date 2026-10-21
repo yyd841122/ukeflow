@@ -7,6 +7,7 @@ import '../../core/model/builtin_strum_patterns.dart';
 import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/practice_state.dart';
+import '../../core/scoring/strum_scorer.dart';
 import '../../core/ui/step_slider_control.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
@@ -74,6 +75,10 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
     // 预备数拍期:倒计面板(预备拍与正曲同一节拍网格,查询同源;
     // 锚在调度 t0,经控制器查询——曲头反推会有取整误差,见 prepStateAt)。
     if (advancePrep(_controller.prepStateNow()?.count)) return;
+
+    // 实时判定查询路径(工单 36):漏拍容差窗关判漏、色度窗满升格错,
+    // 状态翻转经 provider watch 重绘(不在本轮询里 setState)。
+    _scoring.pollLive();
 
     final practice = practiceStateAt(
       timeline: timeline,
@@ -317,7 +322,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
         Expanded(
           child: prepCount != null
               ? _prepPanel(prepCount!, scoring)
-              : _songBody(libraryAsync, state.pattern),
+              : _songBody(libraryAsync, state.pattern, scoring.liveVerdicts),
         ),
         _controls(state),
       ],
@@ -359,6 +364,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   Widget _songBody(
     AsyncValue<ChordLibrary> libraryAsync,
     StrumPattern pattern,
+    List<StrumJudgment?>? liveVerdicts,
   ) {
     final timeline = _controller.timeline;
     final visual = _visual;
@@ -375,6 +381,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
       practice: visual,
       pattern: pattern,
       chords: chords,
+      liveVerdicts: liveVerdicts,
     );
   }
 

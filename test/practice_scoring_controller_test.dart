@@ -335,6 +335,7 @@ void main() {
     final state = container.read(practiceScoringProvider);
     expect(state.status, ScoringStatus.idle);
     expect(state.report, isNull);
+    expect(state.liveVerdicts, isNull, reason: '弃评无残留:实时判定一并清');
     expect(handle.scoringTicksCalls, [true, false]);
     expect(recorder.stopCount, 1);
   });
@@ -370,5 +371,159 @@ void main() {
     final state = container.read(practiceScoringProvider);
     expect(state.status, ScoringStatus.idle);
     expect(state.report, isNull);
+    expect(state.liveVerdicts, isNull, reason: '看完即弃:实时判定一并清');
+  });
+
+  // ── 实时判定反馈(工单 36)────────────────────────────────────
+
+  test('实时判定:onset 到达即着色,弹到的判准、未到的不着色', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+    final atStart = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(atStart, everyElement(isNull), reason: '开跑清零:全部未定');
+
+    // 弹预备 4 下 + 正曲点 0..3(信号 0..6.0s;点 4 在 6.08s 未入窗)。
+    await feed(slice(standardPass(), 0, 6.0));
+
+    final live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live, hasLength(16), reason: '谱序,与报告 verdicts 同序');
+    expect(
+      live.take(4),
+      everyElement(StrumJudgment.onTime),
+      reason: '弹到的点当场着色',
+    );
+    expect(live.sublist(4), everyElement(isNull), reason: '未弹到的点不着色');
+  });
+
+  test('漏拍:弹奏中的空点随下次 onset 补判漏;末点靠轮询查询路径', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+
+    // 点 1 不弹,弹到点 3(信号 0..6.0):点 2 的 onset 到达时点 1 的
+    // 容差窗早已关,重跑顺带补判漏。
+    await feed(slice(standardPass(missIndexes: {1}), 0, 6.0));
+    var live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[0], StrumJudgment.onTime);
+    expect(live[1], StrumJudgment.missed, reason: '窗关未见 onset → 灰');
+    expect(live[2], StrumJudgment.onTime);
+
+    // 末点 15 不弹且之后再无 onset:没有任何到达触发,漏判挂轮询。
+    await feed(slice(standardPass(missIndexes: {1, 15}), 6.0, 15.0));
+    live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[15], isNull, reason: '最后一次重跑时末窗未关');
+
+    controller().pollLive();
+    live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[15], StrumJudgment.missed, reason: '轮询查询路径:窗关判漏');
+    expect(live.take(15), everyElement(isNotNull), reason: '其余点判定不受影响');
+  });
+
+  test('「错」滞后:时机色先亮,色度窗收满翻红;实时与报告逐点一致', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+
+    // 点 5 弹 G(目标是 C)。喂到点 5 检出、色度窗未收满(窗尾 ~7.13s)。
+    await feed(slice(standardPass(wrongAt: {5}), 0, 7.0));
+    var live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[5], StrumJudgment.onTime, reason: '时机判定先行:色度未收满不判错');
+
+    // 引擎钟推过色度窗尾,轮询查询路径触发升格重跑。
+    engine.now = const Duration(milliseconds: 7300);
+    controller().pollLive();
+    live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[5], StrumJudgment.wrong, reason: '色度窗收满:错的点翻红');
+
+    // 弹完后收尾:实时判定与曲末报告逐点一致(同算法同源,不翻案)。
+    await feed(slice(standardPass(wrongAt: {5}), 7.3, 21.0));
+    handle.closeSession();
+    controller().finishSession();
+    final report = container.read(practiceScoringProvider).report!;
+    live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(report.spots[5].judgment, StrumJudgment.wrong);
+    for (var i = 0; i < report.spots.length; i++) {
+      expect(live[i], report.spots[i].judgment, reason: '点 $i 实时与报告一致');
+    }
+  });
+
+  test('暂停冻结:挂起期轮询不推进判定(窗已关也不翻灰)', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+
+    // 点 5 不弹:窗尾 6.75+0.08+0.23 ≈ 7.06s。喂到 6.9 暂停——窗还没关。
+    await feed(slice(standardPass(missIndexes: {5}), 0, 6.9));
+    final frozen = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(frozen[5], isNull, reason: '暂停前窗未关,未判');
+
+    controller().onPause();
+    engine.now = const Duration(seconds: 8);
+    controller().pollLive(); // 轮询照跑,但挂起期不推进判定
+    expect(
+      container.read(practiceScoringProvider).liveVerdicts,
+      same(frozen),
+      reason: '挂起期冻结:窗已过也不翻灰',
+    );
+  });
+
+  test('恢复后照常推进:色度升格与着色续跑,与报告一致', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+
+    await feed(slice(standardPass(wrongAt: {5}), 0, 7.0));
+    controller().onPause();
+    final frozen = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(frozen[5], StrumJudgment.onTime, reason: '时机色已亮,色度未收满');
+
+    controller().onResume();
+    await feed(slice(standardPass(wrongAt: {5}), 7.0, 21.0));
+    controller().pollLive();
+    final live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live[5], StrumJudgment.wrong, reason: '恢复后色度窗已过,升格照常');
+    expect(
+      [...live.take(5), ...live.sublist(6)],
+      everyElement(StrumJudgment.onTime),
+    );
+
+    handle.closeSession();
+    controller().finishSession();
+    final report = container.read(practiceScoringProvider).report!;
+    for (var i = 0; i < report.spots.length; i++) {
+      expect(live[i], report.spots[i].judgment, reason: '点 $i 恢复后仍与报告一致');
+    }
+  });
+
+  test('循环清零:onPassStart 判定列表清空重计', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+    await feed(slice(standardPass(), 0, 6.0));
+    expect(
+      container.read(practiceScoringProvider).liveVerdicts!,
+      anyElement(isNotNull),
+    );
+
+    handle.anchor = engine.engineTime();
+    controller().onPassStart();
+    final live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live, hasLength(16));
+    expect(live, everyElement(isNull), reason: '循环重开清零');
+  });
+
+  test('变速 50% 中途:实时判定照常着色(拍域折秒,零改动)', () async {
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+
+    await feed(slice(standardPass(), 0, 12 * 0.75));
+    handle.periodMs = 1500; // 页面 setSpeed(0.5) 的等效现场
+    await feed(slice(standardPass(periodMs: 1500), 12 * 0.75, 32 * 1.5));
+    controller().pollLive();
+
+    final live = container.read(practiceScoringProvider).liveVerdicts!;
+    expect(live, everyElement(StrumJudgment.onTime), reason: '变速段按新周期折秒,照常判准');
   });
 }

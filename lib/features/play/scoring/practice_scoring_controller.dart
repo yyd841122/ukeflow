@@ -39,6 +39,7 @@ class PracticeScoringState {
     this.report,
     this.reportLatencySec,
     this.error,
+    this.liveVerdicts,
   });
 
   final ScoringStatus status;
@@ -57,12 +58,19 @@ class PracticeScoringState {
   /// 麦克风/权限错误文案;null = 正常。评分失败不拦跟练(照常练)。
   final String? error;
 
+  /// 实时判定(工单 36,GLOSSARY「跟练评分」):谱序,与报告 verdicts
+  /// 同算法同源重算;null = 该点未定(未弹到/容差窗未关),整表 null =
+  /// 不在评分会话(不着色)。「漏」在容差窗关闭后出现;「错」在色度窗
+  /// 收满后由时机色升格(滞后 ~300ms)。
+  final List<StrumJudgment?>? liveVerdicts;
+
   PracticeScoringState copyWith({
     ScoringStatus? status,
     bool? suspended,
     Object? report = _sentinel,
     Object? reportLatencySec = _sentinel,
     Object? error = _sentinel,
+    Object? liveVerdicts = _sentinel,
   }) => PracticeScoringState(
     status: status ?? this.status,
     suspended: suspended ?? this.suspended,
@@ -73,6 +81,9 @@ class PracticeScoringState {
         ? this.reportLatencySec
         : reportLatencySec as double?,
     error: identical(error, _sentinel) ? this.error : error as String?,
+    liveVerdicts: identical(liveVerdicts, _sentinel)
+        ? this.liveVerdicts
+        : liveVerdicts as List<StrumJudgment?>?,
   );
 
   static const _sentinel = Object();
@@ -111,6 +122,14 @@ final class _OnsetRec {
 /// - **拍域**:onset 以拍记(自调度锚点),变速换周期只动秒域映射,
 ///   判定误差按各 onset 检出时的周期折秒(拍数守恒,变速照评)。
 class PracticeScoringController extends Notifier<PracticeScoringState> {
+  /// 漏判的检测确认滞后(秒):onset 候选还要后续 2-3 帧(~25ms)才确认,
+  /// 过了窗尾再留余量才翻灰——杜绝灰了又翻绿的回头色。
+  static const double _missLagSec = 0.05;
+
+  /// 末 onset 色度窗的收尾滞后(秒):比检测确认滞后(~25ms)宽,过了
+  /// 它还没下一 onset,窗即定为准报告期的上限值(缓存与报告期同窗)。
+  static const double _chromaTrailingLagSec = 0.05;
+
   StreamSubscription<Uint8List>? _sub;
   TunerRecorder? _recorder;
   OnsetDetector? _detector;
@@ -135,6 +154,10 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   double _reportLatencySec = defaultLatencySec;
   EngineSound? _replaySound;
   int _replayGen = 0;
+
+  /// 实时判定的最早色度窗终局时刻(引擎秒;工单 36):null = 无待升格
+  /// 「错」的命中点。轮询查询路径据此到点重跑,升格翻红。
+  double? _chromaCheckAt;
 
   PracticeSessionHandle get _handle => ref.read(practiceScoringHandleProvider);
 
@@ -189,7 +212,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     );
     _handle.setScoringTicks(true);
     if (!ref.mounted) return false;
-    state = state.copyWith(status: ScoringStatus.listening, error: null);
+    state = state.copyWith(
+      status: ScoringStatus.listening,
+      error: null,
+      liveVerdicts: null,
+    );
     return true;
   }
 
@@ -216,6 +243,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     _onsets.clear();
     _buffer = MicAudioBuffer();
     _chromaCache.clear();
+    // 实时判定清零(工单 36):循环重开清零、回到开头清零,同一入口。
+    _chromaCheckAt = null;
+    state = state.copyWith(
+      liveVerdicts: List<StrumJudgment?>.filled(_strumTargets.length, null),
+    );
   }
 
   /// 暂停挂起:采集照跑,onset 不收(锚点冻结期的拍域换算会错位)。
@@ -246,7 +278,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     if (!ref.mounted) return; // 容器已随应用退出:评分接线与状态无可落盘。
     _handle.setScoringTicks(false);
     if (_strumTargets.isEmpty || _onsets.isEmpty) {
-      state = state.copyWith(status: ScoringStatus.idle, suspended: false);
+      state = state.copyWith(
+        status: ScoringStatus.idle,
+        suspended: false,
+        liveVerdicts: null,
+      );
       return;
     }
     state = state.copyWith(
@@ -271,6 +307,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
       report: null,
       reportLatencySec: null,
       error: null,
+      liveVerdicts: null,
     );
   }
 
@@ -283,6 +320,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
       status: ScoringStatus.idle,
       report: null,
       reportLatencySec: null,
+      liveVerdicts: null,
     );
   }
 
@@ -333,7 +371,130 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     }
   }
 
+  /// 实时判定的轮询查询路径(页面 16ms 轮询调,工单 36):onset 到达
+  /// 之外的判定推进挂这里——容差窗关闭未见 onset 的点判漏、色度窗收满
+  /// 的点升格「错」。轻扫描探测触发,命中才全量重跑(重跑 <1ms)。
+  /// 暂停冻结:挂起期不推进判定。
+  void pollLive() {
+    if (state.status != ScoringStatus.listening || state.suspended) return;
+    final targets = _strumTargets;
+    final verdicts = state.liveVerdicts;
+    if (targets.isEmpty || verdicts == null) return;
+    final anchor = _handle.scheduleAnchor;
+    if (anchor == null) return;
+    final nowSec =
+        ref.read(audioEngineProvider).engineTime().inMicroseconds / 1e6;
+    final anchorSec = anchor.inMicroseconds / 1e6;
+    final periodSec = _handle.periodMs / 1000;
+    final latencySec = _calibratedLatency();
+    var missDue = false;
+    for (var i = 0; i < targets.length; i++) {
+      if (verdicts[i] != null) continue;
+      if (nowSec >= _missCloseSec(i, anchorSec, periodSec, latencySec)) {
+        missDue = true;
+        break;
+      }
+    }
+    final chromaDue = _chromaCheckAt != null && nowSec >= _chromaCheckAt!;
+    if (missDue || chromaDue) _rerunLive(nowSec);
+  }
+
   // ── 内部 ──────────────────────────────────────────────────────────
+
+  /// 漏判截止时刻(引擎秒,算式单源:pollLive 探测与 _rerunLive 合流共
+  /// 用此线):期望时刻 + 校准延迟 + 容差 + 检测确认滞后。期望时刻**现读**
+  /// 锚点/周期即正确——变速/暂停重锚按拍数守恒(相位保持,
+  /// BeatSchedule.reanchored 以冻结逝时重推 t0),任一拍的绝对期望恒等于
+  /// 锚点+拍位×现周期,无须 per-target 记「当时」周期。
+  double _missCloseSec(
+    int i,
+    double anchorSec,
+    double periodSec,
+    double latencySec,
+  ) => anchorSec +
+      _strumTargets[i].beat * periodSec +
+      latencySec +
+      strumToleranceSec +
+      _missLagSec;
+
+  /// 全量重跑实时判定(工单 36):对已收 onset 重算 scoreStrums——与
+  /// 曲末报告同算法同源(同校准、同色度缓存),不存在实时判完报告翻案。
+  /// 命中点当场着色;「错」只对色度窗已收满的 onset 判(未收满先按时机
+  /// 色亮,窗满后升格重跑);漏判要等容差窗关闭([nowSec] 判)。
+  void _rerunLive(double nowSec) {
+    final targets = _strumTargets;
+    if (targets.isEmpty) return;
+    final anchor = _handle.scheduleAnchor;
+    if (anchor == null) return;
+    final pendingChroma = <int>[];
+    final latencySec = _calibratedLatency();
+    final result = scoreStrums(
+      targets: targets,
+      onsets: _scoredOnsets,
+      latencySec: latencySec,
+      toleranceSec: strumToleranceSec,
+      onTimeWindowSec: strumOnTimeWindowSec,
+      verifyChord: _midiByChord.isEmpty
+          ? null
+          : (onsetIndex, chord) =>
+                _liveVerifyChord(onsetIndex, chord, nowSec, pendingChroma),
+    );
+    final anchorSec = anchor.inMicroseconds / 1e6;
+    final periodSec = _handle.periodMs / 1000;
+    final out = List<StrumJudgment?>.filled(result.verdicts.length, null);
+    for (var i = 0; i < result.verdicts.length; i++) {
+      final judgment = result.verdicts[i].judgment;
+      if (judgment != StrumJudgment.missed) {
+        out[i] = judgment;
+      } else if (nowSec >=
+        _missCloseSec(i, anchorSec, periodSec, latencySec)) {
+        out[i] = StrumJudgment.missed; // 窗关未见 onset → 灰。
+      }
+      // else 未定:容差窗还没关,不着色。
+    }
+    // 待升格的命中点:记最早色度窗终局时刻,轮询路径到点重跑。
+    double? chromaCheckAt;
+    for (final oi in pendingChroma) {
+      final at = _chromaFinalSec(oi);
+      if (chromaCheckAt == null || at < chromaCheckAt) chromaCheckAt = at;
+    }
+    _chromaCheckAt = chromaCheckAt;
+    state = state.copyWith(liveVerdicts: out);
+  }
+
+  /// 实时色度验证(与报告同源的关键):窗未收满不判错(记入待升格,
+  /// 时机判定为准);收满才算——此刻的窗与报告期算的完全同窗,色度
+  /// 缓存两期共用零串味(窗终局见 [_chromaFinalSec])。
+  /// 返回值语义:**true = 不足以判错**(证据不足或验证通过都归此),
+  /// false 才翻「错」——证据不足与「弹对」不是一回事。
+  bool _liveVerifyChord(
+    int onsetIndex,
+    String chord,
+    double nowSec,
+    List<int> pendingChroma,
+  ) {
+    if (nowSec < _chromaFinalSec(onsetIndex)) {
+      pendingChroma.add(onsetIndex);
+      return true;
+    }
+    final matcher = _matcher ??= _buildMatcher();
+    if (matcher == null) return true;
+    final best = _chromaCache.putIfAbsent(
+      onsetIndex,
+      () => _chromaBest(matcher, onsetIndex),
+    );
+    if (best == null) return true; // 色度无证据(全零窗)不算错,时机判定为准。
+    return best.label == chord && best.score > chromaMatchThreshold;
+  }
+
+  /// onset 色度窗的终局时刻(引擎秒):有下一 onset 时刻即终局(gap 已
+  /// 定,窗与报告期同式);末 onset 要过窗上限再留一个检测确认滞后——
+  /// 之后不可能再检出更近的下一 onset,窗定为准报告期的上限值。
+  double _chromaFinalSec(int onsetIndex) {
+    final onset = _onsets[onsetIndex];
+    if (onsetIndex + 1 < _onsets.length) return _chromaWindowEnd(onsetIndex);
+    return onset.engineSec + 0.3 + _chromaTrailingLagSec;
+  }
 
   /// 麦 chunk 到达:引擎钟打戳(ADR-0005)→ 存音频 → 检 onset(拍域)。
   /// 挂起期音频照存(重听上下文完整),onset 不收。
@@ -351,9 +512,13 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     if (anchor == null || timeline == null) return;
     final t0Sec = anchor.inMicroseconds / 1e6;
     final periodMs = _handle.periodMs;
+    final collectedBefore = _onsets.length;
     for (final t in detector.process(samples, arrivalSec)) {
       _onsets.add(_OnsetRec((t - t0Sec) * 1000 / periodMs, periodMs, t));
     }
+    // onset 到达即全量重跑实时判定(工单 36):对已收数据重算
+    // scoreStrums,与曲末报告同算法同源(<1ms,onset 到达 ≤ 每秒数次)。
+    if (_onsets.length > collectedBefore) _rerunLive(arrivalSec);
   }
 
   Float64List _pcm16ToFloat64(Uint8List bytes) {
@@ -420,20 +585,27 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   ChromaMatcher? _buildMatcher() =>
       _midiByChord.isEmpty ? null : ChromaMatcher(midiByChord: _midiByChord);
 
-  /// onset 处的色度最佳匹配:窗 = [检出时刻−20ms, +min(300ms, 距下一
-  /// onset 间隙−10ms))(300ms 上限是 glm 余音冷却先例;−20ms 兜检测器
-  /// 帧中心 ±10ms 抖动;间隙下限 120ms 保住最短可用窗)。
+  /// onset 处的色度最佳匹配:窗 = [检出时刻−20ms, 色度窗尾)(300ms
+  /// 上限是 glm 余音冷却先例;−20ms 兜检测器帧中心 ±10ms 抖动;间隙下限
+  /// 120ms 保住最短可用窗)。窗尾单源 [_chromaWindowEnd],实时判定与
+  /// 报告期同窗。
   ChromaBestMatch? _chromaBest(ChromaMatcher matcher, int onsetIndex) {
     final onset = _onsets[onsetIndex];
-    final nextGap = onsetIndex + 1 < _onsets.length
-        ? _onsets[onsetIndex + 1].engineSec - onset.engineSec
-        : 0.3;
-    final end = onset.engineSec + math.min(0.3, math.max(nextGap - 0.01, 0.12));
-    final samples = _buffer.window(onset.engineSec - 0.02, end);
+    final samples = _buffer.window(onset.engineSec - 0.02, _chromaWindowEnd(onsetIndex));
     if (samples.isEmpty) return null;
     return matcher.bestMatch(
       chromaFromSamples(samples, sampleRate: micSampleRate),
     );
+  }
+
+  /// onset 色度窗尾(引擎秒):[检出时刻, +min(300ms, 距下一 onset
+  /// 间隙−10ms));无下一 onset 时按 300ms 上限。
+  double _chromaWindowEnd(int onsetIndex) {
+    final onset = _onsets[onsetIndex];
+    final nextGap = onsetIndex + 1 < _onsets.length
+        ? _onsets[onsetIndex + 1].engineSec - onset.engineSec
+        : 0.3;
+    return onset.engineSec + math.min(0.3, math.max(nextGap - 0.01, 0.12));
   }
 
   /// 重听定位:命中点用检出时刻,漏点用期望时刻(锚点+拍×当前遍周期;
@@ -481,6 +653,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     _chromaCache.clear();
     _matcher = null;
     _replayTimes = const [];
+    _chromaCheckAt = null;
   }
 
   void _unloadReplaySound() {
@@ -502,6 +675,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
       suspended: false,
       report: null,
       error: message,
+      liveVerdicts: null,
     );
   }
 

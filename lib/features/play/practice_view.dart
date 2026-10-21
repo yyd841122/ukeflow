@@ -5,6 +5,7 @@ import '../../core/model/strum_chart.dart';
 import '../../core/model/strum_pattern.dart';
 import '../../core/practice/play_timeline.dart';
 import '../../core/practice/practice_state.dart';
+import '../../core/scoring/strum_scorer.dart';
 import '../../core/ui/arrow_strip.dart';
 import '../../data/chord_library.dart' show Chord;
 import '../chords/chord_diagram.dart';
@@ -22,6 +23,7 @@ class PracticeView extends StatelessWidget {
     required this.practice,
     required this.pattern,
     required this.chords,
+    this.liveVerdicts,
   });
 
   final PlayTimeline timeline;
@@ -32,6 +34,10 @@ class PracticeView extends StatelessWidget {
 
   /// 和弦名 → 和弦(指法图数据)。谱面和弦已过白名单校验,恒可查。
   final Map<String, Chord> chords;
+
+  /// 实时判定(工单 36,谱序与 [timeline].strums 同序;null = 不在评分
+  /// 会话)。按当前小节折到槽位传给箭头条染色。
+  final List<StrumJudgment?>? liveVerdicts;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +71,7 @@ class PracticeView extends StatelessWidget {
             pattern: pattern,
             currentSlot: _currentSlot,
             slotKeyPrefix: 'play-slot',
+            verdicts: _slotVerdicts,
           ),
         ),
         const SizedBox(height: 4),
@@ -218,6 +225,20 @@ class PracticeView extends StatelessWidget {
       return null;
     }
     return strum.slotInBar;
+  }
+
+  /// 当前小节各槽位的实时判定(工单 36):谱序判定折到当前小节的槽位,
+  /// 与 `_currentSlot` 同一小节基准(beat ~/ beatsPerBar);无评分 null。
+  List<StrumJudgment?>? get _slotVerdicts {
+    final verdicts = liveVerdicts;
+    if (verdicts == null) return null;
+    final bar = practice.beat ~/ beatsPerBar;
+    final slots = List<StrumJudgment?>.filled(eighthsPerBar, null);
+    for (var i = 0; i < timeline.strums.length && i < verdicts.length; i++) {
+      final strum = timeline.strums[i];
+      if (strum.barIndex == bar) slots[strum.slotInBar] = verdicts[i];
+    }
+    return slots;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/scoring/report.dart';
 import '../../../core/scoring/strum_scorer.dart';
+import '../../../core/ui/judgment_colors.dart';
 import '../../../data/settings_providers.dart';
 import 'practice_scoring_controller.dart';
 
@@ -57,6 +58,8 @@ class _ReportBodyState extends ConsumerState<_ReportBody> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         _Header(report: report),
+        const SizedBox(height: 8),
+        const _Legend(),
         const SizedBox(height: 16),
         _LatencyCard(report: report, latencySec: state.reportLatencySec ?? 0),
         const SizedBox(height: 16),
@@ -101,17 +104,6 @@ class _SectionTitle extends StatelessWidget {
   );
 }
 
-/// 判定 → 颜色(报告全套着色的单一来源)。
-Color judgmentColor(BuildContext context, StrumJudgment judgment) {
-  final scheme = Theme.of(context).colorScheme;
-  return switch (judgment) {
-    StrumJudgment.onTime => scheme.primary,
-    StrumJudgment.early || StrumJudgment.late => scheme.tertiary,
-    StrumJudgment.wrong => scheme.secondary,
-    StrumJudgment.missed => scheme.error,
-  };
-}
-
 class _Header extends StatelessWidget {
   const _Header({required this.report});
 
@@ -139,6 +131,54 @@ class _Header extends StatelessWidget {
             context,
           ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
+      ],
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) {
+    // 早/晚现在各占一色(旧映射同为橙),图例值得常驻一眼读懂。
+    final entries = <(StrumJudgment, String)>[
+      (StrumJudgment.onTime, '准'),
+      (StrumJudgment.early, '早'),
+      (StrumJudgment.late, '晚'),
+      (StrumJudgment.wrong, '错'),
+      (StrumJudgment.missed, '漏'),
+    ];
+    return Wrap(
+      key: const Key('judgment-legend'),
+      spacing: 14,
+      runSpacing: 4,
+      children: [
+        for (final (judgment, label) in entries)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  // 漏 = 空心(与箭头条同语义),其余实心。
+                  color: judgment == StrumJudgment.missed
+                      ? Colors.transparent
+                      : judgmentColor(judgment),
+                  border: Border.all(color: judgmentColor(judgment)),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -229,7 +269,7 @@ class _WorstList extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: Icon(
               Icons.flag,
-              color: judgmentColor(context, spot.judgment),
+              color: judgmentColor(spot.judgment),
             ),
             title: Text(_spotLabel(spot)),
             trailing: Text(_judgmentLabel(spot)),
@@ -358,11 +398,10 @@ class _StrumTrack extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: judgmentColor(
-                  context,
                   spot.judgment,
                 ).withValues(alpha: selected == spot.spotIndex ? 0.55 : 0.22),
                 border: Border.all(
-                  color: judgmentColor(context, spot.judgment),
+                  color: judgmentColor(spot.judgment),
                 ),
                 borderRadius: BorderRadius.circular(6),
               ),
@@ -370,7 +409,7 @@ class _StrumTrack extends StatelessWidget {
                 _judgmentLabel(spot),
                 style: TextStyle(
                   fontSize: 12,
-                  color: judgmentColor(context, spot.judgment),
+                  color: judgmentColor(spot.judgment),
                   fontWeight: FontWeight.w600,
                 ),
               ),

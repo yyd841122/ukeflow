@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/model/builtin_strum_patterns.dart';
 import 'package:ukeflow/core/practice/play_timeline.dart';
 import 'package:ukeflow/core/practice/practice_state.dart';
+import 'package:ukeflow/core/scoring/strum_scorer.dart';
+import 'package:ukeflow/core/ui/judgment_colors.dart';
 import 'package:ukeflow/features/chords/chord_diagram.dart';
 import 'package:ukeflow/features/play/practice_view.dart';
 
@@ -20,7 +22,11 @@ void main() {
 
   /// 谱与时间轴每次现构造(parseChart 的 expect 须在测试内求值);
   /// 80 BPM:750ms/拍、一拍两槽 375ms、一行(一小节)3 秒、全曲 16 拍。
-  Future<void> pumpView(WidgetTester tester, Duration elapsed) async {
+  Future<void> pumpView(
+    WidgetTester tester,
+    Duration elapsed, {
+    List<StrumJudgment?>? liveVerdicts,
+  }) async {
     final timeline = compileTimeline(
       chart: practiceFixtureChart,
       pattern: island,
@@ -39,6 +45,7 @@ void main() {
             practice: practice,
             pattern: island,
             chords: chords,
+            liveVerdicts: liveVerdicts,
           ),
         ),
       ),
@@ -59,6 +66,15 @@ void main() {
     );
     return tester.widgetList<Icon>(cell).firstOrNull;
   }
+
+  /// 判定染色的槽位辅助:槽位的填充/描边/内容色(容器装饰与图标分开读)。
+  BoxDecoration slotDecoration(WidgetTester tester, int i) =>
+      tester.widget<Container>(
+        find.byKey(Key('play-slot-$i')),
+      ).decoration! as BoxDecoration;
+
+  Color slotIconColor(WidgetTester tester, int i) =>
+      slotIcon(tester, i)!.color!;
 
   testWidgets('曲首:当前段落下、第一行高亮且和弦在歌词上方、后续行可见、拍号 1', (
     tester,
@@ -167,6 +183,60 @@ void main() {
       '2',
       reason: '槽 3 = 拍 2 的后半拍',
     );
+  });
+
+  testWidgets('实时判定染色(工单 36):弹过的槽按四色渲染,漏灰空心,未定不染', (tester) async {
+    // island 槽序 0,2,3,5,6,7 = 谱序 spot 0..5。判定各给一色:
+    // slot0 准 / slot2 晚 / slot3 漏 / slot5 未定 / slot6 早 / slot7 错。
+    final live = [
+      StrumJudgment.onTime,
+      StrumJudgment.late,
+      StrumJudgment.missed,
+      null,
+      StrumJudgment.early,
+      StrumJudgment.wrong,
+    ];
+    // elapsed 1200ms:槽 3 是当前动作(spot 2,判漏)。
+    await pumpView(tester, const Duration(milliseconds: 1200), liveVerdicts: live);
+
+    // 准=绿:填充语义色,箭头白。
+    expect(slotDecoration(tester, 0).color, judgmentOnTimeColor);
+    expect(slotIconColor(tester, 0), Colors.white);
+    // 晚=黄:填充黄,内容换深色(白在黄上不可读)。
+    expect(slotDecoration(tester, 2).color, judgmentLateColor);
+    expect(slotIconColor(tester, 2), Colors.black87);
+    // 漏=灰空心:透明底 + 灰描边 + 灰内容。
+    final missed = slotDecoration(tester, 3);
+    expect(missed.color, Colors.transparent);
+    expect(missed.border, isNotNull);
+    expect(
+      missed.border!.top.color,
+      judgmentMissedColor,
+      reason: '漏 = 灰空心描边',
+    );
+    expect(slotIconColor(tester, 3), judgmentMissedColor);
+    // 未定:不着色,保持未到描边待命的底样式。
+    final pending = slotDecoration(tester, 5);
+    expect(pending.color, Colors.transparent);
+    expect(
+      pending.border!.top.color,
+      isNot(judgmentMissedColor),
+      reason: '未定不染色',
+    );
+    // 早=蓝、错=红。
+    expect(slotDecoration(tester, 6).color, judgmentEarlyColor);
+    expect(slotDecoration(tester, 7).color, judgmentWrongColor);
+  });
+
+  testWidgets('无评分遍(liveVerdicts null):箭头条保持原样式', (tester) async {
+    await pumpView(tester, const Duration(milliseconds: 1200));
+    final context = tester.element(find.byKey(const Key('play-slot-3')));
+    expect(
+      slotDecoration(tester, 3).color,
+      Theme.of(context).colorScheme.primary,
+      reason: '当前动作照旧点亮',
+    );
+    expect(slotDecoration(tester, 0).color, isNot(judgmentOnTimeColor));
   });
 
   testWidgets('下一和弦小预告:曲首显示下一换和弦点 C,图小一号', (tester) async {

@@ -11,6 +11,7 @@ import 'package:ukeflow/features/demo/demo_playback_controller.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
 import 'package:ukeflow/core/scoring/strum_scorer.dart' show StrumJudgment;
+import 'package:ukeflow/core/ui/judgment_colors.dart';
 import 'package:ukeflow/features/play/scoring/practice_scoring_controller.dart';
 
 import 'helpers/chart_fixtures.dart';
@@ -672,6 +673,75 @@ void main() {
       expect(scoringOf(tester).status, ScoringStatus.idle);
       expect(scoringOf(tester).report, isNull);
       expect(find.byKey(const Key('practice-start')), findsOneWidget);
+    });
+
+    testWidgets('运行态槽位着色:弹过的槽当场染色,未弹的不染(工单 36)', (tester) async {
+      await pumpScoringPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+      // 弹预备 4 下 + 正曲点 0..1(4.2s:点 2 在 4.58s 还没轮到)。
+      await playAlong(tester, 4.2);
+
+      final live = scoringOf(tester).liveVerdicts!;
+      expect(live[0], StrumJudgment.onTime, reason: '前置:onset 已到,判定已出');
+      expect(live[1], StrumJudgment.onTime);
+      expect(live[2], isNull);
+
+      // all-down 槽序 0,2,4,6 = spot 0..3:前两槽绿,未弹槽不着色。
+      BoxDecoration slot(int i) => tester
+          .widget<Container>(find.byKey(Key('play-slot-$i')))
+          .decoration! as BoxDecoration;
+      expect(slot(0).color, judgmentOnTimeColor, reason: '弹到的槽当场着色');
+      expect(slot(2).color, judgmentOnTimeColor);
+      expect(slot(4).color, Colors.transparent, reason: '未弹到的槽不着色');
+      expect(slot(4).border!.top.color, isNot(judgmentMissedColor));
+    });
+
+    testWidgets('报告页:图例五色与轨道用四色单源(工单 36)', (tester) async {
+      await pumpScoringPage(tester);
+      await tester.ensureVisible(find.byKey(const Key('practice-start')));
+      await tester.tap(find.byKey(const Key('practice-start')));
+      await tester.pump();
+      await playAlong(tester, 7.0);
+      await tester.ensureVisible(find.byKey(const Key('practice-stop')));
+      await tester.tap(find.byKey(const Key('practice-stop')));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // 图例:准/早/晚/错/漏 五块,固定语义色(漏=空心灰描边)。
+      final legend = find.byKey(const Key('judgment-legend'));
+      expect(legend, findsOneWidget);
+      final swatches = tester
+          .widgetList<Container>(
+            find.descendant(of: legend, matching: find.byType(Container)),
+          )
+          .toList();
+      expect(swatches, hasLength(5));
+      BoxDecoration swatch(int i) => swatches[i].decoration! as BoxDecoration;
+      expect(swatch(0).color, judgmentOnTimeColor, reason: '准 = 绿');
+      expect(swatch(1).color, judgmentEarlyColor, reason: '早 = 蓝');
+      expect(swatch(2).color, judgmentLateColor, reason: '晚 = 黄');
+      expect(swatch(3).color, judgmentWrongColor, reason: '错 = 红');
+      expect(swatch(4).color, Colors.transparent, reason: '漏 = 空心');
+      expect(swatch(4).border!.top.color, judgmentMissedColor);
+
+      // 轨道:前 6 格准(绿),其余漏(灰)——与图例同一映射。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('strum-cell-0')),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      BoxDecoration cell(int i) => tester
+          .widget<Container>(
+            find.descendant(
+              of: find.byKey(Key('strum-cell-$i')),
+              matching: find.byType(Container),
+            ),
+          )
+          .decoration! as BoxDecoration;
+      expect(cell(0).border!.top.color, judgmentOnTimeColor);
+      expect(cell(15).border!.top.color, judgmentMissedColor);
     });
 
     testWidgets('评分中弹回:弃评不弹报告,麦已停,评分接线已拆', (tester) async {
