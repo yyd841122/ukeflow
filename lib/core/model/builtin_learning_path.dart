@@ -19,7 +19,7 @@ import 'task_target.dart';
 ///   第 29 天起交给用户点名目标曲(五首内置谱和弦词汇全覆盖)。
 
 /// 复用的直达目标(标签与内置节奏型名/谱面标题逐字一致,守护测试锁)。
-const _song = SongTarget('cang-hai-yi-sheng-xiao', label: '沧海一声笑');
+const _song = SongTarget('cang-hai-yi-sheng-xiao-strum', label: '沧海一声笑');
 const _pAllDown = PatternTarget('all-down', label: '下 下 下 下');
 const _pEighthDu = PatternTarget('eighth-du', label: '下上 下上 下上 下上');
 const _pDDuD = PatternTarget('d-du-d-du', label: '下 下上 下 下上');

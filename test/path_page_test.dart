@@ -42,7 +42,7 @@ void main() {
       // (testWidgets 的 FakeAsync 里 rootBundle 真实文件 I/O 完不成)。
       chordLibraryFixtureOverride(),
       builtinChartsFixtureOverride([
-        (id: 'cang-hai-yi-sheng-xiao', chart: practiceFixtureChart),
+        (id: 'cang-hai-yi-sheng-xiao-strum', chart: practiceFixtureChart),
       ]),
       // 直达打开的训练/跟练页要引擎与默认 BPM 缝(与各自页测试同款)。
       audioEngineProvider.overrideWithValue(FakeAudioEngine()),

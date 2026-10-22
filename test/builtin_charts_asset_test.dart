@@ -47,7 +47,7 @@ void main() {
   group('每首目标曲的内容契约', () {
     final expected = {
       'ai-ni-bu-shi-liang-san-tian': ('爱你不是两三天', '梁静茹'),
-      'cang-hai-yi-sheng-xiao': ('沧海一声笑', '黄霑'),
+      'cang-hai-yi-sheng-xiao-strum': ('沧海一声笑', '黄霑'),
       'big-big-world': ('Big Big World', 'Emilia'),
       'love-you-more-than-i-can-say': ('More Than I Can Say', 'Leo Sayer'),
       'yesterday-once-more': ('Yesterday Once More', 'Carpenters'),
@@ -70,7 +70,7 @@ void main() {
           chart.sections.map((s) => s.kind),
           contains(StrumSectionKind.verse),
         );
-        if (entry.key != 'cang-hai-yi-sheng-xiao') {
+        if (entry.key != 'cang-hai-yi-sheng-xiao-strum') {
           expect(
             chart.sections.map((s) => s.kind),
             contains(StrumSectionKind.chorus),

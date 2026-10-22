@@ -4,7 +4,7 @@ import 'strum_chart_parser.dart';
 class BuiltInChart {
   const BuiltInChart({required this.id, required this.chart});
 
-  /// 曲目 id = 资产文件名去扩展名（如 `cang-hai-yi-sheng-xiao`）。
+  /// 曲目 id = 资产文件名去扩展名（如 `cang-hai-yi-sheng-xiao-strum`）。
   final String id;
   final StrumChart chart;
 }
@@ -15,7 +15,7 @@ const builtinChartCatalog = <({String id, String asset})>[
     id: 'ai-ni-bu-shi-liang-san-tian',
     asset: 'assets/charts/ai-ni-bu-shi-liang-san-tian.pro',
   ),
-  (id: 'cang-hai-yi-sheng-xiao', asset: 'assets/charts/cang-hai-yi-sheng-xiao.pro'),
+  (id: 'cang-hai-yi-sheng-xiao-strum', asset: 'assets/charts/cang-hai-yi-sheng-xiao-strum.pro'),
   (id: 'big-big-world', asset: 'assets/charts/big-big-world.pro'),
   (
     id: 'love-you-more-than-i-can-say',
