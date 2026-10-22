@@ -16,3 +16,9 @@ Edit the "Label in our tracker" column to match whatever vocabulary you actually
 
 Completion is recorded as `done` (not one of the canonical roles above): set
 when a ticket's work lands and passes review / real-device acceptance.
+
+Between `ready-for-agent` and `done` this repo also uses the interim status
+`implemented (awaiting device check)`: code is merged and script-verified
+(装机机检过), but the ticket's own 真机待验清单 needs the user's hands-on
+acceptance (first used by ticket 33; see its machine-check comment for the
+pattern).

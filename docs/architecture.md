@@ -34,7 +34,11 @@ lib/
 │   │                 # tab_practice_state.dart 逐音练习状态((时间轴,引擎时刻)→当前音/预亮窗/拍,工单 13)
 │   ├── backup/       # 备份文档编解码(工单 21,纯数据变换零 drift 依赖):四表↔单个版本化 JSON,
 │   │                 # 解析层拦坏文件(版本/形状/主键重复/全空),可读中文错误
-│   ├── ui/           # 共享基础组件（PlaceholderPage 占位页等）
+│   ├── scoring/      # 评分内核(纯 Dart,工单 33,零引擎依赖):OnsetDetector(滤波链 HP150+880/1320 双陷波)、
+│   │                 # strum_scorer(贪心全局最近配对,拍域判定)、calibration(延迟校准)、chroma(封闭验证)、
+│   │                 # mic_audio_buffer、report(报告组装)
+│   ├── tuner/        # 调音内核(纯 Dart):pitch_math、tuner_filter(中值/均值平滑)、tuner_recorder(麦采集)
+│   ├── ui/           # 共享基础组件(ArrowStrip 扫弦箭头条、judgment_colors 判定四色单源等)
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、custom_charts(自建谱)、image_charts(用户图片谱,工单 18)、
 │                     # settings(键值设置,工单 20);backup_service(工单 21:导出快照/导入即覆盖的事务落库口);
