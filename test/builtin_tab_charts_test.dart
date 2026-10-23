@@ -10,6 +10,9 @@ import 'package:ukeflow/core/model/tab_chart.dart';
 /// C4 基频(A4=440 基准),主音落点断言共用。
 const c4Frequency = 261.6255653005986;
 
+/// 频率 → MIDI 音符号(69 = A4),旋律窗/音域断言共用。
+double midiOf(double hz) => 69 + 12 * (math.log(hz / 440) / math.ln2);
+
 /// 逐音合法性断言:弦号/品位域内、拍位严格递增且落在 1/16 拍网格、
 /// 缀字非空白。迁移谱抽查与目标曲内容缝共用同一形状。
 void expectNotesLegal(Iterable<TabNote> notes, {required String context}) {
@@ -36,7 +39,7 @@ void main() {
     expect([for (final c in charts) c.chart.title], [
       '小星星', '欢乐颂',
       // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-      '沧海一声笑',
+      '沧海一声笑', '爱你不是两三天',
       // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
       '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
       '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -185,7 +188,6 @@ void main() {
     // 五声域(宫商角徵羽,无 fa/si):全部音落在 C4..E5 的
     // {C4 D4 E4 G4 A4 C5 D5 E5}。
     const pentatonicMidi = {60, 62, 64, 67, 69, 72, 74, 76};
-    double midiOf(double hz) => 69 + 12 * math.log(hz / 440) / math.ln2;
     for (final n in song.notes) {
       expect(midiOf(n.frequency).round(), isIn(pentatonicMidi),
           reason: '${song.title} 出五声域:$n');
@@ -221,6 +223,53 @@ void main() {
     expect(song.notes.last.string, 3);
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 96);
+    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
+  });
+
+  test('爱你不是两三天:64 音 9 小节,副歌逐句缀字与音域抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian')
+        .chart;
+
+    expect(song.notes, hasLength(64));
+    expect(song.tempo, 70);
+
+    // 副歌起句「爱你不是两三天」:E4 G4 A4 C5 A4 G4 A4 = ②0 ②3 ①0 ①3 ①0 ②3 ①0
+    // (听写初稿,以真机耳朵为准)。
+    expect(song.notes.take(7).map((n) => (n.string, n.fret)), [
+      (2, 0),
+      (2, 3),
+      (1, 0),
+      (1, 3),
+      (1, 0),
+      (2, 3),
+      (1, 0),
+    ]);
+
+    // 第一把位旋律窗 C4..E5(工单 25 录入纪律)。
+    for (final n in song.notes) {
+      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
+          reason: '${song.title} 出旋律窗:$n');
+    }
+
+    // 副歌逐句缀字(歌词源 = assets/charts/ai-ni-bu-shi-liang-san-tian-strum.pro)。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(64));
+    expect(lyrics.sublist(0, 7).join(), '爱你不是两三天');
+    expect(lyrics.sublist(7, 15).join(), '每天却想你很多遍');
+    expect(lyrics.sublist(15, 23).join(), '还不习惯孤独街道');
+    expect(lyrics.sublist(23, 31).join(), '拥挤人潮没你拥抱');
+    expect(lyrics.sublist(31, 38).join(), '爱你不是两三天');
+    expect(lyrics.sublist(38, 46).join(), '一眨眼心就能沉淀');
+    expect(lyrics.sublist(46, 53).join(), '你是否想念我喔');
+    expect(lyrics.sublist(53).join(), '还是像我只和寂寞做朋友');
+
+    expectNotesLegal(song.notes, context: song.title);
+
+    // 终句落主音:「友」= C4 ③0 @33。
+    expect(song.notes.last.string, 3);
+    expect(song.notes.last.fret, 0);
+    expect(song.notes.last.beat, 33);
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 }

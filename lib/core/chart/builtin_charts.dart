@@ -12,8 +12,8 @@ class BuiltInChart {
 /// 内置曲库清单：id 与资产路径一一对应。新增目标曲在此登记。
 const builtinChartCatalog = <({String id, String asset})>[
   (
-    id: 'ai-ni-bu-shi-liang-san-tian',
-    asset: 'assets/charts/ai-ni-bu-shi-liang-san-tian.pro',
+    id: 'ai-ni-bu-shi-liang-san-tian-strum',
+    asset: 'assets/charts/ai-ni-bu-shi-liang-san-tian-strum.pro',
   ),
   (id: 'cang-hai-yi-sheng-xiao-strum', asset: 'assets/charts/cang-hai-yi-sheng-xiao-strum.pro'),
   (id: 'big-big-world', asset: 'assets/charts/big-big-world.pro'),
