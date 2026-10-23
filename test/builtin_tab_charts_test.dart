@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
+import 'package:ukeflow/core/practice/tab_timeline.dart';
 import 'package:ukeflow/core/model/tab_chart.dart';
 
 /// 工单 12 内容缝:内置指弹曲录入正确性。
@@ -31,14 +32,19 @@ void expectEndsOnTonic(TabNote note) {
   expect(note.frequency, closeTo(c4Frequency, 1e-9));
 }
 
-/// 逐音合法性断言:弦号/品位域内、拍位严格递增且落在 1/16 拍网格、
-/// 缀字非空白。迁移谱抽查与目标曲内容缝共用同一形状。
+/// 逐音合法性断言:弦号/品位域内、拍位不倒退(同拍多音合法,独奏
+/// 和弦堆依赖录入序 = 低弦→高弦)且落在 1/16 拍网格、缀字非空白。
+/// 迁移谱抽查与目标曲内容缝共用同一形状。
 void expectNotesLegal(Iterable<TabNote> notes, {required String context}) {
   var lastBeat = -1.0;
   for (final n in notes) {
     expect(n.string, inInclusiveRange(1, 4), reason: '$n');
     expect(n.fret, greaterThanOrEqualTo(0), reason: '$n');
-    expect(n.beat, greaterThan(lastBeat), reason: '$context 拍位须严格递增,见 $n');
+    expect(
+      n.beat,
+      greaterThanOrEqualTo(lastBeat),
+      reason: '$context 拍位不倒退,见 $n',
+    );
     expect(
       n.beat * 4,
       (n.beat * 4).round(),
@@ -61,8 +67,9 @@ void main() {
       [for (final c in charts) c.chart.title],
       [
         '小星星', '欢乐颂',
-        // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-        '沧海一声笑', '爱你不是两三天', 'Big Big World',
+        // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入;
+        // 「·独奏」版自工单 37 起逐首续录)。
+        '沧海一声笑', '爱你不是两三天', '爱你不是两三天·独奏', 'Big Big World',
         // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
         '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
         '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -310,6 +317,58 @@ void main() {
     expect(song.notes.last.string, 1);
     expect(song.notes.last.fret, 12);
     expect(song.notes.last.beat, 87.5);
+  });
+
+  test('爱你不是两三天·独奏:前奏 5 小节 61 音,权威源 TAB 行转录抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian-solo')
+        .chart;
+
+    expect(song.notes, hasLength(61));
+    expect(song.tempo, 78);
+
+    // 小节2 卷弦起 = E 和弦 4442 块(低弦→高弦),接 ③④②③ 拨弦序列。
+    expect(song.notes.take(7).map((n) => (n.string, n.fret, n.beat)), [
+      (4, 4, 4.0),
+      (3, 4, 4.0),
+      (2, 4, 4.0),
+      (1, 2, 4.0),
+      (3, 4, 4.5),
+      (2, 4, 5.0),
+      (3, 4, 5.5),
+    ]);
+
+    // 小节4 和弦堆的旋律音 ①2=B4 与三连音直化位(工单 37 台账)。
+    final stack = song.notes.where((n) => n.beat == 12.0).toList();
+    expect(stack.map((n) => (n.string, n.fret)), [
+      (4, 2),
+      (3, 1),
+      (2, 0),
+      (1, 2),
+    ]);
+    expect(
+      song.notes
+          .where((n) => n.beat >= 13.0 && n.beat < 14.0)
+          .map((n) => (n.string, n.fret, n.beat)),
+      [(2, 0, 13.0), (1, 0, 13.25), (1, 2, 13.5)],
+    );
+
+    // 末音 = ①8=F5 @18(印张圆圈数字+延音号,二拍延音),曲末 20 拍整。
+    final last = song.notes.last;
+    expect((last.string, last.fret, last.beat), (1, 8, 18.0));
+    expect(tabTotalBeats(song), 20);
+
+    // 器乐谱无缀字;音域 C#4..F5(61..77,印张 E 调指形原样)。
+    expect(song.notes.where((n) => n.lyric != null), isEmpty);
+    for (final n in song.notes) {
+      expect(
+        midiOf(n.frequency).round(),
+        inInclusiveRange(61, 77),
+        reason: '${song.title} 出音域:$n',
+      );
+    }
+
+    expectNotesLegal(song.notes, context: song.title);
   });
 
   test('Big Big World:副歌+主歌一 79 音 17 小节,权威源转录抽查', () {
