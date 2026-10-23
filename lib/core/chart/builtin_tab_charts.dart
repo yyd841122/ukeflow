@@ -120,6 +120,50 @@ final huanLeSong = TabChart(
   ],
 );
 
+/// 《Yesterday Once More》(Carpenters):工单 25 目标曲#5,纯旋律版初稿
+/// (2026-10-23 听写,以用户真机耳朵验收为准)。取主歌一 + 副歌(Sha-la-la
+/// 段,全曲身份所在);歌词/C 调/112bpm 取自弹唱资产。听写置信度中低:
+/// 「radio」「favorite songs」句内走向与副歌 Sha-la-la 摆动音型预期听感轮
+/// 重排;节奏为八分拍草拟,原曲的拖拍与弱拍未刻画。
+final yesterdayOnceMore = TabChart(
+  title: 'Yesterday Once More',
+  artist: 'Carpenters',
+  tempo: 112,
+  notes: [
+    // ── 主歌一 ──
+    // 「When I was young」。
+    ...[_n(3, 0, 0, 'When'), _n(3, 0, 0.5, 'I'), _n(3, 2, 1, 'was'), _n(2, 0, 2, 'young')],
+    // 「I'd listen to the radio」。
+    ...[_n(2, 3, 4, "I'd"), _n(2, 0, 4.5, 'lis'), _n(3, 2, 5, 'ten'), _n(3, 0, 5.5, 'to')],
+    ...[_n(3, 2, 6, 'the'), _n(2, 0, 6.5, 'ra'), _n(3, 2, 7, 'di'), _n(3, 0, 7.5, 'o')],
+    // 「Waiting for my favorite songs」。
+    ...[_n(1, 0, 8, 'Wai'), _n(2, 3, 8.5, 'ting'), _n(2, 0, 9, 'for'), _n(3, 2, 9.5, 'my')],
+    ...[_n(2, 0, 10, 'fa'), _n(3, 2, 10.5, 'vo'), _n(3, 2, 11, 'rite'), _n(3, 0, 11.5, 'songs')],
+    // 「When they played I'd sing along」。
+    ...[_n(1, 0, 12, 'when'), _n(2, 3, 12.5, 'they'), _n(2, 0, 13, 'played'), _n(3, 2, 13.5, "I'd")],
+    ...[_n(2, 0, 14, 'sing'), _n(3, 2, 14.5, 'a'), _n(3, 0, 15, 'long')],
+    // 「It made me smile」。
+    ...[_n(2, 3, 16, 'It'), _n(2, 0, 16.5, 'made'), _n(3, 2, 17, 'me'), _n(3, 0, 18, 'smile')],
+    // 「Those were such happy times」。
+    ...[_n(3, 0, 20, 'Those'), _n(3, 2, 21, 'were'), _n(2, 0, 22, 'such'), _n(2, 3, 22.5, 'hap'), _n(3, 2, 23, 'times')],
+    // 「And not so long ago」。
+    ...[_n(2, 0, 24, 'And'), _n(3, 2, 24.5, 'not'), _n(3, 0, 25, 'so'), _n(3, 2, 25.5, 'long'), _n(2, 0, 26, 'a'), _n(3, 0, 27, 'go')],
+    // ── 副歌 ──
+    // 「Every Sha-la-la-la」(摆动音型 A4-G4-E4-G4-A4-G4,草拟)。
+    ...[_n(1, 0, 28, 'Ev'), _n(2, 3, 28.5, 'ery'), _n(2, 0, 29, 'sha'), _n(2, 3, 29.5, 'la'), _n(1, 0, 30, 'la'), _n(2, 3, 30.5, 'la')],
+    // 「Every Wo-o-wo-o」。
+    ...[_n(1, 0, 32, 'Ev'), _n(2, 3, 32.5, 'ery'), _n(2, 0, 33, 'Wo'), _n(2, 3, 33.5, 'o'), _n(1, 0, 34, 'wo'), _n(2, 3, 34.5, 'o')],
+    // 「Still shines」。
+    ...[_n(2, 0, 36, 'Still'), _n(3, 2, 37, 'shines')],
+    // 「Every shing-a-ling-a-ling」。
+    ...[_n(1, 0, 40, 'Ev'), _n(2, 3, 40.5, 'ery'), _n(2, 0, 41, 'shing'), _n(2, 3, 41.5, 'a'), _n(1, 0, 42, 'ling'), _n(2, 3, 42.5, 'a'), _n(2, 0, 43, 'ling')],
+    // 「That they're starting to sing's」。
+    ...[_n(2, 0, 44, 'That'), _n(2, 3, 44.5, "they're"), _n(2, 0, 45, 'star'), _n(3, 2, 45.5, 'ting'), _n(3, 0, 46, 'to'), _n(3, 2, 46.5, "sing's")],
+    // 「So fine」(主音收)。
+    ...[_n(3, 2, 48, 'so'), _n(3, 0, 49, 'fine')],
+  ],
+);
+
 /// 《More Than I Can Say》(Leo Sayer,爱你在心口难开):工单 25 目标曲#4,
 /// 纯旋律版初稿(2026-10-23 听写,以用户真机耳朵验收为准)。取副歌 4 句
 /// (与主歌同旋律的 hook 单元);歌词/C 调/116bpm 取自弹唱资产。听写置信度
@@ -456,6 +500,7 @@ final builtinTabChartCatalog = <({String id, TabChart chart})>[
   (id: 'ai-ni-bu-shi-liang-san-tian', chart: aiNiBuShiLiangSanTian),
   (id: 'big-big-world', chart: bigBigWorld),
   (id: 'love-you-more-than-i-can-say', chart: moreThanICanSay),
+  (id: 'yesterday-once-more', chart: yesterdayOnceMore),
   // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo 指弹谱转录,8 首)──
   (id: 'liang-zhi-lao-hu-tab', chart: liangZhiLaoHu),
   (id: 'ma-li-you-zhi-xiao-yang-gao', chart: maLiYouZhiXiaoYangGao),

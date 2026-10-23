@@ -21,7 +21,7 @@ const builtinChartCatalog = <({String id, String asset})>[
     id: 'love-you-more-than-i-can-say-strum',
     asset: 'assets/charts/love-you-more-than-i-can-say-strum.pro',
   ),
-  (id: 'yesterday-once-more', asset: 'assets/charts/yesterday-once-more.pro'),
+  (id: 'yesterday-once-more-strum', asset: 'assets/charts/yesterday-once-more-strum.pro'),
 
   // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo / ukulele-glm 转录)──
   // demo 三首(段落结构齐全):送别 / 友谊地久天长 / 茉莉花;

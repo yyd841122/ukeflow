@@ -40,6 +40,7 @@ void main() {
       '小星星', '欢乐颂',
       // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
       '沧海一声笑', '爱你不是两三天', 'Big Big World', 'More Than I Can Say',
+      'Yesterday Once More',
       // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
       '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
       '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -358,6 +359,59 @@ void main() {
     expect(song.notes.last.string, 3);
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 18);
+    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
+  });
+
+  test('Yesterday Once More:71 音 13 小节,主歌一副歌逐句缀字与音域抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'yesterday-once-more')
+        .chart;
+
+    expect(song.notes, hasLength(71));
+    expect(song.tempo, 112);
+
+    // 起句「When I was young」:C4 C4 D4 E4 = ③0 ③0 ③2 ②0(听写初稿)。
+    expect(song.notes.take(4).map((n) => (n.string, n.fret)), [
+      (3, 0),
+      (3, 0),
+      (3, 2),
+      (2, 0),
+    ]);
+
+    // 第一把位旋律窗 C4..E5。
+    for (final n in song.notes) {
+      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
+          reason: '${song.title} 出旋律窗:$n');
+    }
+
+    // 主歌一 + 副歌逐句缀字(歌词源 = assets/charts/yesterday-once-more-strum.pro)。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(71));
+    expect(lyrics.sublist(0, 4), ['When', 'I', 'was', 'young']);
+    expect(lyrics.sublist(4, 12),
+        ["I'd", 'lis', 'ten', 'to', 'the', 'ra', 'di', 'o']);
+    expect(lyrics.sublist(12, 20),
+        ['Wai', 'ting', 'for', 'my', 'fa', 'vo', 'rite', 'songs']);
+    expect(lyrics.sublist(20, 27),
+        ['when', 'they', 'played', "I'd", 'sing', 'a', 'long']);
+    expect(lyrics.sublist(27, 31), ['It', 'made', 'me', 'smile']);
+    expect(lyrics.sublist(31, 36), ['Those', 'were', 'such', 'hap', 'times']);
+    expect(lyrics.sublist(36, 42), ['And', 'not', 'so', 'long', 'a', 'go']);
+    expect(lyrics.sublist(42, 48), ['Ev', 'ery', 'sha', 'la', 'la', 'la']);
+    expect(lyrics.sublist(48, 54), ['Ev', 'ery', 'Wo', 'o', 'wo', 'o']);
+    expect(lyrics.sublist(54, 56), ['Still', 'shines']);
+    expect(lyrics.sublist(56, 63),
+        ['Ev', 'ery', 'shing', 'a', 'ling', 'a', 'ling']);
+    expect(lyrics.sublist(63, 69),
+        ['That', "they're", 'star', 'ting', 'to', "sing's"]);
+    expect(lyrics.sublist(69), ['so', 'fine']);
+
+    expectNotesLegal(song.notes, context: song.title);
+
+    // 终句落主音:「fine」= C4 ③0 @49。
+    expect(song.notes.last.string, 3);
+    expect(song.notes.last.fret, 0);
+    expect(song.notes.last.beat, 49);
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 }

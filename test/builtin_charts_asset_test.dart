@@ -50,7 +50,7 @@ void main() {
       'cang-hai-yi-sheng-xiao-strum': ('沧海一声笑', '黄霑'),
       'big-big-world-strum': ('Big Big World', 'Emilia'),
       'love-you-more-than-i-can-say-strum': ('More Than I Can Say', 'Leo Sayer'),
-      'yesterday-once-more': ('Yesterday Once More', 'Carpenters'),
+      'yesterday-once-more-strum': ('Yesterday Once More', 'Carpenters'),
     };
 
     for (final entry in expected.entries) {
