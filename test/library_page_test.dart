@@ -319,6 +319,10 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.byKey(const Key('user-image-1')), findsOneWidget);
+    // 删除钮在卡片下缘:标题可见≠按钮可点;ensureVisible 居中后点
+    // (对曲卡数量引起的布局推移稳健)。
+    await tester.ensureVisible(find.byKey(const Key('delete-user-image-1')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('delete-user-image-1')));
     await tester.pumpAndSettle();
@@ -371,7 +375,8 @@ void main() {
 
       await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('相册来的谱'), 200);
+      // 滚动目标用卡片 key:标题可见≠卡片可点(曲卡数量变化会推移布局)。
+      await tester.scrollUntilVisible(find.byKey(const Key('user-image-1')), 200);
 
       expect(find.text('相册来的谱'), findsOneWidget);
       expect(find.byKey(const Key('user-image-1')), findsOneWidget);
@@ -384,7 +389,11 @@ void main() {
 
       await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
       await tester.pumpAndSettle();
+      // 先滚到构建出卡片(Lazy ListView),再 ensureVisible 居中后点
+      // (对曲卡数量引起的布局推移稳健)。
       await tester.scrollUntilVisible(find.text('相册来的谱'), 200);
+      await tester.ensureVisible(find.byKey(const Key('user-image-1')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('user-image-1')));
       // 定步 pump 不 pumpAndSettle:测试 FakeAsync 区里真图片解码不走
       // 真异步,photo_view 的加载转圈(无限动画)会把 settle 拖死;
