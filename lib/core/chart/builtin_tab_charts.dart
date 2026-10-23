@@ -120,6 +120,36 @@ final huanLeSong = TabChart(
   ],
 );
 
+/// 《Big Big World》(Emilia):工单 25 目标曲#3,纯旋律版初稿
+/// (2026-10-23 听写,以用户真机耳朵验收为准)。取副歌 8 句(全曲本体,
+/// 与弹唱资产结构一致);歌词/C 调/80bpm 取自弹唱资产。听写置信度中等:
+/// 「girl/world/thing」句尾落音与两处「Miss you much」下行预期听感轮修正;
+/// 节奏为八分拍草拟(弱拍「I'm a」双八),原曲切分未刻画。
+final bigBigWorld = TabChart(
+  title: 'Big Big World',
+  artist: 'Emilia',
+  tempo: 80,
+  notes: [
+    // ── 副歌 ──
+    // 「I'm a big big girl」。
+    ...[_n(2, 0, 0, "I'm"), _n(2, 0, 0.5, 'a'), _n(2, 3, 1, 'big'), _n(2, 3, 2, 'big'), _n(1, 0, 3, 'girl')],
+    // 「In a big big world」(答句落 G4)。
+    ...[_n(2, 0, 4, 'In'), _n(2, 0, 4.5, 'a'), _n(2, 3, 5, 'big'), _n(2, 3, 6, 'big'), _n(2, 3, 7, 'world')],
+    // 「It's not a big big thing」(弱拍 a 落 D4,草拟)。
+    ...[_n(2, 0, 8, "It's"), _n(2, 0, 8.5, 'not'), _n(3, 2, 9, 'a'), _n(2, 3, 9.5, 'big'), _n(2, 3, 10, 'big'), _n(1, 0, 11, 'thing')],
+    // 「If you leave me」(落主音)。
+    ...[_n(3, 2, 12, 'If'), _n(3, 0, 13, 'you'), _n(3, 0, 14, 'leave'), _n(3, 0, 15, 'me')],
+    // 「But I do do feel」。
+    ...[_n(2, 0, 16, 'But'), _n(2, 0, 16.5, 'I'), _n(2, 3, 17, 'do'), _n(2, 3, 18, 'do'), _n(1, 0, 19, 'feel')],
+    // 「That I do do will」。
+    ...[_n(2, 0, 20, 'That'), _n(2, 0, 20.5, 'I'), _n(2, 3, 21, 'do'), _n(2, 3, 22, 'do'), _n(2, 3, 23, 'will')],
+    // 「Miss you much」(下行 A4-G4-E4)。
+    ...[_n(1, 0, 24, 'Miss'), _n(2, 3, 25, 'you'), _n(2, 0, 26, 'much')],
+    // 「Miss you much」(终句主音收 D4-C4-C4)。
+    ...[_n(3, 2, 28, 'Miss'), _n(3, 0, 29, 'you'), _n(3, 0, 30, 'much')],
+  ],
+);
+
 /// 《爱你不是两三天》(梁静茹):工单 25 目标曲#2,纯旋律版初稿
 /// (2026-10-23 听写,以用户真机耳朵验收为准)。取副歌 8 句(全曲hook,
 /// 重复段不排,跟练用单曲循环补全曲);歌词/C 调/70bpm 取自弹唱资产。
@@ -398,6 +428,7 @@ final builtinTabChartCatalog = <({String id, TabChart chart})>[
   // ── 5 首目标曲指弹谱(工单 25:纯旋律版逐首录入;「·独奏」版后补)──
   (id: 'cang-hai-yi-sheng-xiao', chart: cangHaiYiShengXiao),
   (id: 'ai-ni-bu-shi-liang-san-tian', chart: aiNiBuShiLiangSanTian),
+  (id: 'big-big-world', chart: bigBigWorld),
   // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo 指弹谱转录,8 首)──
   (id: 'liang-zhi-lao-hu-tab', chart: liangZhiLaoHu),
   (id: 'ma-li-you-zhi-xiao-yang-gao', chart: maLiYouZhiXiaoYangGao),

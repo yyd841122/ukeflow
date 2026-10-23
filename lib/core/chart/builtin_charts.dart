@@ -16,7 +16,7 @@ const builtinChartCatalog = <({String id, String asset})>[
     asset: 'assets/charts/ai-ni-bu-shi-liang-san-tian-strum.pro',
   ),
   (id: 'cang-hai-yi-sheng-xiao-strum', asset: 'assets/charts/cang-hai-yi-sheng-xiao-strum.pro'),
-  (id: 'big-big-world', asset: 'assets/charts/big-big-world.pro'),
+  (id: 'big-big-world-strum', asset: 'assets/charts/big-big-world-strum.pro'),
   (
     id: 'love-you-more-than-i-can-say',
     asset: 'assets/charts/love-you-more-than-i-can-say.pro',

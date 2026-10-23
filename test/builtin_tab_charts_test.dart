@@ -39,7 +39,7 @@ void main() {
     expect([for (final c in charts) c.chart.title], [
       '小星星', '欢乐颂',
       // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-      '沧海一声笑', '爱你不是两三天',
+      '沧海一声笑', '爱你不是两三天', 'Big Big World',
       // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
       '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
       '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -270,6 +270,51 @@ void main() {
     expect(song.notes.last.string, 3);
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 33);
+    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
+  });
+
+  test('Big Big World:36 音 8 小节,副歌逐句缀字与音域抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'big-big-world')
+        .chart;
+
+    expect(song.notes, hasLength(36));
+    expect(song.tempo, 80);
+
+    // 起句「I'm a big big girl」:E4 E4 G4 G4 A4 = ②0 ②0 ②3 ②3 ①0
+    // (听写初稿,以真机耳朵为准)。
+    expect(song.notes.take(5).map((n) => (n.string, n.fret)), [
+      (2, 0),
+      (2, 0),
+      (2, 3),
+      (2, 3),
+      (1, 0),
+    ]);
+
+    // 第一把位旋律窗 C4..E5。
+    for (final n in song.notes) {
+      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
+          reason: '${song.title} 出旋律窗:$n');
+    }
+
+    // 副歌逐句缀字(歌词源 = assets/charts/big-big-world-strum.pro)。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(36));
+    expect(lyrics.sublist(0, 5), ["I'm", 'a', 'big', 'big', 'girl']);
+    expect(lyrics.sublist(5, 10), ['In', 'a', 'big', 'big', 'world']);
+    expect(lyrics.sublist(10, 16), ["It's", 'not', 'a', 'big', 'big', 'thing']);
+    expect(lyrics.sublist(16, 20), ['If', 'you', 'leave', 'me']);
+    expect(lyrics.sublist(20, 25), ['But', 'I', 'do', 'do', 'feel']);
+    expect(lyrics.sublist(25, 30), ['That', 'I', 'do', 'do', 'will']);
+    expect(lyrics.sublist(30, 33), ['Miss', 'you', 'much']);
+    expect(lyrics.sublist(33), ['Miss', 'you', 'much']);
+
+    expectNotesLegal(song.notes, context: song.title);
+
+    // 终句落主音:末「much」= C4 ③0 @30。
+    expect(song.notes.last.string, 3);
+    expect(song.notes.last.fret, 0);
+    expect(song.notes.last.beat, 30);
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 }
