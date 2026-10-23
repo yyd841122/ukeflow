@@ -120,6 +120,32 @@ final huanLeSong = TabChart(
   ],
 );
 
+/// 《More Than I Can Say》(Leo Sayer,爱你在心口难开):工单 25 目标曲#4,
+/// 纯旋律版初稿(2026-10-23 听写,以用户真机耳朵验收为准)。取副歌 4 句
+/// (与主歌同旋律的 hook 单元);歌词/C 调/116bpm 取自弹唱资产。听写置信度
+/// 中等:「Woh woh yeah yeah」起句与「twice as much tomorrow」9 音组预期
+/// 听感轮修正;节奏为八分拍草拟(快歌八分串),L3 尾「tomorrow」跨小节
+/// 连拖 L4 以 13 拍起(切分近似)。
+final moreThanICanSay = TabChart(
+  title: 'More Than I Can Say',
+  artist: 'Leo Sayer',
+  tempo: 116,
+  notes: [
+    // ── 副歌 ──
+    // 「Woh woh yeah yeah」。
+    ...[_n(2, 3, 0, 'Woh'), _n(2, 3, 1, 'woh'), _n(2, 0, 2, 'yeah'), _n(2, 3, 2.5, 'yeah')],
+    // 「I love you more than I can say」(八分串落主音)。
+    ...[_n(2, 0, 4, 'I'), _n(2, 3, 4.5, 'love'), _n(1, 0, 5, 'you'), _n(2, 3, 5.5, 'more')],
+    ...[_n(2, 0, 6, 'than'), _n(3, 2, 6.5, 'I'), _n(3, 2, 7, 'can'), _n(3, 0, 7.5, 'say')],
+    // 「I'll love you twice as much tomorrow」(「tomorrow」跨小节拖拍)。
+    ...[_n(2, 0, 8, "I'll"), _n(2, 3, 8.5, 'love'), _n(1, 0, 9, 'you'), _n(2, 3, 9.5, 'twice')],
+    ...[_n(2, 0, 10, 'as'), _n(3, 2, 10.5, 'much'), _n(2, 0, 11, 'to'), _n(3, 2, 11.5, 'mor'), _n(3, 2, 12, 'row')],
+    // 「Woh woh love you more than I can say」(13 拍起切分近似,主音收)。
+    ...[_n(2, 3, 13, 'Woh'), _n(2, 3, 14, 'woh'), _n(2, 0, 15, 'love'), _n(2, 3, 15.5, 'you')],
+    ...[_n(1, 0, 16, 'more'), _n(2, 3, 16.5, 'than'), _n(2, 0, 17, 'I'), _n(3, 2, 17.5, 'can'), _n(3, 0, 18, 'say')],
+  ],
+);
+
 /// 《Big Big World》(Emilia):工单 25 目标曲#3,纯旋律版初稿
 /// (2026-10-23 听写,以用户真机耳朵验收为准)。取副歌 8 句(全曲本体,
 /// 与弹唱资产结构一致);歌词/C 调/80bpm 取自弹唱资产。听写置信度中等:
@@ -429,6 +455,7 @@ final builtinTabChartCatalog = <({String id, TabChart chart})>[
   (id: 'cang-hai-yi-sheng-xiao', chart: cangHaiYiShengXiao),
   (id: 'ai-ni-bu-shi-liang-san-tian', chart: aiNiBuShiLiangSanTian),
   (id: 'big-big-world', chart: bigBigWorld),
+  (id: 'love-you-more-than-i-can-say', chart: moreThanICanSay),
   // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo 指弹谱转录,8 首)──
   (id: 'liang-zhi-lao-hu-tab', chart: liangZhiLaoHu),
   (id: 'ma-li-you-zhi-xiao-yang-gao', chart: maLiYouZhiXiaoYangGao),

@@ -39,7 +39,7 @@ void main() {
     expect([for (final c in charts) c.chart.title], [
       '小星星', '欢乐颂',
       // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-      '沧海一声笑', '爱你不是两三天', 'Big Big World',
+      '沧海一声笑', '爱你不是两三天', 'Big Big World', 'More Than I Can Say',
       // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
       '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
       '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -315,6 +315,49 @@ void main() {
     expect(song.notes.last.string, 3);
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 30);
+    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
+  });
+
+  test('More Than I Can Say:30 音 5 小节,副歌逐句缀字与音域抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'love-you-more-than-i-can-say')
+        .chart;
+
+    expect(song.notes, hasLength(30));
+    expect(song.tempo, 116);
+
+    // 起句「Woh woh yeah yeah」:G4 G4 E4 G4 = ②3 ②3 ②0 ②3(听写初稿)。
+    expect(song.notes.take(4).map((n) => (n.string, n.fret)), [
+      (2, 3),
+      (2, 3),
+      (2, 0),
+      (2, 3),
+    ]);
+
+    // 第一把位旋律窗 C4..E5。
+    for (final n in song.notes) {
+      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
+          reason: '${song.title} 出旋律窗:$n');
+    }
+
+    // 副歌逐句缀字(歌词源 = assets/charts/love-you-more-than-i-can-say-strum.pro)。
+    final lyrics = song.notes.map((n) => n.lyric).toList();
+    expect(lyrics.whereType<String>(), hasLength(30));
+    expect(lyrics.sublist(0, 4), ['Woh', 'woh', 'yeah', 'yeah']);
+    expect(
+        lyrics.sublist(4, 12),
+        ['I', 'love', 'you', 'more', 'than', 'I', 'can', 'say']);
+    expect(lyrics.sublist(12, 21),
+        ["I'll", 'love', 'you', 'twice', 'as', 'much', 'to', 'mor', 'row']);
+    expect(lyrics.sublist(21),
+        ['Woh', 'woh', 'love', 'you', 'more', 'than', 'I', 'can', 'say']);
+
+    expectNotesLegal(song.notes, context: song.title);
+
+    // 终句落主音:末「say」= C4 ③0 @18。
+    expect(song.notes.last.string, 3);
+    expect(song.notes.last.fret, 0);
+    expect(song.notes.last.beat, 18);
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 }
