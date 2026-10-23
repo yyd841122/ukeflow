@@ -13,6 +13,21 @@ const c4Frequency = 261.6255653005986;
 /// 频率 → MIDI 音符号(69 = A4),旋律窗/音域断言共用。
 double midiOf(double hz) => 69 + 12 * (math.log(hz / 440) / math.ln2);
 
+/// 第一把位旋律窗 C4..E5(MIDI 60..76,工单 25 录入纪律)。
+void expectInMelodyWindow(Iterable<TabNote> notes, {required String context}) {
+  for (final n in notes) {
+    expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
+        reason: '$context 出旋律窗:$n');
+  }
+}
+
+/// 终句主音收:末音 = C4 ③0(拍位各曲不同,由用例自行断言)。
+void expectEndsOnTonic(TabNote note) {
+  expect(note.string, 3);
+  expect(note.fret, 0);
+  expect(note.frequency, closeTo(c4Frequency, 1e-9));
+}
+
 /// 逐音合法性断言:弦号/品位域内、拍位严格递增且落在 1/16 拍网格、
 /// 缀字非空白。迁移谱抽查与目标曲内容缝共用同一形状。
 void expectNotesLegal(Iterable<TabNote> notes, {required String context}) {
@@ -248,10 +263,7 @@ void main() {
     ]);
 
     // 第一把位旋律窗 C4..E5(工单 25 录入纪律)。
-    for (final n in song.notes) {
-      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
-          reason: '${song.title} 出旋律窗:$n');
-    }
+    expectInMelodyWindow(song.notes, context: song.title);
 
     // 副歌逐句缀字(歌词源 = assets/charts/ai-ni-bu-shi-liang-san-tian-strum.pro)。
     final lyrics = song.notes.map((n) => n.lyric).toList();
@@ -268,10 +280,8 @@ void main() {
     expectNotesLegal(song.notes, context: song.title);
 
     // 终句落主音:「友」= C4 ③0 @33。
-    expect(song.notes.last.string, 3);
-    expect(song.notes.last.fret, 0);
+    expectEndsOnTonic(song.notes.last);
     expect(song.notes.last.beat, 33);
-    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 
   test('Big Big World:36 音 8 小节,副歌逐句缀字与音域抽查', () {
@@ -293,10 +303,7 @@ void main() {
     ]);
 
     // 第一把位旋律窗 C4..E5。
-    for (final n in song.notes) {
-      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
-          reason: '${song.title} 出旋律窗:$n');
-    }
+    expectInMelodyWindow(song.notes, context: song.title);
 
     // 副歌逐句缀字(歌词源 = assets/charts/big-big-world-strum.pro)。
     final lyrics = song.notes.map((n) => n.lyric).toList();
@@ -313,13 +320,11 @@ void main() {
     expectNotesLegal(song.notes, context: song.title);
 
     // 终句落主音:末「much」= C4 ③0 @30。
-    expect(song.notes.last.string, 3);
-    expect(song.notes.last.fret, 0);
+    expectEndsOnTonic(song.notes.last);
     expect(song.notes.last.beat, 30);
-    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 
-  test('More Than I Can Say:30 音 5 小节,副歌逐句缀字与音域抽查', () {
+  test('More Than I Can Say:30 音 5 小节,主歌一逐句缀字与音域抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'love-you-more-than-i-can-say')
         .chart;
@@ -336,12 +341,9 @@ void main() {
     ]);
 
     // 第一把位旋律窗 C4..E5。
-    for (final n in song.notes) {
-      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
-          reason: '${song.title} 出旋律窗:$n');
-    }
+    expectInMelodyWindow(song.notes, context: song.title);
 
-    // 副歌逐句缀字(歌词源 = assets/charts/love-you-more-than-i-can-say-strum.pro)。
+    // 主歌一逐句缀字(歌词源 = assets/charts/love-you-more-than-i-can-say-strum.pro)。
     final lyrics = song.notes.map((n) => n.lyric).toList();
     expect(lyrics.whereType<String>(), hasLength(30));
     expect(lyrics.sublist(0, 4), ['Woh', 'woh', 'yeah', 'yeah']);
@@ -356,10 +358,8 @@ void main() {
     expectNotesLegal(song.notes, context: song.title);
 
     // 终句落主音:末「say」= C4 ③0 @18。
-    expect(song.notes.last.string, 3);
-    expect(song.notes.last.fret, 0);
+    expectEndsOnTonic(song.notes.last);
     expect(song.notes.last.beat, 18);
-    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 
   test('Yesterday Once More:71 音 13 小节,主歌一副歌逐句缀字与音域抽查', () {
@@ -379,10 +379,7 @@ void main() {
     ]);
 
     // 第一把位旋律窗 C4..E5。
-    for (final n in song.notes) {
-      expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
-          reason: '${song.title} 出旋律窗:$n');
-    }
+    expectInMelodyWindow(song.notes, context: song.title);
 
     // 主歌一 + 副歌逐句缀字(歌词源 = assets/charts/yesterday-once-more-strum.pro)。
     final lyrics = song.notes.map((n) => n.lyric).toList();
@@ -409,9 +406,7 @@ void main() {
     expectNotesLegal(song.notes, context: song.title);
 
     // 终句落主音:「fine」= C4 ③0 @49。
-    expect(song.notes.last.string, 3);
-    expect(song.notes.last.fret, 0);
+    expectEndsOnTonic(song.notes.last);
     expect(song.notes.last.beat, 49);
-    expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 }

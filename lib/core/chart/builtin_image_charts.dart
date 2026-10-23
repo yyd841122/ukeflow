@@ -20,7 +20,7 @@ class BuiltinImageChart {
 }
 
 /// 内置图片谱:Big Big World(图片版)——与内置弹唱谱同曲同内容
-/// (生成自 assets/charts/big-big-world.pro),对照「同曲文本谱可跟练、
+/// (生成自 assets/charts/big-big-world-strum.pro),对照「同曲文本谱可跟练、
 /// 图片谱只读」的边界最直观。
 const builtinImageChartCatalog = [
   BuiltinImageChart(

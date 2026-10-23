@@ -19,6 +19,7 @@ class BuiltInTabChart {
 ///   长音只在起始拍落一个音(时值由四线谱横向位置表达,不记持续)。
 /// - 录入序 = 演奏序:同拍多音按低弦→高弦(拨奏自低向高)。
 /// - 歌词缀字([TabNote.lyric])逐音缀一个字,旋律音缀词、器乐音留空;
+///   英文曲按**音节**缀(lis/ten、sha/la),非整词;
 ///   句尾长音的字缀在长音起始拍(唱到下一句前停在该字)。
 TabNote _n(int string, int fret, double beat, [String? lyric]) =>
     TabNote(string: string, fret: fret, beat: beat, lyric: lyric);
@@ -175,7 +176,7 @@ final moreThanICanSay = TabChart(
   artist: 'Leo Sayer',
   tempo: 116,
   notes: [
-    // ── 副歌 ──
+    // ── 主歌一(=全曲 hook,副歌同旋律;段落名从弹唱资产)──
     // 「Woh woh yeah yeah」。
     ...[_n(2, 3, 0, 'Woh'), _n(2, 3, 1, 'woh'), _n(2, 0, 2, 'yeah'), _n(2, 3, 2.5, 'yeah')],
     // 「I love you more than I can say」(八分串落主音)。
