@@ -16,8 +16,11 @@ double midiOf(double hz) => 69 + 12 * (math.log(hz / 440) / math.ln2);
 /// 第一把位旋律窗 C4..E5(MIDI 60..76,工单 25 录入纪律)。
 void expectInMelodyWindow(Iterable<TabNote> notes, {required String context}) {
   for (final n in notes) {
-    expect(midiOf(n.frequency).round(), inInclusiveRange(60, 76),
-        reason: '$context 出旋律窗:$n');
+    expect(
+      midiOf(n.frequency).round(),
+      inInclusiveRange(60, 76),
+      reason: '$context 出旋律窗:$n',
+    );
   }
 }
 
@@ -36,8 +39,11 @@ void expectNotesLegal(Iterable<TabNote> notes, {required String context}) {
     expect(n.string, inInclusiveRange(1, 4), reason: '$n');
     expect(n.fret, greaterThanOrEqualTo(0), reason: '$n');
     expect(n.beat, greaterThan(lastBeat), reason: '$context 拍位须严格递增,见 $n');
-    expect(n.beat * 4, (n.beat * 4).round(),
-        reason: '$context 拍位落在 1/16 拍网格,见 $n');
+    expect(
+      n.beat * 4,
+      (n.beat * 4).round(),
+      reason: '$context 拍位落在 1/16 拍网格,见 $n',
+    );
     if (n.lyric != null) expect(n.lyric, isNotEmpty);
     lastBeat = n.beat;
   }
@@ -51,14 +57,17 @@ void main() {
     for (var i = 0; i < charts.length; i++) {
       expect(charts[i].id, builtinTabChartCatalog[i].id);
     }
-    expect([for (final c in charts) c.chart.title], [
-      '小星星', '欢乐颂',
-      // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-      '沧海一声笑', '爱你不是两三天',
-      // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
-      '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
-      '卡农', '绿袖子', '划小船', '老麦克唐纳',
-    ]);
+    expect(
+      [for (final c in charts) c.chart.title],
+      [
+        '小星星', '欢乐颂',
+        // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
+        '沧海一声笑', '爱你不是两三天',
+        // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
+        '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
+        '卡农', '绿袖子', '划小船', '老麦克唐纳',
+      ],
+    );
   });
 
   group('迁移谱数据面抽查(转录自 demo,拍位自曲头累计、域内合法)', () {
@@ -108,10 +117,15 @@ void main() {
       (2, 3),
       (2, 3),
     ]);
-    expect(song.notes.take(2).map((n) => n.frequency),
-        everyElement(closeTo(c4Frequency, 1e-9)));
-    expect(song.notes[28].frequency, closeTo(c4Frequency, 1e-9),
-        reason: '再现段开头同修:C4');
+    expect(
+      song.notes.take(2).map((n) => n.frequency),
+      everyElement(closeTo(c4Frequency, 1e-9)),
+    );
+    expect(
+      song.notes[28].frequency,
+      closeTo(c4Frequency, 1e-9),
+      reason: '再现段开头同修:C4',
+    );
     // 「满天都是小星星」句尾:C4 = ③0 @拍14(二拍长音)。
     final bar4 = song.notes.where((n) => n.beat >= 12 && n.beat < 16).toList();
     expect(bar4.last.string, 3);
@@ -204,8 +218,11 @@ void main() {
     // {C4 D4 E4 G4 A4 C5 D5 E5}。
     const pentatonicMidi = {60, 62, 64, 67, 69, 72, 74, 76};
     for (final n in song.notes) {
-      expect(midiOf(n.frequency).round(), isIn(pentatonicMidi),
-          reason: '${song.title} 出五声域:$n');
+      expect(
+        midiOf(n.frequency).round(),
+        isIn(pentatonicMidi),
+        reason: '${song.title} 出五声域:$n',
+      );
     }
 
     // 段落逐句缀字(歌词源 = assets/charts/cang-hai-yi-sheng-xiao.pro,
@@ -241,15 +258,15 @@ void main() {
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 
-  test('爱你不是两三天:主歌一+副歌 47 音 24 小节,权威源转录抽查', () {
+  test('爱你不是两三天:主歌一+副歌整段 168 音 22 小节,权威源转录抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian')
         .chart;
 
-    expect(song.notes, hasLength(47));
+    expect(song.notes, hasLength(168));
     expect(song.tempo, 78);
 
-    // 起句「你的信只留下」:附点八分+16 分切分(G4 G4 G4 C5)。
+    // 起句「你的信只留下」:附点八分+16 分同音连线(G4 G4 [G4] C5)。
     expect(song.notes.take(4).map((n) => (n.string, n.fret, n.beat)), [
       (2, 3, 0),
       (2, 3, 0.75),
@@ -257,26 +274,41 @@ void main() {
       (1, 3, 1.5),
     ]);
 
-    // 第一把位旋律窗 C4..E5。
-    expectInMelodyWindow(song.notes, context: song.title);
+    // 音域 D4..A5(主歌 E4..E5,副歌高置段 印张双点 D5..A5,工单 37 台账)。
+    for (final n in song.notes) {
+      expect(
+        midiOf(n.frequency).round(),
+        inInclusiveRange(62, 81),
+        reason: '${song.title} 出音域:$n',
+      );
+    }
 
-    // 逐音缀字(拖腔音留空;连音二次起唱同字重复)。
-    final lyrics = song.notes.map((n) => n.lyric).toList();
-    expect(lyrics.sublist(0, 8).join(), '你的信只留下最后');
-    expect(lyrics.sublist(8, 12).map((l) => l ?? '').join(), '一封');
-    expect(lyrics.sublist(12, 14).join(), '淡淡');
-    expect(lyrics.sublist(14, 18).join(), '介意我会');
-    expect(lyrics.sublist(18, 25).join(), '将信纸好好收着');
-    expect(lyrics[25], '当');
-    expect(lyrics.sublist(26, 34).join(), '我需需要你关关怀');
-    expect(lyrics.sublist(34, 39).join(), '的时候走过');
-    expect(lyrics.sublist(39, 47).join(), '两三天每天却想你');
+    // 逐音缀字全文(拖腔音留空;印张连线尾音带字处照录,如 b10「信」)。
+    expect(
+      song.notes.map((n) => n.lyric ?? '').join(),
+      '你的信只留下最后一封淡淡笔迹你熟悉的温柔请别介意我会将信纸好好收着'
+      '当我需要你关怀的时候走过夏日街头还是想牵你的手好想听到一句温暖的问候'
+      '虽然我们说好了还是朋友但为什么却没有再联络'
+      '爱你不是两三天每天却想你很多遍还不习惯孤独街道拥挤人潮没'
+      '你拥抱爱你不是两三天一眨眼心跳能沉淀你是否想念',
+    );
+
+    // 段落锚点抽查:副歌起「两」= G4 ②3 @64;顶点「天」= G5 ①10 @66。
+    final liang = song.notes.singleWhere((n) => n.lyric == '两' && n.beat == 64);
+    expect((liang.string, liang.fret, liang.beat), (2, 3, 64));
+    final tianTop = song.notes.singleWhere(
+      (n) => n.lyric == '天' && n.beat == 66,
+    );
+    expect((tianTop.string, tianTop.fret), (1, 10));
+    // 高置段连续判断:三/每 = E5 ①7。
+    final san = song.notes.singleWhere((n) => n.lyric == '三' && n.beat == 64.5);
+    expect((san.string, san.fret, san.beat), (1, 7, 64.5));
 
     expectNotesLegal(song.notes, context: song.title);
 
-    // 副歌末音「你」= C5 ①3 @47.75。
+    // 全曲末音「念」= A5 ①12 @87.5(长音接原曲间奏)。
     expect(song.notes.last.string, 1);
-    expect(song.notes.last.fret, 3);
-    expect(song.notes.last.beat, 44.75);
+    expect(song.notes.last.fret, 12);
+    expect(song.notes.last.beat, 87.5);
   });
 }
