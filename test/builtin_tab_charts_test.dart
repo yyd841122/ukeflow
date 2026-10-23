@@ -241,37 +241,42 @@ void main() {
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
   });
 
-  test('爱你不是两三天:主歌一片段 39 音,权威源转录抽查', () {
+  test('爱你不是两三天:主歌一+副歌 47 音 24 小节,权威源转录抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian')
         .chart;
 
-    expect(song.notes, hasLength(39));
+    expect(song.notes, hasLength(47));
     expect(song.tempo, 78);
 
-    // 起句「你的信只留下」:G4 G4 G4 C5 = ②3 ②3 ②3 ①3(站方谱 E→C 照录)。
-    expect(song.notes.take(4).map((n) => (n.string, n.fret)), [
-      (2, 3),
-      (2, 3),
-      (2, 3),
-      (1, 3),
+    // 起句「你的信只留下」:附点八分+16 分切分(G4 G4 G4 C5)。
+    expect(song.notes.take(4).map((n) => (n.string, n.fret, n.beat)), [
+      (2, 3, 0),
+      (2, 3, 0.75),
+      (2, 3, 1),
+      (1, 3, 1.5),
     ]);
 
     // 第一把位旋律窗 C4..E5。
     expectInMelodyWindow(song.notes, context: song.title);
 
-    // 逐音缀字(拖腔音留空)。
+    // 逐音缀字(拖腔音留空;连音二次起唱同字重复)。
     final lyrics = song.notes.map((n) => n.lyric).toList();
-    expect(lyrics.sublist(0, 10).join(), '你的信只留下最后一封');
+    expect(lyrics.sublist(0, 8).join(), '你的信只留下最后');
+    expect(lyrics.sublist(8, 12).map((l) => l ?? '').join(), '一封');
     expect(lyrics.sublist(12, 14).join(), '淡淡');
-    expect(lyrics.sublist(25, 27).join(), '请别');
-    expect(lyrics.sublist(35).join(), '你的的手');
+    expect(lyrics.sublist(14, 18).join(), '介意我会');
+    expect(lyrics.sublist(18, 25).join(), '将信纸好好收着');
+    expect(lyrics[25], '当');
+    expect(lyrics.sublist(26, 34).join(), '我需需要你关关怀');
+    expect(lyrics.sublist(34, 39).join(), '的时候走过');
+    expect(lyrics.sublist(39, 47).join(), '两三天每天却想你');
 
     expectNotesLegal(song.notes, context: song.title);
 
-    // 段末「手」= G4 ②3 @43 长音收。
-    expect(song.notes.last.string, 2);
+    // 副歌末音「你」= C5 ①3 @47.75。
+    expect(song.notes.last.string, 1);
     expect(song.notes.last.fret, 3);
-    expect(song.notes.last.beat, 43);
+    expect(song.notes.last.beat, 44.75);
   });
 }
