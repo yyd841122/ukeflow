@@ -377,6 +377,153 @@ final aiNiBuShiLiangSanTian = TabChart(
   ],
 );
 
+/// 《Big Big World》(Emilia):工单 25 目标曲#3,纯旋律版副歌+主歌一
+/// (2026-10-23)。**权威源转录**:站方「谱全了」渲染谱 PDF(用户下载,
+/// 1=C 88bpm,Louise 编谱),简谱旋律行逐音照录,非听写。覆盖副歌
+/// 「I'm a big big girl…miss you much」+ 主歌「I can see the first leaf
+/// falling…feeling inside」一整遍(原曲 b2 弱起-b19,拍格 0-67),
+/// 以「inside」拖腔长音收,接原曲反复段(b19 尾「I'm a」弱起属反复段,
+/// 不录;b11 为原曲整小节气口,保留拍格)。印张八度点**逐音核验**:
+/// 全曲双点为主(点数减一 = 高一层),唯 b18「way」拖腔第三音作单点 6
+/// = A4(原曲该处真实下探);落指位全曲单音在 ① 弦(C5/D5/E5/F5 =
+/// ①3/5/7/8,下探 A4 = ①0),手感同已验收的爱你不是两三天副歌高置段。
+/// 节奏含 16 分拖腔(b9 much)、附点八分+16 分对(b13/b17/b18)、
+/// 同音连线(b9/b14/b17),小节和=4 拍逐小节闭合;英文按音节缀字,
+/// 印张弧线内的拖腔词整词照录(falling/outside/very 尾音空字)、
+/// 自带连字符处照拆(ye-llow/fee-ling)。读谱台账见工单 37。
+final bigBigWorld = TabChart(
+  title: 'Big Big World',
+  artist: 'Emilia',
+  tempo: 88,
+  notes: [
+    // ── 副歌(b2 弱起-b10)──
+    // b2 弱起「I'm a」:第四拍八分对(C5 D5),前三拍前奏休止不录。
+    ...[_n(1, 3, 0, "I'm"), _n(1, 5, 0.5, 'a')],
+    // b3 「big big girl In a」:girl 后 In a 八分对。
+    ...[
+      _n(1, 7, 1, 'big'),
+      _n(1, 7, 2, 'big'),
+      _n(1, 7, 3, 'girl'),
+      _n(1, 7, 4, 'In'),
+      _n(1, 8, 4.5, 'a'),
+    ],
+    // b4 「big big world It's not a」:world 起 4 个八分 + a 八分。
+    ...[
+      _n(1, 5, 5, 'big'),
+      _n(1, 5, 6, 'big'),
+      _n(1, 5, 7, 'world'),
+      _n(1, 5, 7.5, "It's"),
+      _n(1, 5, 8, 'not'),
+      _n(1, 7, 8.5, 'a'),
+    ],
+    // b5 「big big thing if you」。
+    ...[
+      _n(1, 3, 9, 'big'),
+      _n(1, 3, 10, 'big'),
+      _n(1, 3, 11, 'thing'),
+      _n(1, 3, 12, 'if'),
+      _n(1, 5, 12.5, 'you'),
+    ],
+    // b6 「leave— me But I」:leave 二拍长音,But I 八分对。
+    ...[
+      _n(1, 7, 13, 'leave'),
+      _n(1, 5, 15, 'me'),
+      _n(1, 3, 16, 'But'),
+      _n(1, 5, 16.5, 'I'),
+    ],
+    // b7 「do do feel that I」。
+    ...[
+      _n(1, 7, 17, 'do'),
+      _n(1, 7, 18, 'do'),
+      _n(1, 7, 19, 'feel'),
+      _n(1, 7, 20, 'that'),
+      _n(1, 8, 20.5, 'I'),
+    ],
+    // b8 「do do will miss you」。
+    ...[
+      _n(1, 5, 21, 'do'),
+      _n(1, 5, 22, 'do'),
+      _n(1, 5, 23, 'will'),
+      _n(1, 5, 24, 'miss'),
+      _n(1, 7, 24.5, 'you'),
+    ],
+    // b9 「much」拖腔:16 分对 E5 D5 + 8 分 C5~四分 C5 同音连线,拖二拍。
+    ...[_n(1, 7, 25, 'much'), _n(1, 5, 25.25), _n(1, 3, 25.5), _n(1, 3, 26)],
+    // b10 回应句「Miss you much」:八分休止起,尾音 E5 弧线拖腔+一拍。
+    ...[
+      _n(1, 7, 29.5, 'Miss'),
+      _n(1, 5, 30, 'you'),
+      _n(1, 5, 30.5, 'much'),
+      _n(1, 7, 31),
+    ],
+    // b11 整小节气口(原曲全休止),不落音。
+    // ── 主歌(b12 弱起-b19)──
+    // b12 「I can see the」:休止+八分对+八分+附点四分(the 拖 1.5 拍)。
+    ...[
+      _n(1, 7, 38, 'I'),
+      _n(1, 8, 38.5, 'can'),
+      _n(1, 7, 39, 'see'),
+      _n(1, 5, 39.5, 'the'),
+    ],
+    // b13 「first leaf falling」:first 八分、leaf 四分、falling 16 分对
+    // 起弧线拖腔(整词照录),C5 四分后拖一拍。
+    ...[
+      _n(1, 5, 41, 'first'),
+      _n(1, 7, 41.5, 'leaf'),
+      _n(1, 7, 42.5, 'falling'),
+      _n(1, 5, 42.75),
+      _n(1, 3, 43),
+    ],
+    // b14 「It's all」:八分对 + 同音连线 C5,拖二拍。
+    ...[_n(1, 3, 46, "It's"), _n(1, 3, 46.5, 'all'), _n(1, 3, 47)],
+    // b15 「ye-llow and nice」:三连八分 + nice 四分 + E5 附点四分弧线拖腔。
+    ...[
+      _n(1, 7, 49, 'ye'),
+      _n(1, 5, 49.5, 'llow'),
+      _n(1, 3, 50, 'and'),
+      _n(1, 5, 50.5, 'nice'),
+      _n(1, 7, 51.5),
+    ],
+    // b16 「It's so very」:休止+八分对+八分,very 弧线拖腔(C5 附点四分)。
+    ...[
+      _n(1, 3, 54, "It's"),
+      _n(1, 5, 54.5, 'so'),
+      _n(1, 5, 55, 'very'),
+      _n(1, 3, 55.5),
+    ],
+    // b17 「cold outside」:cold 八分~四分同音连线;outside 附点八分起,
+    // 16 分三连 D5 E5 D5 弧线拖腔,收 E5 四分。
+    ...[
+      _n(1, 5, 57, 'cold'),
+      _n(1, 5, 57.5),
+      _n(1, 3, 58.5, 'outside'),
+      _n(1, 5, 59.25),
+      _n(1, 7, 59.5),
+      _n(1, 5, 59.75),
+      _n(1, 7, 60),
+    ],
+    // b18 「Like the way I'm」:way 附点拖腔下行 D5 C5 A4(印张单点 6 =
+    // 全曲唯一 ①0 空弦),收 I'm 四分。
+    ...[
+      _n(1, 3, 62, 'Like'),
+      _n(1, 5, 62.5, 'the'),
+      _n(1, 5, 63, 'way'),
+      _n(1, 3, 63.25),
+      _n(1, 0, 63.5),
+      _n(1, 3, 64, "I'm"),
+    ],
+    // b19 「fee-ling inside」:八分对×2 + E5 拖腔四分;尾拍「I'm a」弱起
+    // 属原曲反复段,不录。
+    ...[
+      _n(1, 7, 65, 'fee'),
+      _n(1, 5, 65.5, 'ling'),
+      _n(1, 3, 66, 'in'),
+      _n(1, 5, 66.5, 'side'),
+      _n(1, 7, 67),
+    ],
+  ],
+);
+
 /// 《沧海一声笑》(黄霑,《笑傲江湖》主题曲):工单 25 目标曲#1,
 /// 纯旋律版初稿(2026-10-22 听写,以用户真机耳朵验收为准,预期 1–2 轮修正)。
 ///
@@ -912,6 +1059,7 @@ final builtinTabChartCatalog = <({String id, TabChart chart})>[
   // ── 5 首目标曲指弹谱(工单 25:纯旋律版逐首录入;「·独奏」版后补)──
   (id: 'cang-hai-yi-sheng-xiao', chart: cangHaiYiShengXiao),
   (id: 'ai-ni-bu-shi-liang-san-tian', chart: aiNiBuShiLiangSanTian),
+  (id: 'big-big-world', chart: bigBigWorld),
   // ── 旧项目迁移谱(2026-10-18,自 ukulele-demo 指弹谱转录,8 首)──
   (id: 'liang-zhi-lao-hu-tab', chart: liangZhiLaoHu),
   (id: 'ma-li-you-zhi-xiao-yang-gao', chart: maLiYouZhiXiaoYangGao),

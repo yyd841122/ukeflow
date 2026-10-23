@@ -62,7 +62,7 @@ void main() {
       [
         '小星星', '欢乐颂',
         // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入)。
-        '沧海一声笑', '爱你不是两三天',
+        '沧海一声笑', '爱你不是两三天', 'Big Big World',
         // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
         '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
         '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -310,5 +310,78 @@ void main() {
     expect(song.notes.last.string, 1);
     expect(song.notes.last.fret, 12);
     expect(song.notes.last.beat, 87.5);
+  });
+
+  test('Big Big World:副歌+主歌一 79 音 17 小节,权威源转录抽查', () {
+    final song = loadBuiltinTabCharts()
+        .singleWhere((c) => c.id == 'big-big-world')
+        .chart;
+
+    expect(song.notes, hasLength(79));
+    expect(song.tempo, 88);
+
+    // 弱起「I'm a」= C5 D5(①3 ①5),句首「big big girl」= E5×3(①7)。
+    expect(song.notes.take(5).map((n) => (n.string, n.fret, n.beat)), [
+      (1, 3, 0),
+      (1, 5, 0.5),
+      (1, 7, 1),
+      (1, 7, 2),
+      (1, 7, 3),
+    ]);
+
+    // 音域 A4..F5(MIDI 69..77,印张双点减一);全曲单音在 ① 弦。
+    for (final n in song.notes) {
+      expect(n.string, 1, reason: '${song.title} 出 ① 弦:$n');
+      expect(
+        midiOf(n.frequency).round(),
+        inInclusiveRange(69, 77),
+        reason: '${song.title} 出音域:$n',
+      );
+    }
+
+    // 逐音缀字全文(拖腔音留空;印张连字符照拆 ye/llow、fee/ling,
+    // 弧线内整词 falling/outside/very,in/side 无弧线按音节拆)。
+    expect(
+      song.notes.map((n) => n.lyric ?? '').join(),
+      "I'mabigbiggirlInabigbigworldIt'snotabigbigthingifyouleaveme"
+      "ButIdodofeelthatIdodowillmissyoumuch"
+      'Missyoumuch'
+      'Icanseethefirstleaffalling'
+      "It'sallyellowandnice"
+      "It'ssoverycold"
+      "outsideLikethewayI'mfeelinginside",
+    );
+
+    // b9「much」16 分拖腔 + 同音连线:E5(16) D5(16) C5(8)~C5(4)。
+    expect(
+      song.notes
+          .where((n) => n.beat >= 25 && n.beat < 27)
+          .map((n) => (n.fret, n.beat, n.lyric)),
+      [(7, 25, 'much'), (5, 25.25, null), (3, 25.5, null), (3, 26, null)],
+    );
+
+    // b17「outside」附点八分起 16 分三连拖腔:C5. D5 E5 D5 E5。
+    expect(
+      song.notes
+          .where((n) => n.beat >= 58.5 && n.beat < 61)
+          .map((n) => (n.fret, n.beat)),
+      [(3, 58.5), (5, 59.25), (7, 59.5), (5, 59.75), (7, 60)],
+    );
+
+    // b18「way」拖腔下行 D5 C5 A4:全曲唯一 ①0(印张单点 6)。
+    expect(
+      song.notes
+          .where((n) => n.beat >= 63 && n.beat < 64)
+          .map((n) => n.fret),
+      [5, 3, 0],
+    );
+
+    expectNotesLegal(song.notes, context: song.title);
+
+    // 末音 =「inside」拖腔 E5 ①7 @67;曲末保有整拍(68 拍 = 17 小节整,
+    // b19 尾「I'm a」弱起属原曲反复段,不录)。
+    expect(song.notes.last.string, 1);
+    expect(song.notes.last.fret, 7);
+    expect(song.notes.last.beat, 67);
   });
 }
