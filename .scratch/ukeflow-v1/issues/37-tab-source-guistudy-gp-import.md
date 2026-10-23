@@ -27,3 +27,4 @@
 ## Comments
 
 - 2026-10-23 (立票): 调研由票 25 批量段四首被否决触发;四首错谱已从内置目录下架(git 与本票留档,重录后回归);工具/测试共用件(expectInMelodyWindow/expectEndsOnTonic/midiOf/c4Frequency)保留待重录复用。
+- 2026-10-23 (补充探查,用户指路后): **服务端搜索确认可用**——`/searchResults?searchValue=<kw>&type=ukulele` 的 astro-island props 内嵌 `ukleleInfo.records`(sheetCode/title/artist/keynote/screenshotUrl),四首全部定位:爱你不是两三天=1sdc0ucyi7U(D调 78bpm)、Big Big World=1sdjMLfbiEa(C调 88bpm)与 1sdcGscAQYC 两版、More Than I Can Say=uomJwTue(C调 capo10)、Yesterday Once More=uopjBeT0(D调)。**但谱面本体确认不可合法抓取**:单曲页只有 .ibe(强加密)与 300x300 封面(实测 default/N.jpg 全为 300x300,读不了音);整页可读谱图仅部分 sheet 偶发存在;渲染引擎在更深层 chunk,解密密钥不外明——解密路不Cryptic 走(绕技术保护,维持不做)。**结论收窄**:抓取只能到「定位+元数据」为止,逐音核对必须用户从站方播放器/打印流拿到渲染谱(打印曲谱按钮/截图/免费下载)发给 agent 照录;中期仍是 GP 文件导入提案(提案 2 不变)。
