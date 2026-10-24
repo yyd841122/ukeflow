@@ -46,6 +46,7 @@ enum ScoreTrackMode { accompaniment, dual }
 class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreTrackMode _trackMode = ScoreTrackMode.accompaniment;
   ScoreCursor? _visual;
+  final _scroll = ScrollController();
 
   late final TabPracticeController _controller;
 
@@ -90,38 +91,36 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
       _controller.passEnd();
       return;
     }
+    // 流水跟滚:每帧按引擎时刻平移横带(播放头恒在视口左 1/3),
+    // 弹过的向左滑出、后面的从右补上;高亮仍只在当位变化才重绘。
+    final viewportWidth = _contentWidth ?? 360;
+    final target = (_layout.stripX(mainBeat) -
+            viewportWidth * ScoreSheetLayout.followViewportFraction)
+        .clamp(0.0, _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0);
+    if (_scroll.hasClients && (_scroll.offset - target).abs() >= 0.5) {
+      _scroll.jumpTo(target);
+    }
+
     final cursor = _layout.currentAt(mainBeat);
     if (cursor != _visual) {
       setState(() => _visual = cursor);
     }
   }
 
-  int _systemOfCursor(ScoreCursor cursor) =>
-      _layout.systemOfBeat(cursor.tabIndex >= 0
-          ? _layout.tabNotes[cursor.tabIndex].beat
-          : 0.0);
-
-  /// 布局缓存:谱面整页不变,内容宽变了才重建(onPoll 每拍查询共享)。
-  ScoreSheetLayout get _layout {
-    final width = _contentWidth ?? 360;
-    if (_layoutCache == null || _layoutWidth != width) {
-      _layoutCache = ScoreSheetLayout(
+  /// 布局缓存:横带几何一次构造(onPoll 每帧查询共享)。
+  ScoreSheetLayout get _layout =>
+      _layoutCache ??= ScoreSheetLayout(
         def: widget.def,
         tabChart: widget.tabChart,
         melodyChart: widget.melodyChart,
-        contentWidth: width,
       );
-      _layoutWidth = width;
-    }
-    return _layoutCache!;
-  }
 
   ScoreSheetLayout? _layoutCache;
-  double? _layoutWidth;
   double? _contentWidth;
 
   @override
   void dispose() {
+    _scroll.dispose();
     stopSessionOnUnmount([_controller.stop]);
     super.dispose();
   }
@@ -163,13 +162,11 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           onRetry: () => _controller.warmup(),
         ),
         const SizedBox(height: 16),
-        // 弹前读谱缩为一行(首系统,与跟练视图同款)——用户反馈整页
-        // 太长,开始示范按钮要一屏可见(2026-10-24)。
-        ScoreSheetSystemView(
+        // 弹前读谱 = 横带全景(横向可拖;开始示范按钮一屏可见)。
+        ScoreStripView(
           def: widget.def,
           tabChart: widget.tabChart,
           melodyChart: widget.melodyChart,
-          system: 0,
         ),
         const SizedBox(height: 12),
         SegmentedButton<ScoreTrackMode>(
@@ -264,22 +261,40 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     if (visual == null || timeline == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    // 运行态只出当前一行(谱表系统),播完切下一行——真机反馈整页
-    // 折行难追播放点(2026-10-24),与四线谱跟练的阶梯平移同一纪律。
+    // 流水展示(用户真机反馈 2026-10-24):横带按引擎时刻匀速左移,
+    // 播放头恒在视口左 1/3,弹过的滑出、后面的从右补上,不跳行。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ScoreSheetSystemView(
-              def: widget.def,
-              tabChart: widget.tabChart,
-              melodyChart: widget.melodyChart,
-              system: _systemOfCursor(visual),
-              cursor: visual,
-              layout: _layoutWidth == _contentWidth ? _layoutCache : null,
-            ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ScoreStripView(
+                  def: widget.def,
+                  tabChart: widget.tabChart,
+                  melodyChart: widget.melodyChart,
+                  cursor: visual,
+                  scrollController: _scroll,
+                  layout: _layoutCache,
+                ),
+              ),
+              // 播放头标线(视口左 1/3,与跟滚锚点同位)。
+              Positioned(
+                left: (_contentWidth ?? 360) *
+                        ScoreSheetLayout.followViewportFraction -
+                    1,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                child: ColoredBox(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.35),
+                ),
+              ),
+            ],
           ),
         ),
         Text(

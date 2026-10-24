@@ -67,9 +67,9 @@ void main() {
 
     expect(find.text('爱你不是两三天'), findsOneWidget, reason: 'AppBar 曲名');
     expect(find.text('谱面视图 · 梁静茹 · 78 BPM · 1=E'), findsOneWidget);
-    // 弹前读谱为一行(首系统)——整页太长会顶走开始示范按钮(真机反馈)。
-    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget);
-    expect(find.text('1=E'), findsOneWidget, reason: '谱角调号画在行首');
+    // 弹前读谱 = 横带全景(横向可拖)——整页折行已按真机反馈移除。
+    expect(find.byKey(const Key('score-strip')), findsOneWidget);
+    expect(find.text('1=E'), findsOneWidget, reason: '谱角调号在带首');
     // 一屏可达开始示范:行高(约 180px)+控件行,按钮在首屏视口内。
     final startCenter = tester.getCenter(
       find.byKey(const Key('score-practice-start')),
@@ -101,16 +101,25 @@ void main() {
     expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
 
-    // 跨过预备(约 3077ms)进正曲:单系统一行视图就位(整页易乱,真机
-    // 反馈改一行),拍号与进度条在位。
+    // 跨过预备(约 3077ms)进正曲:流水横带就位,拍号与进度条在位。
     await advanceAndPump(tester, 3300);
     expect(find.byKey(const Key('score-prep-count')), findsNothing);
-    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget,
-        reason: '运行态只出当前一行');
-    expect(find.byKey(const Key('score-sheet-canvas')), findsNothing,
-        reason: '整页滚动视图不进运行态');
+    expect(find.byKey(const Key('score-strip')), findsOneWidget);
     expect(find.byKey(const Key('score-beat-number')), findsOneWidget);
     expect(find.byKey(const Key('score-progress')), findsOneWidget);
+
+    // 流水跟滚:正曲初期(全休止小节)播放头未过视口锚点,位移为 0。
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('score-strip-scroll')),
+    ).controller!;
+    expect(scroll.offset, 0.0, reason: '播放头未到视口锚点不滚');
+
+    // 再推 6 秒(主歌进行中):横带已向左滑出一段,流水位移 > 0。
+    await advanceAndPump(tester, 6000);
+    expect(scroll.offset, greaterThan(0), reason: '横带随播放流水左移');
+    final after6s = scroll.offset;
+    await advanceAndPump(tester, 2000);
+    expect(scroll.offset, greaterThan(after6s), reason: '持续流动不跳变');
   });
 
   testWidgets('双轨混播换谱起播:合并谱(旋律+20 拍/+4 半音)照常编译走拍', (
@@ -126,7 +135,7 @@ void main() {
     expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
 
     await advanceAndPump(tester, 3300);
-    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget);
+    expect(find.byKey(const Key('score-strip')), findsOneWidget);
     expect(find.byKey(const Key('score-progress')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -143,42 +152,43 @@ void main() {
   });
 
 
-  testWidgets('单行视图:任意系统的画布都从原点画(第 2 行起四层可见)', (tester) async {
+  testWidgets('横带双层:静态带与当位覆盖层各一,画布即带宽', (tester) async {
     engine = FakeAudioEngine();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [audioEngineProvider.overrideWithValue(engine)],
         child: MaterialApp(
           home: Scaffold(
-            body: ScoreSheetSystemView(
+            body: ScoreStripView(
               def: def,
               tabChart: solo,
               melodyChart: melody,
-              system: 2,
             ),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // 画布只有一个系统高;画笔纵原点必须为 0——带系统偏移会把
-    // 琴弦/简谱/歌词画到画布外(真机第 2 行起只剩和弦图,2026-10-24)。
-    final canvas = tester.renderObject<RenderBox>(
-      find.byKey(const Key('score-sheet-line')),
+    final strip = tester.widget<SizedBox>(
+      find.byKey(const Key('score-strip')),
     );
-    expect(canvas.size.height, ScoreSheetLayout.systemHeight);
-    final paint = tester.widget<CustomPaint>(
+    final layout = ScoreSheetLayout(
+      def: def,
+      tabChart: solo,
+      melodyChart: melody,
+    );
+    expect(strip.width, layout.stripWidth);
+    final painters = tester.widgetList<CustomPaint>(
       find.byWidgetPredicate(
         (w) =>
             w is CustomPaint &&
             w.painter != null &&
-            w.painter.runtimeType.toString() == '_ScoreSystemPainter',
+            (w.painter.runtimeType.toString() == '_StripPainter' ||
+                w.painter.runtimeType.toString() == '_StripHighlightPainter'),
       ),
-    );
-    final painter = paint.painter as dynamic;
-    expect(painter.originY, 0.0);
-    expect(painter.system, 2);
+    ).toList();
+    expect(painters, hasLength(2), reason: '静态带 + 当位覆盖层');
     expect(tester.takeException(), isNull);
   });
 

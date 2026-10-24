@@ -1,7 +1,11 @@
-/// 谱面布局内核(工单 39 测试缝①,GLOSSARY「谱面视图」「谱表系统」):
-/// (组合定义, 内容宽) → 系统切分 + 四层元素坐标 + 简谱符号推导 + 跟随
-/// 高亮当位查询。纯函数、零引擎依赖,CustomPainter 只做笔画——绘制与
-/// 数据一致的保证点全在这里,与 TabChartLayout 同一分工。
+/// 谱面布局内核(工单 39 测试缝①,GLOSSARY「谱面视图」):组合定义 →
+/// 连续横带坐标(和弦图+和弦名 / TAB 伴奏 / 简谱旋律 / 歌词 四层纵带,
+/// 横向 = 拍位×像素) + 简谱符号推导 + 跟随高亮当位查询。纯函数、零引擎
+/// 依赖,CustomPainter 只做笔画——绘制与数据一致的保证点全在这里。
+///
+/// 横带展示(用户真机反馈 2026-10-24:流水式,弹过的向左滑出、后面的
+/// 从右补上,播放头恒在视口左 1/3;和弦图照印张压在其拍位正上方,与行
+/// 首留出距离)。早先的「屏宽折行系统」几何已按此方向移除。
 library;
 
 import 'dart:math' as math;
@@ -191,15 +195,14 @@ int _degreeOfPitchClass(int pitchClass) {
   return degree;
 }
 
-/// 谱面布局:一次构造,全部几何与系统切片就位(谱面整页不变,缓存一次;
+/// 谱面布局:一次构造,横带元素坐标全部就位(谱面整带不变,缓存一次;
 /// 跟随高亮只查 [currentAt],不改几何)。
 class ScoreSheetLayout {
   ScoreSheetLayout({
     required this.def,
     required this.tabChart,
     required this.melodyChart,
-    required double contentWidth,
-  }) : contentWidth = math.max(0.0, contentWidth) {
+  }) {
     tabNotes = sortedTabNotes(tabChart.notes);
     melodyNotes = sortedTabNotes(melodyChart.notes);
     numberedNotes = deriveNumberedNotes(
@@ -215,23 +218,35 @@ class ScoreSheetLayout {
       final maxBeat = tabNotes.map((n) => n.beat).reduce(math.max);
       barCount = (maxBeat.ceil() / beatsPerBar).ceil();
     }
-    barsPerSystem = contentWidth <= 0
-        ? 1
-        : (contentWidth / (beatsPerBar * minPxPerBeat))
-            .floor()
-            .clamp(1, maxBarsPerSystem);
-    pxPerBeat = contentWidth / (barsPerSystem * beatsPerBar);
-    systemCount = barCount == 0 ? 0 : (barCount / barsPerSystem).ceil();
 
-    // 预切片:每系统的 TAB/简谱下标区间(音符按拍位升序,二分定位)。
+    // 横带元素预计算(绝对 x,一次构造,播放期只读)。
     _tabBeats = [for (final n in tabNotes) n.beat];
     _melodyBeats = [
       for (final n in melodyNotes) n.beat + def.melodyAlignBeats,
     ];
     _chordBeats = [for (final c in def.chords) c.beat];
     _tabChordPluck = _computeChordPlucks();
-    _tabSlices = _slices(_tabBeats);
-    _melodySlices = _slices(_melodyBeats);
+    chordGlyphs = [
+      for (var i = 0; i < def.chords.length; i++)
+        ScoreGlyph(
+          i,
+          def.chords[i],
+          stripX(def.chords[i].beat) - chordGlyphWidth / 2,
+        ),
+    ];
+    tabPoints = [
+      for (var i = 0; i < tabNotes.length; i++)
+        ScoreTabPoint(
+          i,
+          tabNotes[i],
+          stripX(_tabBeats[i]),
+          isChordPluck: _tabChordPluck[i],
+        ),
+    ];
+    numPoints = [
+      for (var i = 0; i < numberedNotes.length; i++)
+        ScoreNumPoint(i, numberedNotes[i], stripX(_melodyBeats[i])),
+    ];
 
     // 全休止小节:四层皆无(前奏 bar 1;画全休止 0)。
     final barsWithTab = {
@@ -257,21 +272,19 @@ class ScoreSheetLayout {
   final TabChart tabChart;
   final TabChart melodyChart;
 
-  /// 系统内容宽(px,页面按屏宽扣除边距后传入)。
-  final double contentWidth;
+  // ── 横向参数(连续横带)──
+  /// 一档拍位的像素宽:16 分符位 10px 可辨,全曲 108 拍约 4.3kpx。
+  static const stripPxPerBeat = 40.0;
 
-  // ── 横向参数 ──
-  /// 一档拍位的最小像素宽(16 分符位可辨的下限,定每系统小节数)。
-  static const minPxPerBeat = 36.0;
+  /// 带首留白:谱角调号 + 首和弦与左缘的距离(照印张行首留气口)。
+  static const stripLeftPad = 56.0;
+  static const stripRightPad = 24.0;
 
-  /// 每系统小节数上限(A4 印张版面)。
-  static const maxBarsPerSystem = 4;
-
-  /// 和弦图窗宽与防重叠最小间距。
+  /// 和弦图窗宽(居中压在锚拍上)与防重叠最小间距。
   static const chordGlyphWidth = 44.0;
   static const chordGlyphGap = 6.0;
 
-  // ── 纵向参数(系统内四层纵带,自上而下)──
+  // ── 纵向参数(横带内四层纵带,自上而下)──
   /// 和弦层带高(名+图窗 52px);其下留 [chordTabGap] 再接琴弦层——
   /// 真机两轮反馈:和弦图与琴弦贴得太近,一轮加 10px 仍挤,再加到 20。
   static const chordBandHeight = 68.0;
@@ -297,80 +310,43 @@ class ScoreSheetLayout {
   late final List<TabNote> melodyNotes;
   late final List<NumNote> numberedNotes;
 
-  /// 全曲小节数(主轴网格收口)与系统切分。
+  /// 全曲小节数(主轴网格收口)。
   late final int barCount;
-  late final int barsPerSystem;
 
-  /// 系统内一档拍位的像素宽(系统满幅均分)。
-  late final double pxPerBeat;
-  late final int systemCount;
+  /// 横带四层元素(绝对坐标,一次预计算)。
+  late final List<ScoreGlyph> chordGlyphs;
+  late final List<ScoreTabPoint> tabPoints;
+  late final List<ScoreNumPoint> numPoints;
 
   /// 四层皆无元素的小节(全休止,画 0)。
   late final List<int> emptyBars;
 
-  double get barWidth => beatsPerBar * pxPerBeat;
+  /// 主轴拍位 → 横带绝对 x(线性:时值即距离)。
+  double stripX(double mainBeat) =>
+      stripLeftPad + mainBeat * stripPxPerBeat;
 
-  int systemOfBar(int bar) => bar ~/ barsPerSystem;
+  /// 第 [bar] 小节线(0 起)的绝对 x。
+  double barX(int bar) => stripX(bar * beatsPerBar.toDouble());
 
-  int firstBarOfSystem(int system) => system * barsPerSystem;
+  /// 横带总宽:覆盖主轴网格收口 + 右留白。
+  double get stripWidth =>
+      (barCount == 0 ? stripLeftPad : barX(barCount)) + stripRightPad;
 
-  int barsInSystem(int system) =>
-      math.min(barsPerSystem, barCount - firstBarOfSystem(system));
+  /// 跟随高亮的跟滚锚点:播放头恒在视口左 1/3(流水展示,用户 2026-10-24)。
+  static const followViewportFraction = 1 / 3;
 
-  double systemStartBeat(int system) =>
-      firstBarOfSystem(system) * beatsPerBar.toDouble();
+  /// 跟随高亮当位查询:主轴拍位 → 四层当前元素(GLOSSARY「跟随高亮」)。
+  /// 尾拍越过网格钳到最后元素(拍 108-112 的无声尾段谱面驻留收尾)。
+  ScoreCursor currentAt(double mainBeat) => ScoreCursor(
+    chordIndex: _lastAtOrBefore(_chordBeats, mainBeat),
+    tabIndex: _lastAtOrBefore(_tabBeats, mainBeat),
+    melodyIndex: _lastAtOrBefore(_melodyBeats, mainBeat),
+  );
 
-  double systemEndBeat(int system) =>
-      (firstBarOfSystem(system) + barsInSystem(system)) *
-      beatsPerBar.toDouble();
-
-  /// 主轴拍位 → 系统(末小节线后的尾拍钳进最后小节,曲末尾拍不越界)。
-  int systemOfBeat(double mainBeat) {
-    final bar = (mainBeat ~/ beatsPerBar).toInt().clamp(0, barCount - 1);
-    return systemOfBar(bar);
-  }
-
-  /// 第 [system] 系统内第 [bar] 小节线的横坐标(0 = 行首)。
-  double barXInSystem(int system, int bar) =>
-      (bar - firstBarOfSystem(system)) * barWidth;
-
-  /// 主轴拍位在该系统内的横坐标。
-  double beatXInSystem(int system, double mainBeat) =>
-      (mainBeat - systemStartBeat(system)) * pxPerBeat;
-
-  /// 系统的和弦层:锚拍在系统内的拍锚,防重叠右移后钳回行宽。
-  List<ScoreGlyph> chordsInSystem(int system) {
-    final start = systemStartBeat(system);
-    final end = systemEndBeat(system);
-    final glyphs = <ScoreGlyph>[];
-    double? prevRight;
-    for (var i = 0; i < def.chords.length; i++) {
-      final anchor = def.chords[i];
-      if (anchor.beat < start || anchor.beat >= end) continue;
-      var x = beatXInSystem(system, anchor.beat);
-      if (prevRight != null && x < prevRight) {
-        x = prevRight; // 与前一枚图留最小间距(拍距密于图宽时顺移)。
-      }
-      x = math.min(x, math.max(0.0, contentWidth - chordGlyphWidth));
-      prevRight = x + chordGlyphWidth + chordGlyphGap;
-      glyphs.add(ScoreGlyph(i, anchor, x));
-    }
-    return glyphs;
-  }
-
-  /// 系统的 TAB 层音点(按拍位升序,带印张 × 标记)。
-  List<ScoreTabPoint> tabInSystem(int system) {
-    final (start, end) = _tabSlices[system];
-    return [
-      for (var i = start; i < end; i++)
-        ScoreTabPoint(
-          i,
-          tabNotes[i],
-          beatXInSystem(system, _tabBeats[i]),
-          isChordPluck: _tabChordPluck[i],
-        ),
-    ];
-  }
+  late final List<bool> _tabChordPluck;
+  late final List<double> _tabBeats;
+  late final List<double> _melodyBeats;
+  late final List<double> _chordBeats;
 
   /// 逐音 × 判定:(弦,品) == 当前和弦锚(拍 ≤ 该音)指形的按位。
   /// 无锚(前奏 bar 1 前)或指形闷音位(-1)不判 ×。
@@ -385,61 +361,6 @@ class ScoreSheetLayout {
       plucks[i] = shapeFret == note.fret;
     }
     return plucks;
-  }
-
-  /// 系统的简谱层符号(含歌词,按拍位升序)。
-  List<ScoreNumPoint> numberedInSystem(int system) {
-    final (start, end) = _melodySlices[system];
-    return [
-      for (var i = start; i < end; i++)
-        ScoreNumPoint(
-          i,
-          numberedNotes[i],
-          beatXInSystem(system, _melodyBeats[i]),
-        ),
-    ];
-  }
-
-  /// 跟随高亮当位查询:主轴拍位 → 四层当前元素(GLOSSARY「跟随高亮」)。
-  /// 尾拍越过网格钳到最后元素(拍 108-112 的无声尾段谱面驻留收尾)。
-  ScoreCursor currentAt(double mainBeat) => ScoreCursor(
-    chordIndex: _lastAtOrBefore(_chordBeats, mainBeat),
-    tabIndex: _lastAtOrBefore(_tabBeats, mainBeat),
-    melodyIndex: _lastAtOrBefore(_melodyBeats, mainBeat),
-  );
-
-  late final List<bool> _tabChordPluck;
-  late final List<double> _tabBeats;
-  late final List<double> _melodyBeats;
-  late final List<double> _chordBeats;
-  late final List<(int, int)> _tabSlices;
-  late final List<(int, int)> _melodySlices;
-
-  /// 每系统的音序下标区间 [start, end):按系统起讫拍二分切片。
-  List<(int, int)> _slices(List<double> beats) {
-    final slices = <(int, int)>[];
-    var cursor = 0;
-    for (var s = 0; s < systemCount; s++) {
-      final start = _lowerBound(beats, systemStartBeat(s), cursor);
-      final end = _lowerBound(beats, systemEndBeat(s), start);
-      slices.add((start, end));
-      cursor = start;
-    }
-    return slices;
-  }
-
-  static int _lowerBound(List<double> beats, double value, int from) {
-    var low = from;
-    var high = beats.length;
-    while (low < high) {
-      final mid = (low + high) ~/ 2;
-      if (beats[mid] < value) {
-        low = mid + 1;
-      } else {
-        high = mid;
-      }
-    }
-    return low;
   }
 
   /// 升序拍位列表里最后一个 ≤ [beat] 的下标;无则 -1。二分查找。

@@ -1,155 +1,61 @@
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
 import 'package:ukeflow/core/chart/score_sheet_defs.dart';
 import 'package:ukeflow/core/model/tab_chart.dart';
 import 'package:ukeflow/core/practice/score_sheet_layout.dart';
 
-/// 谱面布局内核(工单 39 测试缝①):(组合定义, 屏宽) → 系统切分 + 四层
+/// 谱面布局内核(工单 39 测试缝①):(组合定义) → 连续横带坐标 + 四层
 /// 元素坐标 + 简谱符号推导 + 跟随高亮当位查询。纯函数,零引擎依赖。
-/// 推导规则用合成旋律逐符号锁定;系统切分/当位查询用真数据(首曲)。
+/// 推导规则用合成旋律逐符号锁定;横带几何/当位查询用真数据(首曲)。
 void main() {
   final charts = {for (final e in builtinTabChartCatalog) e.id: e.chart};
   final def = scoreSheetCatalog.single;
   final solo = charts[def.tabChartId]!;
   final melody = charts[def.melodyChartId]!;
 
-  ScoreSheetLayout layout(double contentWidth) => ScoreSheetLayout(
+  final l = ScoreSheetLayout(
     def: def,
     tabChart: solo,
     melodyChart: melody,
-    contentWidth: contentWidth,
   );
 
-  group('系统切分:屏宽定每系统小节数', () {
-    test('窄屏 310px:2 小节/系统,pxPerBeat 满幅均分,27 小节 14 系统', () {
-      final l = layout(310);
-      expect(l.barsPerSystem, 2);
-      expect(l.pxPerBeat, closeTo(310 / 8, 1e-9));
-      expect(l.barCount, 27, reason: '主轴网格按印张 27 小节收口');
-      expect(l.systemCount, 14);
-      expect(ScoreSheetLayout.systemHeight, greaterThan(0));
+  group('横带几何:时值即距离,和弦图居中压锚拍', () {
+    test('stripX 线性:拍位×像素 + 带首留白', () {
+      expect(l.stripX(0), ScoreSheetLayout.stripLeftPad);
+      expect(l.stripX(4),
+          ScoreSheetLayout.stripLeftPad + 4 * ScoreSheetLayout.stripPxPerBeat);
     });
 
-    test('宽屏 800px:4 小节/系统(印张版面),7 系统', () {
-      final l = layout(800);
-      expect(l.barsPerSystem, 4);
-      expect(l.systemCount, 7);
+    test('横带宽度收在主轴网格(27 小节)+ 右留白', () {
+      expect(l.barCount, 27);
+      expect(l.stripWidth, l.barX(27) + ScoreSheetLayout.stripRightPad);
     });
 
-    test('极窄 200px:1 小节/系统,27 系统', () {
-      final l = layout(200);
-      expect(l.barsPerSystem, 1);
-      expect(l.systemCount, 27);
-    });
-
-    test('小节归系统:2 小节/系统时 bar 0-1 在系统 0,bar 26 单独收尾', () {
-      final l = layout(310);
-      expect(l.systemOfBar(0), 0);
-      expect(l.systemOfBar(1), 0);
-      expect(l.systemOfBar(2), 1);
-      expect(l.systemOfBar(26), 13);
-      expect(l.firstBarOfSystem(13), 26);
-      expect(l.barsInSystem(13), 1);
-      expect(l.barsInSystem(0), 2);
-    });
-  });
-
-  group('四层坐标', () {
-    test('和弦图落系统顶层行:系统头小节的锚贴行首,行内防重叠右移', () {
-      final l = layout(310);
-      // 系统 2 = bar 4-5(拍 16-24):锚 E@16、E@20、A@22。
-      final glyphs = l.chordsInSystem(2);
-      expect(glyphs.map((g) => g.anchor.label), ['E', 'E', 'A']);
-      // E@16 是系统 2 头小节头拍:x = 0(落行首)。
-      expect(glyphs[0].x, 0.0);
-      // 行内 x 单调不减且两两不叠(留最小间距)。
-      for (var i = 1; i < glyphs.length; i++) {
-        expect(glyphs[i].x,
-            greaterThanOrEqualTo(glyphs[i - 1].x + ScoreSheetLayout.chordGlyphWidth));
+    test('和弦图居中压在其锚拍上,与带首留有距离(照印张对应关系)', () {
+      // 首锚 E@4:中心在 stripX(4),不贴行首。
+      final first = l.chordGlyphs.first;
+      expect(first.anchor.label, 'E');
+      expect(first.x,
+          l.stripX(4) - ScoreSheetLayout.chordGlyphWidth / 2);
+      expect(first.x, greaterThan(ScoreSheetLayout.stripLeftPad),
+          reason: '和弦图与带首有距离');
+      // 两两不叠且按拍序排布。
+      for (var i = 1; i < l.chordGlyphs.length; i++) {
+        expect(l.chordGlyphs[i].x,
+            greaterThanOrEqualTo(l.chordGlyphs[i - 1].x +
+                ScoreSheetLayout.chordGlyphWidth));
       }
     });
 
-    test('TAB 音横坐标 = 小节内拍位 × pxPerBeat,系统按拍位归属', () {
-      final l = layout(310);
-      // 独奏第一堆 @4.0:bar 1 → 系统 0,小节内偏移 0。
-      final sys0 = l.tabInSystem(0);
-      final first = sys0.firstWhere((n) => n.note.beat == 4.0);
-      expect(first.x, closeTo(l.barXInSystem(0, 1), 1e-9));
-      // @8.0 是 bar 2 头:归系统 1,x = 0。
-      expect(l.systemOfBeat(8.0), 1);
-      final sys1 = l.tabInSystem(1);
-      expect(sys1.first.note.beat, 8.0);
-      expect(sys1.first.x, closeTo(l.barXInSystem(1, 2), 1e-9));
+    test('TAB/简谱音点绝对坐标 = 拍位映射,简谱含对齐偏移', () {
+      expect(l.tabPoints.first.note.beat, 4.0);
+      expect(l.tabPoints.first.x, l.stripX(4.0));
+      expect(l.numPoints.first.symbol.lyric, '你');
+      expect(l.numPoints.first.x, l.stripX(20.0), reason: '你 = 旋律 0 + 20');
     });
 
-    test('简谱音 x = (旋律拍+20) 的主轴坐标,歌词缀字随音符', () {
-      final l = layout(310);
-      // 旋律首音 你 G4 @0(+20 = 主轴拍 20,bar 5,系统 2)。
-      final sys2 = l.numberedInSystem(2);
-      expect(sys2.first.symbol.degree, 5);
-      expect(sys2.first.symbol.lyric, '你');
-      expect(sys2.first.x, closeTo(l.barXInSystem(2, 5), 1e-9));
-      // 前奏系统(0-1)无旋律音。
-      expect(l.numberedInSystem(0), isEmpty);
-      expect(l.numberedInSystem(1), isEmpty);
-    });
-
-    test('全休止小节只有前奏 bar 0,四层皆空', () {
-      final l = layout(310);
+    test('全休止小节只有前奏 bar 0', () {
       expect(l.emptyBars, [0]);
-    });
-
-    test('小节线横坐标:系统内逐小节等距,首线贴行首', () {
-      final l = layout(310);
-      expect(l.barXInSystem(0, 0), 0.0);
-      expect(l.barXInSystem(0, 1), closeTo(4 * l.pxPerBeat, 1e-9));
-      expect(l.barXInSystem(0, 2), closeTo(8 * l.pxPerBeat, 1e-9),
-          reason: '末小节线 = 下一系统行首');
-    });
-  });
-
-  group('TAB 印张 × 判定:落指形位画 ×,旋律音保持数字', () {
-    // 宽屏 800:4 小节/系统,系统 0 = bar 0-3(拍 0-16,前奏+主歌 b4)。
-    final l = layout(800);
-    final sys0 = l.tabInSystem(0);
-    bool pluckAt(double beat, int string, int fret) => sys0
-        .firstWhere(
-          (p) => p.note.beat == beat && p.note.string == string,
-          orElse: () => throw TestFailure('找不到音 @$beat ①$string'),
-        )
-        .isChordPluck;
-
-    test('和弦堆/拨弦(品位=当前指形按位)判 ×', () {
-      // b4 A 堆 @12.0:A=[2,1,0,0](④2③1②0)→ ④③② 全 ×。
-      expect(pluckAt(12.0, 4, 2), isTrue);
-      expect(pluckAt(12.0, 3, 1), isTrue);
-      expect(pluckAt(12.0, 2, 0), isTrue);
-      // 前奏 b2 E 堆 @4.0:E=[4,4,4,2] → ④③②① 全 ×。
-      for (final p in sys0.where((p) => p.note.beat == 4.0)) {
-        expect(p.isChordPluck, isTrue, reason: '${p.note}');
-      }
-    });
-
-    test('旋律品位不落指形位 → 保持数字(false)', () {
-      // b4 旋律 ①2=B4 @12.0(印张数字②):A 指形 ①=0 ≠ 2。
-      expect(pluckAt(12.0, 1, 2), isFalse);
-      // b5 末音 ①8=F5 @18.0(印张数字⑧):E 指形 ①=2 ≠ 8。bar 5 在系统 1。
-      final sys1 = layout(800).tabInSystem(1);
-      final f5 = sys1.firstWhere(
-        (p) => p.note.beat == 18.0 && p.note.string == 1,
-      );
-      expect(f5.note.fret, 8);
-      expect(f5.isChordPluck, isFalse);
-    });
-
-    test('主歌两拍单元(b6 起,拍 20+)逐音 ×', () {
-      // b6 E 段(拍 20-21.5,E=[4,4,4,2])与 A 段(拍 22-23.5,A=[2,1,0,0])。
-      final sys1 = layout(800).tabInSystem(1); // bar 4-7 = 拍 16-32
-      for (final p in sys1.where((p) => p.note.beat >= 20)) {
-        expect(p.isChordPluck, isTrue, reason: '主歌单元应全 ×:${p.note}');
-      }
     });
   });
 
@@ -168,9 +74,9 @@ void main() {
         const TabNote(string: 2, fret: 3, beat: 1.25),
         // 拍 2: 3(整拍)。
         const TabNote(string: 2, fret: 0, beat: 2, lyric: 'c'),
-        // 拍 3: 7(整拍,高音一点)——曲首前无它,单独验八度点。
+        // 拍 3: 7(整拍,高音零点;①2 = B4)。
         const TabNote(string: 1, fret: 2, beat: 3, lyric: 'd'),
-        // 拍 4: 5(八分)+ 延续音拖 1 拍 + 休止 1.75(后继远跳)。
+        // 拍 4: 5(八分)+ 延续音拖 1 拍 + 休止 1.5(后继远跳)。
         const TabNote(string: 2, fret: 3, beat: 4, lyric: 'e'),
         const TabNote(string: 2, fret: 3, beat: 4.5),
         // 拍 7: 6(尾音,网格收在 bar 尽头)。
@@ -222,6 +128,14 @@ void main() {
       expect(tieOfE.restAfter, 1.5, reason: 'd=2.5 → 本音 1 拍 + 休止 1.5');
     });
 
+    test('对齐偏移:mainBeat 落主轴拍(弧线端点按主轴坐标消费)', () {
+      final aligned = deriveNumberedNotes(melody, alignBeats: 20);
+      expect(aligned.first.mainBeat, 20.0, reason: '你 = 旋律拍 0 + 20');
+      expect(aligned.last.mainBeat, 107.5, reason: '念 = 87.5 + 20');
+      // 缺省不过偏移(合成旋律直接推导的既有用例不受影响)。
+      expect(deriveNumberedNotes(melody).first.mainBeat, 0.0);
+    });
+
     test('非自然音级当场报错(数据缺陷不静默进渲染)', () {
       const chromatic = TabChart(
         title: '坏数据',
@@ -231,16 +145,8 @@ void main() {
       expect(() => deriveNumberedNotes(chromatic), throwsArgumentError);
     });
 
-    test('对齐偏移:mainBeat 落主轴拍(弧线端点按主轴坐标消费)', () {
-      final aligned = deriveNumberedNotes(melody, alignBeats: 20);
-      expect(aligned.first.mainBeat, 20.0, reason: '你 = 旋律拍 0 + 20');
-      expect(aligned.last.mainBeat, 107.5, reason: '念 = 87.5 + 20');
-      // 缺省不过偏移(合成旋律直接推导的既有用例不受影响)。
-      expect(deriveNumberedNotes(melody).first.mainBeat, 0.0);
-    });
-
-    test('真数据:旋律全曲可推导,副歌高置段双点(A5=6 两点)', () {
-      final real = deriveNumberedNotes(melody);
+    test('真数据:旋律全曲可推导,副歌高置段(A5=6 一点)', () {
+      final real = deriveNumberedNotes(melody, alignBeats: 20);
       expect(real, hasLength(168));
       final nian = real.last; // 念 = ①12 = A5,全曲最高。
       expect(nian.degree, 6);
@@ -252,9 +158,41 @@ void main() {
     });
   });
 
+  group('TAB 印张 × 判定:落指形位画 ×,旋律音保持数字', () {
+    bool pluckAt(double beat, int string) => l.tabPoints
+        .firstWhere(
+          (p) => p.note.beat == beat && p.note.string == string,
+          orElse: () => throw TestFailure('找不到音 @$beat ④③②① 下标 $string'),
+        )
+        .isChordPluck;
+
+    test('和弦堆/拨弦(品位=当前指形按位)判 ×', () {
+      // b4 A 堆 @12.0:A=[2,1,0,0](④2③1②0)→ ④③② 全 ×。
+      expect(pluckAt(12.0, 4), isTrue);
+      expect(pluckAt(12.0, 3), isTrue);
+      expect(pluckAt(12.0, 2), isTrue);
+      // 前奏 b2 E 堆 @4.0:E=[4,4,4,2] → 全 ×。
+      for (final p in l.tabPoints.where((p) => p.note.beat == 4.0)) {
+        expect(p.isChordPluck, isTrue, reason: '${p.note}');
+      }
+    });
+
+    test('旋律品位不落指形位 → 保持数字(false)', () {
+      // b4 旋律 ①2=B4 @12.0(印张数字②):A 指形 ①=0 ≠ 2。
+      expect(pluckAt(12.0, 1), isFalse);
+      // b5 末音 ①8=F5 @18.0(印张数字⑧):E 指形 ①=2 ≠ 8。
+      expect(pluckAt(18.0, 1), isFalse);
+    });
+
+    test('主歌两拍单元(b6 起,拍 20+)逐音 ×', () {
+      for (final p in l.tabPoints.where((p) => p.note.beat >= 20)) {
+        expect(p.isChordPluck, isTrue, reason: '主歌单元应全 ×:${p.note}');
+      }
+    });
+  });
+
   group('跟随高亮当位查询', () {
     test('预备期拍 0-20:有 TAB 当前音与当前和弦,简谱无当前音', () {
-      final l = layout(310);
       final c = l.currentAt(19.5);
       expect(c.chordIndex, def.chords.indexWhere((ch) => ch.beat == 16),
           reason: '前奏末锚 E@16');
@@ -263,27 +201,24 @@ void main() {
     });
 
     test('主歌拍 21.5:和弦 E@20,简谱当前音=信@1.5(+20),歌词逐字', () {
-      final l = layout(310);
       final c = l.currentAt(21.5);
       expect(c.chordIndex, def.chords.indexWhere((ch) => ch.beat == 20));
-      final symbol = deriveNumberedNotes(melody)[c.melodyIndex];
+      final symbol = deriveNumberedNotes(melody, alignBeats: 20)[c.melodyIndex];
       expect(symbol.lyric, '信');
     });
 
     test('副歌拍 84.5:和弦 E@84,简谱当前音=三@64.5(+20)', () {
-      final l = layout(310);
       final c = l.currentAt(84.5);
       expect(c.chordIndex, def.chords.indexWhere((ch) => ch.beat == 84));
-      final symbol = deriveNumberedNotes(melody)[c.melodyIndex];
+      final symbol = deriveNumberedNotes(melody, alignBeats: 20)[c.melodyIndex];
       expect(symbol.lyric, '三');
     });
 
     test('曲末尾拍(>网格):钳到最后锚/音,不越界', () {
-      final l = layout(310);
       final c = l.currentAt(120);
       expect(c.chordIndex, def.chords.length - 1);
-      expect(c.tabIndex, l.tabNotes.length - 1);
-      expect(c.melodyIndex, l.melodyNotes.length - 1);
+      expect(c.tabIndex, l.tabPoints.length - 1);
+      expect(c.melodyIndex, l.numPoints.length - 1);
       final c0 = l.currentAt(-1);
       expect(c0.chordIndex, -1);
       expect(c0.tabIndex, -1);
@@ -292,13 +227,9 @@ void main() {
   });
 
   test('布局确定性:同入参同输出(缓存几何不随调用漂移)', () {
-    final a = layout(310);
-    final b = layout(310);
-    expect(a.barsPerSystem, b.barsPerSystem);
-    expect(a.systemCount, b.systemCount);
-    expect(a.pxPerBeat, b.pxPerBeat);
-    expect(a.numberedNotes.map((n) => n.degree), b.numberedNotes.map((n) => n.degree));
-    // 末音时长入推导:末尾剩余不足整拍的按小节收口。
-    expect(math.max(a.numberedNotes.last.dashes, 0), greaterThanOrEqualTo(0));
+    final b = ScoreSheetLayout(def: def, tabChart: solo, melodyChart: melody);
+    expect(l.stripWidth, b.stripWidth);
+    expect(l.tabPoints.map((p) => p.x), b.tabPoints.map((p) => p.x));
+    expect(l.chordGlyphs.map((g) => g.x), b.chordGlyphs.map((g) => g.x));
   });
 }
