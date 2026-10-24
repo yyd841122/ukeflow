@@ -210,49 +210,14 @@ class _StripPainter extends CustomPainter {
     }
     // 扫弦/卷弦记号:直杆+箭头(下/上)、波浪(卷弦),压在事件拍位上。
     for (final e in layout.def.strums) {
-      _paintStrumGlyph(canvas, layout.stripX(e.beat), e.kind);
-    }
-  }
-
-  /// 扫弦记号:纵杆贯穿四弦,箭头指发声方向;卷弦画波浪(慢扫)。
-  void _paintStrumGlyph(Canvas canvas, double x, ScoreStrumKind kind) {
-    final top = _tabTop - 4;
-    final bottom = _tabTop + 3 * ScoreSheetLayout.tabLineGap + 4;
-    final paint = Paint()
-      ..color = scheme.onSurface
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-    switch (kind) {
-      case ScoreStrumKind.roll:
-        // 波浪:三段小弧连成的竖向 zigzag(慢扫)。
-        final path = Path();
-        var y = top;
-        var dir = 1.0;
-        path.moveTo(x, y);
-        while (y < bottom) {
-          y = math.min(y + 7, bottom);
-          path.quadraticBezierTo(x + 5 * dir, y - 3.5, x, y);
-          dir = -dir;
-        }
-        canvas.drawPath(path, paint..strokeWidth = 1.6);
-      case ScoreStrumKind.strumDown:
-        canvas.drawLine(Offset(x, top), Offset(x, bottom - 4), paint);
-        canvas.drawPath(
-          Path()
-            ..moveTo(x - 5, bottom - 9)
-            ..lineTo(x, bottom)
-            ..lineTo(x + 5, bottom - 9),
-          paint..strokeWidth = 1.8,
-        );
-      case ScoreStrumKind.strumUp:
-        canvas.drawLine(Offset(x, top + 4), Offset(x, bottom), paint);
-        canvas.drawPath(
-          Path()
-            ..moveTo(x - 5, top + 9)
-            ..lineTo(x, top)
-            ..lineTo(x + 5, top + 9),
-          paint..strokeWidth = 1.8,
-        );
+      paintStrumGlyph(
+        canvas,
+        x: layout.stripX(e.beat),
+        kind: e.kind,
+        color: scheme.onSurface,
+        top: _tabTop,
+        bottom: _tabTop + 3 * ScoreSheetLayout.tabLineGap,
+      );
     }
   }
 
@@ -398,18 +363,34 @@ class _StripHighlightPainter extends CustomPainter {
     // TAB 当前音(同拍组一齐点亮,与四线谱跟练同纪律)。
     if (cursor.tabIndex >= 0 && cursor.tabIndex < layout.tabPoints.length) {
       final currentBeat = layout.tabNotes[cursor.tabIndex].beat;
-      for (final point
-          in layout.tabPoints.where((p) => p.note.beat == currentBeat)) {
-        final y =
-            _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
-        final center = Offset(point.x, y);
-        canvas.drawCircle(center, 10.5, Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = scheme.primary);
-        canvas.drawCircle(center, 8, Paint()..color = scheme.primary);
-        _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
-            ScoreSheetLayout.tabFontSize, scheme.onPrimary, bold: true);
+      final strumKind = layout.strumKindAt(currentBeat);
+      if (strumKind != null) {
+        // 扫弦/卷弦拍:点亮记号本身(不逐弦画圈)。
+        paintStrumGlyph(
+          canvas,
+          x: layout.stripX(currentBeat),
+          kind: strumKind,
+          color: scheme.primary,
+          top: _tabTop,
+          bottom: _tabTop + 3 * ScoreSheetLayout.tabLineGap,
+          strokeWidth: 3.0,
+        );
+      } else {
+        for (final point
+            in layout.tabPoints.where((p) => p.note.beat == currentBeat)) {
+          if (point.hiddenByStrum) continue;
+          final y =
+              _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
+          final center = Offset(point.x, y);
+          canvas.drawCircle(center, 10.5, Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = scheme.primary);
+          canvas.drawCircle(center, 8, Paint()..color = scheme.primary);
+          _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}',
+              center, ScoreSheetLayout.tabFontSize, scheme.onPrimary,
+              bold: true);
+        }
       }
     }
 
@@ -444,6 +425,54 @@ class _StripHighlightPainter extends CustomPainter {
   @override
   bool shouldRepaint(_StripHighlightPainter old) =>
       old.layout != layout || old.cursor != cursor;
+}
+
+/// 扫弦记号公共画法(静态带普通色,当位覆盖层主色描粗——同一形状)。
+void paintStrumGlyph(
+  Canvas canvas, {
+  required double x,
+  required ScoreStrumKind kind,
+  required Color color,
+  required double top,
+  required double bottom,
+  double strokeWidth = 2.0,
+}) {
+  final paint = Paint()
+    ..color = color
+    ..strokeWidth = strokeWidth
+    ..style = PaintingStyle.stroke;
+  switch (kind) {
+    case ScoreStrumKind.roll:
+      // 波浪:竖向 zigzag 小弧连成(慢扫)。
+      final path = Path();
+      var y = top;
+      var dir = 1.0;
+      path.moveTo(x, y);
+      while (y < bottom) {
+        y = math.min(y + 7, bottom);
+        path.quadraticBezierTo(x + 5 * dir, y - 3.5, x, y);
+        dir = -dir;
+      }
+      canvas.drawPath(path, paint..strokeWidth = strokeWidth * 0.8);
+    case ScoreStrumKind.strumDown:
+      canvas.drawLine(Offset(x, top), Offset(x, bottom - 4), paint);
+      canvas.drawPath(
+        Path()
+          ..moveTo(x - 5, bottom - 9)
+          ..lineTo(x, bottom)
+          ..lineTo(x + 5, bottom - 9),
+        paint..strokeWidth = strokeWidth * 0.9,
+      );
+    case ScoreStrumKind.strumUp:
+      canvas.drawLine(Offset(x, top + 4), Offset(x, bottom), paint);
+      canvas.drawPath(
+        Path()
+          ..moveTo(x - 5, top + 9)
+          ..lineTo(x, top)
+          ..lineTo(x + 5, top + 9),
+        paint..strokeWidth = strokeWidth * 0.9,
+      );
+  }
 }
 
 void _text(
