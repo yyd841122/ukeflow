@@ -20,17 +20,22 @@ import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
 import 'helpers/image_fixtures.dart';
 
-/// 曲库页(工单 15):内置弹唱谱+自建弹唱谱(同一弹唱谱区,数据源接通)
-/// 与内置指弹谱(指弹谱区)。内置谱注入 fixture,自建谱走真内存库
+/// 曲库目录与各类型列表:内置谱注入 fixture,自建谱走真内存库
 /// (closeStreamsSynchronously 收口 drift 流计时器,见 path_page_test);
 /// 引擎一律 FakeAudioEngine(点曲进跟练页会预热)。
 void main() {
   late AppDatabase db;
   late FakeAudioEngine engine;
 
+  Future<void> openCategory(WidgetTester tester, String title) async {
+    await tester.tap(find.text(title));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pumpLibrary(
     WidgetTester tester, {
     ImagePickFlow? imagePickFlow,
+    String? category = '弹唱谱',
   }) async {
     db = AppDatabase(
       DatabaseConnection(
@@ -60,23 +65,47 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    if (category != null) await openCategory(tester, category);
   }
 
-  testWidgets('渲染:弹唱谱/指弹谱两区即类型标识,内置曲目齐全,工具行在顶', (tester) async {
-    await pumpLibrary(tester);
-
-    expect(find.text('弹唱谱'), findsOneWidget);
-    expect(find.text('指弹谱'), findsOneWidget);
-    expect(find.text('测试曲'), findsOneWidget);
-    expect(find.text('测试者 · C 调 · 80 BPM'), findsOneWidget);
-    expect(find.text('第二首'), findsOneWidget);
-    // 指弹谱区来自 Dart 常量目录(零资产,不注入也可见)。
-    expect(find.text('小星星'), findsOneWidget);
-    expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
-    expect(find.text('欢乐颂'), findsOneWidget);
-    // 练琴工具行(工单 15 后续:跟练页签裁撤,工具并入曲库页顶部)。
+  testWidgets('目录四类入口齐全,逐类往返,工具行保留,导入入口只在列表', (tester) async {
+    await pumpLibrary(tester, category: null);
     expect(find.text('节拍器'), findsOneWidget);
     expect(find.text('节奏型训练'), findsOneWidget);
+    expect(find.text('测试曲'), findsNothing);
+    expect(find.text('导入'), findsNothing);
+    expect(find.text('Cifra Club'), findsNothing);
+    expect(find.text('相册选图'), findsNothing);
+    for (final title in ['弹唱谱', '指弹谱', '独奏谱', '图片谱']) {
+      expect(find.text(title), findsOneWidget);
+      await openCategory(tester, title);
+      expect(find.widgetWithText(AppBar, title), findsOneWidget);
+      if (title == '弹唱谱') {
+        expect(find.text('测试曲'), findsOneWidget);
+        expect(find.text('测试者 · C 调 · 80 BPM'), findsOneWidget);
+        expect(find.text('第二首'), findsOneWidget);
+        expect(find.text('导入'), findsOneWidget);
+        expect(find.text('Cifra Club'), findsOneWidget);
+      } else {
+        expect(find.text('测试曲'), findsNothing);
+        expect(find.text('导入'), findsNothing);
+        expect(find.text('Cifra Club'), findsNothing);
+      }
+      if (title == '指弹谱') {
+        expect(find.text('小星星'), findsOneWidget);
+        expect(find.text('欢乐颂'), findsOneWidget);
+        expect(find.text('爱你不是两三天'), findsOneWidget);
+        expect(find.text('爱你不是两三天·独奏'), findsNothing);
+        expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
+      }
+      if (title == '独奏谱') {
+        expect(find.text('独奏谱即将上线\n谱面视图将在后续版本提供,敬请期待。'), findsOneWidget);
+        expect(find.byType(Card), findsNothing);
+      }
+      expect(find.text('相册选图'), title == '图片谱' ? findsOneWidget : findsNothing);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('弹唱谱区有文本导入入口,点进导入页', (tester) async {
@@ -92,11 +121,10 @@ void main() {
     );
   });
 
-  testWidgets('弹唱谱区有 Cifra Club 搜索源入口(工单 17)', (tester) async {
+  testWidgets('弹唱谱列表有 Cifra Club 搜索源入口', (tester) async {
     await pumpLibrary(tester);
 
-    // 只验入口在:点进会构造 WebView(真平台件),widget 测试环境没有,
-    // 页面本身由真机验收(票 17 验收①)。
+    // 搜索页自身的平台交互由专属测试覆盖,此处只验入口随迁。
     expect(find.text('Cifra Club'), findsOneWidget);
   });
 
@@ -113,7 +141,7 @@ void main() {
   });
 
   testWidgets('点指弹谱进指弹跟练页,弹回回曲库', (tester) async {
-    await pumpLibrary(tester);
+    await pumpLibrary(tester, category: '指弹谱');
 
     await tester.tap(find.byKey(const Key('tab-chart-xiao-xing-xing')));
     await tester.pumpAndSettle();
@@ -145,7 +173,7 @@ void main() {
     expect(find.text('曲库自建歌'), findsOneWidget);
     expect(find.byKey(const Key('custom-chart-1')), findsOneWidget);
     expect(find.textContaining('还没有自建谱'), findsNothing, reason: '空态提示退场');
-    expect(find.text('我自己 · 88 BPM'), findsOneWidget, reason: '元信息行取自源文本');
+    expect(find.text('自建 · 我自己 · 88 BPM'), findsOneWidget, reason: '元信息行取自源文本');
 
     // 自建谱与内置谱同一待遇:点开直达跟练。
     await tester.tap(find.byKey(const Key('custom-chart-1')));
@@ -158,12 +186,15 @@ void main() {
 
     // 绕过导入管线直写坏谱(DAO 层不校验,读出层才校验)——
     // 模拟存储损坏/白名单漂移后的存量坏行。
-    await db.customChartsDao.add(title: '坏谱歌', source: '{start_of_verse}\n[C]词');
+    await db.customChartsDao.add(
+      title: '坏谱歌',
+      source: '{start_of_verse}\n[C]词',
+    );
     await tester.pumpAndSettle();
 
     // 坏条目:保留在列(不静默缺曲目)、标记不可跟练。
     expect(find.text('坏谱歌'), findsOneWidget);
-    expect(find.text('谱面读不出,暂不可跟练'), findsOneWidget);
+    expect(find.text('自建 · 谱面读不出,暂不可跟练'), findsOneWidget);
     expect(find.textContaining('还没有自建谱'), findsNothing);
     await tester.tap(find.byKey(const Key('custom-chart-1')));
     await tester.pumpAndSettle();
@@ -198,20 +229,29 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await openCategory(tester, '弹唱谱');
     expect(find.text('曲库加载失败'), findsOneWidget);
     expect(find.textContaining('内置谱炸了'), findsOneWidget);
+    expect(find.text('导入'), findsOneWidget);
+    expect(find.text('Cifra Club'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await openCategory(tester, '独奏谱');
+    expect(find.textContaining('独奏谱即将上线'), findsOneWidget);
+    expect(find.text('曲库加载失败'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await openCategory(tester, '图片谱');
+    expect(find.text('相册选图'), findsOneWidget);
   });
 
   // ── 工单 32:删除(自建谱/用户图片谱真删,内置谱隐藏)──
 
-  testWidgets('三类曲目卡都带删除钮,内置卡删除钮与进入钮并存', (tester) async {
+  testWidgets('弹唱谱卡删除钮与进入钮并存', (tester) async {
     await pumpLibrary(tester);
 
     expect(find.byKey(const Key('delete-chart-test-chart-a')), findsOneWidget);
-    expect(
-      find.byKey(const Key('delete-tab-chart-xiao-xing-xing')),
-      findsOneWidget,
-    );
+
     // 删除钮不顶掉进入:点卡仍直达跟练。
     await tester.tap(find.byKey(const Key('chart-test-chart-a')));
     await tester.pumpAndSettle();
@@ -224,15 +264,24 @@ void main() {
     await tester.tap(find.byKey(const Key('delete-chart-test-chart-a')));
     await tester.pumpAndSettle();
     expect(find.text('把「测试曲」移出曲库?'), findsOneWidget);
-    expect(find.textContaining('可随时在设置页恢复'), findsOneWidget,
-        reason: '文案讲清是隐藏不是真删');
+    expect(
+      find.textContaining('可随时在设置页恢复'),
+      findsOneWidget,
+      reason: '文案讲清是隐藏不是真删',
+    );
 
     await tester.tap(find.byKey(const Key('delete-confirm')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('chart-test-chart-a')), findsNothing,
-        reason: '卡片即时退场(流推送)');
-    expect(find.byKey(const Key('chart-test-chart-b')), findsOneWidget,
-        reason: '其余内置谱不受牵连');
+    expect(
+      find.byKey(const Key('chart-test-chart-a')),
+      findsNothing,
+      reason: '卡片即时退场(流推送)',
+    );
+    expect(
+      find.byKey(const Key('chart-test-chart-b')),
+      findsOneWidget,
+      reason: '其余内置谱不受牵连',
+    );
     expect(
       await db.settingsDao.getString(SettingsKeys.hiddenBuiltinStrums),
       'test-chart-a',
@@ -271,16 +320,18 @@ void main() {
 
     expect(find.byKey(const Key('custom-chart-1')), findsNothing);
     expect(await db.customChartsDao.getAll(), isEmpty);
-    expect(find.textContaining('还没有自建谱'), findsOneWidget,
-        reason: '空态提示回场');
+    expect(find.textContaining('还没有自建谱'), findsOneWidget, reason: '空态提示回场');
   });
 
   testWidgets('损坏自建谱同样可删(自救路径补齐,工单 16 遗留)', (tester) async {
     await pumpLibrary(tester);
 
-    await db.customChartsDao.add(title: '坏谱歌', source: '{start_of_verse}\n[C]词');
+    await db.customChartsDao.add(
+      title: '坏谱歌',
+      source: '{start_of_verse}\n[C]词',
+    );
     await tester.pumpAndSettle();
-    expect(find.text('谱面读不出,暂不可跟练'), findsOneWidget);
+    expect(find.text('自建 · 谱面读不出,暂不可跟练'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('delete-custom-chart-1')));
     await tester.pumpAndSettle();
@@ -292,7 +343,7 @@ void main() {
   });
 
   testWidgets('指弹谱删除=隐藏:确认后退场(其余指弹曲不动)', (tester) async {
-    await pumpLibrary(tester);
+    await pumpLibrary(tester, category: '指弹谱');
 
     await tester.tap(find.byKey(const Key('delete-tab-chart-xiao-xing-xing')));
     await tester.pumpAndSettle();
@@ -308,7 +359,7 @@ void main() {
   });
 
   testWidgets('用户图片谱删除=数据库行硬删', (tester) async {
-    await pumpLibrary(tester);
+    await pumpLibrary(tester, category: '图片谱');
 
     await db.imageChartsDao.add(title: '用户图片谱', image: tinyPngBytes);
     await tester.pumpAndSettle();
@@ -333,12 +384,56 @@ void main() {
     expect(await db.imageChartsDao.getAll(), isEmpty);
   });
 
+  testWidgets('用户图片谱改名保留原图与 id,内置图片谱只提供隐藏', (tester) async {
+    await pumpLibrary(tester, category: '图片谱');
+    await db.imageChartsDao.add(title: '旧曲名', image: tinyPngBytes);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('改名'), findsOneWidget);
+    await tester.tap(find.byTooltip('改名'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('image-chart-title-input')),
+      '新曲名',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('新曲名'), findsOneWidget);
+    expect(find.text('旧曲名'), findsNothing);
+    final rows = await db.imageChartsDao.getAll();
+    expect(rows.single.id, 1);
+    expect(rows.single.title, '新曲名');
+    expect(rows.single.image, tinyPngBytes);
+  });
+
+  testWidgets('内置图片谱隐藏后可恢复的提示与落库不回归', (tester) async {
+    await pumpLibrary(tester, category: '图片谱');
+    await tester.tap(find.byTooltip('移出曲库'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('可随时在设置页恢复'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('Big Big World(图片版)'), findsNothing);
+    expect(find.textContaining('暂无图片谱'), findsOneWidget);
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenBuiltinImages),
+      isNotEmpty,
+    );
+  });
+
   testWidgets('窄屏(360dp)列表不溢出', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
     await pumpLibrary(tester);
     expect(tester.takeException(), isNull);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    for (final title in ['指弹谱', '独奏谱', '图片谱']) {
+      await openCategory(tester, title);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
   });
 
   test('chartMetaLine:空白字段剔除,不产孤立分隔符', () {
@@ -354,15 +449,11 @@ void main() {
     );
   });
 
-  group('图片谱区(工单 18,ADR-0002 只读边界)', () {
-    testWidgets('内置图片谱在列,区头与卡片都标识只读,有相册选图入口', (tester) async {
-      await pumpLibrary(tester);
+  group('图片谱列表(工单 18,ADR-0002 只读边界)', () {
+    testWidgets('内置图片谱在列,卡片标识只读,有相册选图入口', (tester) async {
+      await pumpLibrary(tester, category: '图片谱');
 
-      // 区在长列表折叠线下,滚到可见再断言。
-      await tester.scrollUntilVisible(
-        find.text('Big Big World(图片版)'),
-        200,
-      );
+      await tester.scrollUntilVisible(find.text('Big Big World(图片版)'), 200);
       expect(find.text('图片谱'), findsOneWidget);
       expect(find.text('Big Big World(图片版)'), findsOneWidget);
       // 「只读」标识逐卡可见:图片谱不能跟练是 v1 物理边界(ADR-0002)。
@@ -371,12 +462,15 @@ void main() {
     });
 
     testWidgets('数据源接通:相册图片入库即自动入列,同样标识只读', (tester) async {
-      await pumpLibrary(tester);
+      await pumpLibrary(tester, category: '图片谱');
 
       await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
       await tester.pumpAndSettle();
       // 滚动目标用卡片 key:标题可见≠卡片可点(曲卡数量变化会推移布局)。
-      await tester.scrollUntilVisible(find.byKey(const Key('user-image-1')), 200);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('user-image-1')),
+        200,
+      );
 
       expect(find.text('相册来的谱'), findsOneWidget);
       expect(find.byKey(const Key('user-image-1')), findsOneWidget);
@@ -385,7 +479,7 @@ void main() {
     });
 
     testWidgets('点图片谱进查看器:全程无跟练入口(ADR-0002)', (tester) async {
-      await pumpLibrary(tester);
+      await pumpLibrary(tester, category: '图片谱');
 
       await db.imageChartsDao.add(title: '相册来的谱', image: tinyPngBytes);
       await tester.pumpAndSettle();
@@ -419,12 +513,9 @@ void main() {
       // widget 测试 FakeAsync 区里真通道调用永远等不到响应,必须打桩。
       ImagePickerPlatform.instance = _ThrowingPickerPlatform();
       addTearDown(() => ImagePickerPlatform.instance = _originalPickerPlatform);
-      await pumpLibrary(tester);
+      await pumpLibrary(tester, category: '图片谱');
 
       await tester.scrollUntilVisible(find.text('相册选图'), 200);
-      // 再拖一点让按钮离开视口边缘,settle 后再点(按钮在区头右缘,
-      // 滚停即点容易脱靶)。
-      await tester.drag(find.byType(ListView), const Offset(0, -60));
       await tester.pumpAndSettle();
       await tester.tap(find.text('相册选图'));
       await tester.pumpAndSettle();
@@ -437,22 +528,24 @@ void main() {
       // 选图+验真一环打桩(引擎解码在测试 FakeAsync 区不走真异步,
       // 真选图链在 image_pick_flow_test 真异步下覆盖);对话框→命名→
       // 落库→出卡走真链路。
-      await pumpLibrary(tester, imagePickFlow: _StubPickedFlow());
+      await pumpLibrary(
+        tester,
+        category: '图片谱',
+        imagePickFlow: _StubPickedFlow(),
+      );
 
       await tester.scrollUntilVisible(find.text('相册选图'), 200);
-      await tester.drag(find.byType(ListView), const Offset(0, -60));
       await tester.pumpAndSettle();
       await tester.tap(find.text('相册选图'));
       await tester.pumpAndSettle();
 
       // 命名对话框:预填文件名去扩展名,改个名确认。
       expect(find.byKey(const Key('image-chart-title-input')), findsOneWidget);
-      expect(
-        find.text('my-chart'),
-        findsOneWidget,
-        reason: '建议名 = 文件名去扩展名',
+      expect(find.text('my-chart'), findsOneWidget, reason: '建议名 = 文件名去扩展名');
+      await tester.enterText(
+        find.byKey(const Key('image-chart-title-input')),
+        '相册真图',
       );
-      await tester.enterText(find.byKey(const Key('image-chart-title-input')), '相册真图');
       await tester.tap(find.text('存入曲库'));
       await tester.pumpAndSettle();
 
@@ -470,7 +563,8 @@ void main() {
 /// image_picker 平台打桩:widget 测试 FakeAsync 区里真通道调用永远等
 /// 不到响应(不会抛 MissingPluginException,是挂死),必须从平台接口
 /// 缝注入。生产代码同走 ImagePickerPlatform.instance,别无旁门。
-final ImagePickerPlatform _originalPickerPlatform = ImagePickerPlatform.instance;
+final ImagePickerPlatform _originalPickerPlatform =
+    ImagePickerPlatform.instance;
 
 /// 选择器打不开/平台异常路。
 class _ThrowingPickerPlatform extends ImagePickerPlatform {
@@ -487,8 +581,6 @@ class _ThrowingPickerPlatform extends ImagePickerPlatform {
 /// 测试注释)。
 class _StubPickedFlow extends ImagePickFlow {
   @override
-  Future<ImagePickOutcome> pickAndValidate() async => ImagePicked(
-    bytes: tinyPngBytes,
-    suggestedTitle: 'my-chart',
-  );
+  Future<ImagePickOutcome> pickAndValidate() async =>
+      ImagePicked(bytes: tinyPngBytes, suggestedTitle: 'my-chart');
 }

@@ -24,15 +24,24 @@ class ImageChartsDao extends DatabaseAccessor<AppDatabase>
     return (delete(imageCharts)..where((row) => row.id.equals(id))).go();
   }
 
+  /// 改名只更新标题(工单 32 改名入口;原图与记录 id 不动)。
+  Future<void> renameTitle(int id, String title) {
+    return (update(imageCharts)..where((row) => row.id.equals(id))).write(
+      ImageChartsCompanion(title: Value(title)),
+    );
+  }
+
   /// 全部图片谱,按入库序(id 升序)。
   Future<List<ImageChart>> getAll() {
-    return (select(imageCharts)..orderBy([(row) => OrderingTerm.asc(row.id)]))
-        .get();
+    return (select(
+      imageCharts,
+    )..orderBy([(row) => OrderingTerm.asc(row.id)])).get();
   }
 
   /// 响应式图片谱流:曲库页订阅,选图入库即自动入列。
   Stream<List<ImageChart>> watchAll() {
-    return (select(imageCharts)..orderBy([(row) => OrderingTerm.asc(row.id)]))
-        .watch();
+    return (select(
+      imageCharts,
+    )..orderBy([(row) => OrderingTerm.asc(row.id)])).watch();
   }
 }
