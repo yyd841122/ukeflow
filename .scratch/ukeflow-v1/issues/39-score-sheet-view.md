@@ -24,7 +24,7 @@
 
 **Blocked by:** 38
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] 阶段A：组合定义+和弦行落卡+四层渲染+系统折行+跟随高亮+单轨伴奏示范，装机
 - [ ] 真机目验：四层对齐逐系统对照印张（前奏/主歌/副歌），调号 1=E
@@ -35,3 +35,10 @@
 ## Comments
 
 - 2026-10-24 (立票): /grill-with-docs 全案定案（Q1-Q12）。方向源于工单 37 独奏听验判定变更；读谱台账=工单 37 Comments，数据三源全复用。
+
+
+- 2026-10-24 (认领+实现方案): 三源读定——TAB=`builtin_tab_charts.aiNiBuShiLiangSanTianSolo`(496 音,拍格 0-108,主轴),旋律=`aiNiBuShiLiangSanTian`(168 音,拍格 0-88,+20 对齐主轴),和弦行=44 个拍锚新落(前奏 E A B Bsus4 A B E,照工单 37 前奏台账补 Bsus4=4444;主歌 |E A|B C#m7|A B|E|×2+移位句;副歌A/B;尾 |F#m D7|E|G#7|,拍位=小节首+2 拍一换,延展小节 E 整小节)。指形走 `ChordFingering` 直构(frets ④..① 序),复用 `ChordDiagram` 自绘。**播放复用 TabPracticeController 全套**(count-in/暂停/变速/循环):单轨=start(solo 谱);双轨=纯函数 `buildDualTrackChart`(旋律 beat+20、fret+4——4 半音=整数品,frequency 自动合 E 调)合成合并谱后照常编译,零控制器改动。**简谱推导规则**(数据只含 attack+lyric):度数=C 调 pitch class(与印张度数同,转录保度数)、八度点=实际八度(印张点数−1,照谱角 1=E 读谱一致)、时值=距下音 gap(八分单线/十六分双线/附点/整拍横杠)、延音线弧=后继无缀字(拖腔/装饰连)、休止 0=延续音 gap≥1 拍时本音记 1 拍、余量出 0(节奏总量与印张逐拍闭合;个别印张「音·+休」细分差半拍,目验再调)。视图=整谱一张 CustomPaint 纵滚,系统=横向满幅均分小节(屏宽定 1-4 小节/系统),和弦图落系统顶层行、锚拍对位+防重叠右移;跟随高亮=当位三索引(和弦锚/TAB 音/简谱音)+歌词字,纵向按系统阶梯跳滚。
+- 2026-10-24 (装机冒烟): 全量 823 绿、analyzer 净,debug APK 装机(OPPO PCAM00)。冷启 App 渲染正常、logcat 净(无 E/flutter、无 FATAL)。**深层导航机检受阻(设备态,非 App 缺陷)**:装机后首次 uiautomator dump 树是活的(曲库 tab 点按落位),此后 Flutter 语义桥整空(node=1、零文本),多轮重 launch/dump 均不起;对照实验原生「设置」App dump 完全正常——桥死是设备会话态,重启设备可修(未动用户手机)。谱面页结构已由 widget 测试全锁(score_sheet_page_test:元信息/画布/轨道选择/起播流转/双轨换谱/失败降级),**四层对齐对照印张的真机目验与单/双轨听验留给用户**(票面 checklist 未勾项)。
+
+- 2026-10-24 (code-review 两轴评审+修复): **Standards**:硬违规 2 处已修——①工单文件误起第二个 `## Comments` 节(违反 issue-tracker 单节纪律,已并入原节);②「开始跟谱」为未登记造词(违背 domain.md 词汇纪律),按 GLOSSARY「双轨混播=示范播放方式」改「开始示范」。坏味落地修复:midi 推导改 `UkeString.midi + 品位`(免对数往返)、副标题行收 `ScoreSheetDef.subtitleLine` 单源、`_c`→`_anchor`、页 `_contentWidth` 只在运行体捕获(与视图同约束宽,消布局分叉)、`_soloEntries` 提局部、别名函数清除;架构文档补谱面视图条目。判断题保留:(def,tab,melody) 三元组显式传参(widget API 明示)、三种坐标点类不并记录类型(画笔具名可读)。
+- 2026-10-24 (Spec 评审抓真 bug,已修): **简谱延音线弧端点错位**——`NumNote.mainBeat` 文档写主轴拍、实存旋律拍(少 +20),画笔弧终点按主轴坐标消费致全曲弧线端点错位(前段负钳行尾、后段落错 x);测试只锁 arcOut 布尔漏网。修复:`deriveNumberedNotes` 加 `alignBeats` 参数落主轴拍(布局传 `def.melodyAlignBeats`),补回归测试(你=20、念=107.5)。已录偏离(目验知悉):八度点自实际音高(较印张恒少一枚,认领 comment 在案)、和弦图锚拍对位+防重叠右移(非逐字「行首」)。全量复跑以本修复后为准。

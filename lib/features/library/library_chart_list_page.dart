@@ -1,42 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/chart/score_sheet_defs.dart';
 import '../../core/model/strum_chart.dart';
+import '../../core/model/tab_chart.dart';
 import '../../core/ui/load_error_view.dart';
 import '../../core/ui/centered_hint.dart';
 import '../../data/chart_providers.dart';
 import '../../data/providers.dart';
 import '../play/chart_meta.dart';
 import '../play/practice_page.dart';
+import '../play/score_sheet_page.dart';
 import '../play/tab_chart_page.dart';
 import 'cifraclub_search_page.dart';
 import 'image_chart_viewer_page.dart';
 import 'image_pick_flow.dart';
 import 'text_import_page.dart';
 
+/// 一条独奏谱:组合定义 × 两层谱卡(主轴自曲库列表取=已滤隐藏集;
+/// 旋律层自内置目录直取,是组合内部数据源不受列表可见性影响)。
+typedef SoloChartEntry = ({
+  ScoreSheetDef def,
+  BuiltInTabChart tab,
+  ({String id, TabChart chart}) melody,
+});
+
+/// 独奏谱列表:组合定义驱动,主轴谱卡被隐藏即整条出列。
+List<SoloChartEntry> _soloEntries(List<BuiltInTabChart> tabCharts) => [
+  for (final def in scoreSheetCatalog)
+    for (final tab in tabCharts)
+      if (tab.id == def.tabChartId)
+        (
+        def: def,
+        tab: tab,
+        melody: builtinTabChartCatalog.firstWhere(
+          (entry) => entry.id == def.melodyChartId,
+        ),
+      ),
+];
+
+
 /// 曲库类型目录:增加类型时在此添加一项,目录自动跟进。
 enum LibraryCategory {
   strum('弹唱谱', Icons.queue_music),
   tab('指弹谱', Icons.music_note),
-  solo(
-    '独奏谱',
-    Icons.piano,
-    emptyMessage: '独奏谱即将上线',
-    emptyDetail: '谱面视图将在后续版本提供,敬请期待。',
-  ),
+  solo('独奏谱', Icons.piano),
   image('图片谱', Icons.image_outlined);
 
-  const LibraryCategory(
-    this.title,
-    this.icon, {
-    this.emptyMessage,
-    this.emptyDetail,
-  });
+  const LibraryCategory(this.title, this.icon);
 
   final String title;
   final IconData icon;
-  final String? emptyMessage;
-  final String? emptyDetail;
 }
 
 /// 各类型歌曲列表:入口与管理行为留在所属类型内,数据层保持原样。
@@ -52,17 +66,12 @@ class LibraryChartListPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 类型占位不订阅曲库,无需等待数据库或资产加载。
-    if (category.emptyMessage != null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(category.title)),
-        body: CenteredHint(
-          message: category.emptyMessage!,
-          detail: category.emptyDetail,
-        ),
-      );
-    }
     final libraryAsync = ref.watch(libraryProvider);
+    // 独奏谱解析一次(卡片与空态共用,不重复扫曲库)。
+    final soloEntries = libraryAsync.maybeWhen(
+      data: (library) => _soloEntries(library.tab),
+      orElse: () => const <SoloChartEntry>[],
+    );
     return Scaffold(
       appBar: AppBar(title: Text(category.title)),
       body: ListView(
@@ -110,10 +119,61 @@ class LibraryChartListPage extends ConsumerWidget {
                   },
                 if (library.customStrum.isEmpty) const _CustomEmptyHint(),
               ],
+              if (category == LibraryCategory.solo) ...[
+                // 独奏谱(工单 39):组合定义驱动,点开默认进谱面视图;
+                // 卡内次入口保留四线谱跟练(功能不砍)。可见性随主轴谱卡
+                // 的隐藏集走,简谱旋律层是组合内部数据源,不受列表影响。
+                for (final solo in soloEntries)
+                  _ChartCard(
+                    cardKey: 'solo-chart-${solo.def.id}',
+                    title: solo.def.title,
+                    subtitle: solo.def.subtitleLine(solo.tab.chart),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ScoreSheetPage(
+                          def: solo.def,
+                          tabChart: solo.tab.chart,
+                          melodyChart: solo.melody.chart,
+                        ),
+                      ),
+                    ),
+                    actions: [
+                      IconButton(
+                        key: Key('solo-tab-entry-${solo.def.id}'),
+                        tooltip: '四线谱跟练',
+                        icon: const Icon(Icons.grid_on),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                TabChartPage(chart: solo.tab.chart),
+                          ),
+                        ),
+                      ),
+                    ],
+                    onDelete: () => _hideBuiltin(
+                      context,
+                      ref,
+                      title: solo.def.title,
+                      hide: () => ref
+                          .read(builtinChartVisibilityProvider)
+                          .hideTab(solo.def.tabChartId),
+                    ),
+                  ),
+
+                if (soloEntries.isEmpty)
+                  const CenteredHint(
+                    message: '暂无独奏谱',
+                    detail: '隐藏的内置谱可在设置页恢复。',
+                  ),
+              ],
               if (category == LibraryCategory.tab) ...[
-                // 旧四线谱独奏版保留数据,待谱面视图落地后接入独奏谱类型。
+                // 「·独奏」版主轴归独奏谱类型(组合定义引用,工单 39),
+                // 指弹谱列表只列旋律型。
                 for (final entry in library.tab.where(
-                  (entry) => entry.id != 'ai-ni-bu-shi-liang-san-tian-solo',
+                  (entry) =>
+                      !scoreSheetCatalog.any(
+                        (def) => def.tabChartId == entry.id,
+                      ),
                 ))
                   _ChartCard(
                     cardKey: 'tab-chart-${entry.id}',
@@ -489,6 +549,7 @@ class _ChartCard extends StatelessWidget {
     this.onTap,
     this.onDelete,
     this.onRename,
+    this.actions = const <Widget>[],
   });
 
   final String cardKey;
@@ -496,6 +557,9 @@ class _ChartCard extends StatelessWidget {
   final String? subtitle;
   final bool enabled;
   final VoidCallback? onTap;
+
+  /// 卡内次操作(独奏谱的四线谱跟练次入口),排在删除钮之前。
+  final List<Widget> actions;
 
   /// 删除入口(工单 32):非 null 才出删除钮——三类语义(真删/隐藏)
   /// 由调用方确认后处置,卡片只管呈现。key 取 delete-<卡片 key>,
@@ -514,6 +578,7 @@ class _ChartCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ...actions,
             if (onRename != null)
               IconButton(
                 key: Key('rename-$cardKey'),

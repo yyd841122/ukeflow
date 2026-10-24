@@ -77,6 +77,11 @@ lib/
   （core/practice/practice_state.dart）。
 - 一切发声（节拍 tick、扫弦采样错峰、KS 拨弦、逐音示范）都走 `playClocked` 预定，
   与视觉事件出自**同一份时间轴**——音画同步是结构保证，不是校准出来的。
+- 谱面视图（工单 39，ADR-0008）沿用同一纪律：跟随高亮的当位查
+  core/practice/score_sheet_layout.dart 纯函数（主轴拍位自引擎时刻换算），
+  拍位走 core/audio/beat_scheduling 的节拍语义；双轨混播在编译期合成
+  合并谱（core/practice/dual_track_timeline.dart），播放侧复用指弹
+  逐音管线，无新调度器。
 
 ## 里程碑（中值 ~7.5 周，目标区间 6~10 周）
 

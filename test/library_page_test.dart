@@ -99,8 +99,19 @@ void main() {
         expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
       }
       if (title == '独奏谱') {
-        expect(find.text('独奏谱即将上线\n谱面视图将在后续版本提供,敬请期待。'), findsOneWidget);
-        expect(find.byType(Card), findsNothing);
+        // 工单 39:独奏谱类型位真实化,点开默认进谱面视图。
+        expect(find.text('独奏谱即将上线'), findsNothing);
+        expect(find.text('爱你不是两三天'), findsOneWidget);
+        expect(find.text('梁静茹 · 78 BPM · 1=E'), findsOneWidget);
+        expect(
+          find.byKey(const Key('solo-chart-ai-ni-bu-shi-liang-san-tian-solo')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('solo-tab-entry-ai-ni-bu-shi-liang-san-tian-solo')),
+          findsOneWidget,
+          reason: '四线谱跟练次入口保留',
+        );
       }
       expect(find.text('相册选图'), title == '图片谱' ? findsOneWidget : findsNothing);
       await tester.pageBack();
@@ -237,12 +248,49 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     await openCategory(tester, '独奏谱');
-    expect(find.textContaining('独奏谱即将上线'), findsOneWidget);
-    expect(find.text('曲库加载失败'), findsNothing);
+    // 独奏谱随曲库数据出列(主轴谱卡在 tab 列表里,同批加载失败):
+    // 类型占位时代「不订阅曲库」的隔离已成过去,失败态与其他类型同呈现。
+    expect(find.text('曲库加载失败'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await openCategory(tester, '图片谱');
     expect(find.text('相册选图'), findsOneWidget);
+  });
+
+  // ── 工单 39:独奏谱类型位,谱面视图默认入口 + 四线谱次入口 ──
+
+  testWidgets('点独奏谱卡默认进谱面视图(弹前读谱),弹回回独奏谱列表', (tester) async {
+    await pumpLibrary(tester, category: '独奏谱');
+
+    await tester.tap(
+      find.byKey(const Key('solo-chart-ai-ni-bu-shi-liang-san-tian-solo')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('谱面视图 · 梁静茹 · 78 BPM · 1=E'), findsOneWidget);
+    expect(find.byKey(const Key('score-sheet-canvas')), findsOneWidget);
+    expect(find.text('开始示范'), findsOneWidget, reason: '会话页空闲面板');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('独奏谱'), findsOneWidget);
+  });
+
+  testWidgets('独奏谱卡次入口进四线谱跟练(功能不砍)', (tester) async {
+    await pumpLibrary(tester, category: '独奏谱');
+
+    await tester.tap(
+      find.byKey(const Key('solo-tab-entry-ai-ni-bu-shi-liang-san-tian-solo')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('tab-chart-canvas')),
+      findsOneWidget,
+      reason: '四线谱跟练会话页',
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('独奏谱'), findsOneWidget);
   });
 
   // ── 工单 32:删除(自建谱/用户图片谱真删,内置谱隐藏)──
