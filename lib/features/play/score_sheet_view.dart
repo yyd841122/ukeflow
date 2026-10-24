@@ -139,25 +139,13 @@ class _StripPainter extends CustomPainter {
   final ScoreSheetLayout layout;
   final ColorScheme scheme;
 
-  static const _numFontSize = 14.0;
-  static const _lyricFontSize = 11.0;
-  static const _tabFontSize = 10.0;
+  static const _numFontSize = ScoreSheetLayout.numFontSize;
+  static const _lyricFontSize = ScoreSheetLayout.lyricFontSize;
+  static const _tabFontSize = ScoreSheetLayout.tabFontSize;
 
-  double get _tabTop =>
-      ScoreSheetLayout.chordBandHeight +
-      ScoreSheetLayout.chordTabGap +
-      ScoreSheetLayout.tabTopPad;
-
-  double get _numBandTop =>
-      ScoreSheetLayout.chordBandHeight +
-      ScoreSheetLayout.chordTabGap +
-      ScoreSheetLayout.tabBandHeight;
-
-  double get _numCenterY => _numBandTop + 8 + _numFontSize / 2;
-
-  double get _lyricY => _numBandTop +
-      ScoreSheetLayout.numBandHeight +
-      ScoreSheetLayout.lyricBandHeight / 2;
+  double get _tabTop => ScoreSheetLayout.tabBandTop;
+  double get _numCenterY => ScoreSheetLayout.numCenterY;
+  double get _lyricY => ScoreSheetLayout.lyricCenterY;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -168,7 +156,7 @@ class _StripPainter extends CustomPainter {
     // 全休止小节:四层皆无,简谱带画全休止 0。
     for (final bar in layout.emptyBars) {
       _text(canvas, '0',
-          Offset(layout.barX(bar) + layout.stripX(2) - layout.stripX(0), _numCenterY),
+          Offset(layout.barX(bar) + ScoreSheetLayout.stripPxPerBeat, _numCenterY),
           _numFontSize, scheme.onSurface.withValues(alpha: 0.55));
     }
   }
@@ -333,23 +321,9 @@ class _StripHighlightPainter extends CustomPainter {
   final ColorScheme scheme;
   final ScoreCursor? cursor;
 
-  static const _numFontSize = 14.0;
-  static const _lyricFontSize = 11.0;
-  static const _tabFontSize = 10.0;
-
-  double get _tabTop =>
-      ScoreSheetLayout.chordBandHeight +
-      ScoreSheetLayout.chordTabGap +
-      ScoreSheetLayout.tabTopPad;
-
-  double get _numBandTop => _tabTop - ScoreSheetLayout.tabTopPad +
-      3 * ScoreSheetLayout.tabLineGap + 8;
-
-  double get _numCenterY => _numBandTop + 8 + _numFontSize / 2;
-
-  double get _lyricY => _numBandTop +
-      ScoreSheetLayout.numBandHeight +
-      ScoreSheetLayout.lyricBandHeight / 2;
+  // 纵带 y 与字号一律取自内核单源——与静态带逐像素同位
+  //(真机教训:间距调整后覆盖层公式没跟上,当前音/歌词错位 8px)。
+  double get _tabTop => ScoreSheetLayout.tabBandTop;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -385,7 +359,7 @@ class _StripHighlightPainter extends CustomPainter {
           ..color = scheme.primary);
         canvas.drawCircle(center, 8, Paint()..color = scheme.primary);
         _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
-            _tabFontSize, scheme.onPrimary, bold: true);
+            ScoreSheetLayout.tabFontSize, scheme.onPrimary, bold: true);
       }
     }
 
@@ -395,22 +369,24 @@ class _StripHighlightPainter extends CustomPainter {
       final point = layout.numPoints[cursor.melodyIndex];
       final symbol = point.symbol;
       final x = point.x + 2;
-      _text(canvas, '${symbol.degree}', Offset(x, _numCenterY), _numFontSize,
-          scheme.primary, bold: true, alignLeft: true);
+      _text(canvas, '${symbol.degree}', Offset(x, ScoreSheetLayout.numCenterY),
+          ScoreSheetLayout.numFontSize, scheme.primary, bold: true,
+          alignLeft: true);
       final dotPaint = Paint()..color = scheme.primary;
       for (var d = 0; d < symbol.highDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, _numCenterY - _numFontSize / 2 - 3 - d * 3.5), 1.4,
-          dotPaint);
+          Offset(x + 4, ScoreSheetLayout.numCenterY -
+              ScoreSheetLayout.numFontSize / 2 - 3 - d * 3.5), 1.4, dotPaint);
       }
       for (var d = 0; d < symbol.lowDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, _numCenterY + _numFontSize / 2 + 3 + d * 3.5), 1.4,
-          dotPaint);
+          Offset(x + 4, ScoreSheetLayout.numCenterY +
+              ScoreSheetLayout.numFontSize / 2 + 3 + d * 3.5), 1.4, dotPaint);
       }
       if (symbol.lyric != null) {
-        _text(canvas, symbol.lyric!, Offset(point.x + 2, _lyricY),
-            _lyricFontSize, scheme.primary, bold: true, alignLeft: true);
+        _text(canvas, symbol.lyric!, Offset(point.x + 2,
+            ScoreSheetLayout.lyricCenterY), ScoreSheetLayout.lyricFontSize,
+            scheme.primary, bold: true, alignLeft: true);
       }
     }
   }

@@ -299,6 +299,28 @@ class ScoreSheetLayout {
   /// 琴弦行与歌词行之间同步放宽(真机反馈 2026-10-24)。
   static const numBandHeight = 38.0;
   static const lyricBandHeight = 22.0;
+
+  // 字号(静态带与当位覆盖层重绘必须逐像素同位,字号一并单源)。
+  static const numFontSize = 14.0;
+  static const lyricFontSize = 11.0;
+  static const tabFontSize = 10.0;
+
+  // ── 纵带 y 坐标(唯一来源;静态带与当位覆盖层共用,改间距只动这里)──
+
+  /// TAB 弦线区顶(①弦线 y)。
+  static double get tabBandTop =>
+      chordBandHeight + chordTabGap + tabTopPad;
+
+  /// 简谱带顶。
+  static double get numBandTop =>
+      chordBandHeight + chordTabGap + tabBandHeight;
+
+  /// 简谱度数行的纵中心。
+  static double get numCenterY => numBandTop + 8 + numFontSize / 2;
+
+  /// 歌词行的纵中心。
+  static double get lyricCenterY =>
+      numBandTop + numBandHeight + lyricBandHeight / 2;
   static const systemGap = 16.0;
   static const systemHeight = chordBandHeight +
       chordTabGap +

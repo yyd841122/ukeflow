@@ -57,6 +57,26 @@ void main() {
     test('全休止小节只有前奏 bar 0', () {
       expect(l.emptyBars, [0]);
     });
+
+    test('纵带坐标单源:静态带与当位覆盖层共用(间距改动只动内核)', () {
+      // 真机教训:间距调整后覆盖层公式没跟上,当前音/歌词错位 8px。
+      expect(ScoreSheetLayout.tabBandTop, 96.0); // 68 + 20 + 8
+      expect(ScoreSheetLayout.numBandTop, 146.0); // 68 + 20 + 58
+      expect(
+        ScoreSheetLayout.numCenterY,
+        ScoreSheetLayout.numBandTop + 8 + ScoreSheetLayout.numFontSize / 2,
+      );
+      expect(
+        ScoreSheetLayout.lyricCenterY,
+        ScoreSheetLayout.numBandTop + ScoreSheetLayout.numBandHeight +
+            ScoreSheetLayout.lyricBandHeight / 2,
+      );
+      // 层序:和弦带 < 琴弦 < 简谱 < 歌词。
+      expect(ScoreSheetLayout.tabBandTop,
+          lessThan(ScoreSheetLayout.numBandTop));
+      expect(ScoreSheetLayout.numCenterY,
+          lessThan(ScoreSheetLayout.lyricCenterY));
+    });
   });
 
   group('简谱符号推导(合成旋律逐符号)', () {
