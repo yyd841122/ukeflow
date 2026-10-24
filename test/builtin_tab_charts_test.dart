@@ -319,12 +319,12 @@ void main() {
     expect(song.notes.last.beat, 87.5);
   });
 
-  test('爱你不是两三天·独奏:前奏 5 小节 61 音,权威源 TAB 行转录抽查', () {
+  test('爱你不是两三天·独奏:前奏+主歌+副歌 496 音,权威源 TAB 行转录抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian-solo')
         .chart;
 
-    expect(song.notes, hasLength(61));
+    expect(song.notes, hasLength(496));
     expect(song.tempo, 78);
 
     // 小节2 卷弦起 = E 和弦 4442 块(低弦→高弦),接 ③④②③ 拨弦序列。
@@ -353,10 +353,47 @@ void main() {
       [(2, 0, 13.0), (1, 0, 13.25), (1, 2, 13.5)],
     );
 
-    // 末音 = ①8=F5 @18(印张圆圈数字+延音号,二拍延音),曲末 20 拍整。
-    final last = song.notes.last;
-    expect((last.string, last.fret, last.beat), (1, 8, 18.0));
-    expect(tabTotalBeats(song), 20);
+    // 前奏末音 = ①8=F5 @18(印张圆圈数字+延音号,二拍延音)。
+    final fermata = song.notes.singleWhere((n) => n.beat == 18.0);
+    expect((fermata.string, fermata.fret), (1, 8));
+
+    // 主歌 b6 E 堆 @20(④②①,③ 位竖杆=虚按不发音)+ ③4 补音 @20.5。
+    expect(
+      song.notes.where((n) => n.beat == 20.0).map((n) => (n.string, n.fret)),
+      [(4, 4), (2, 4), (1, 2)],
+    );
+    expect(
+      song.notes.where((n) => n.beat == 20.5).map((n) => (n.string, n.fret)),
+      [(3, 4)],
+    );
+    // 延展小节(b9 E 整小节)重拍不重击低音:beat 34 只 ②①。
+    expect(
+      song.notes.where((n) => n.beat == 34.0).map((n) => (n.string, n.fret)),
+      [(2, 4), (1, 2)],
+    );
+    // 副歌A b19 G#7(1323)堆 @72;高置段 b22 首扫 @84 = E 全四弦,
+    // 拍 86 = ×柱连音环不占拍(无攻击)。
+    expect(
+      song.notes.where((n) => n.beat == 72.0).map((n) => (n.string, n.fret)),
+      [(4, 1), (2, 2), (1, 3)],
+    );
+    expect(
+      song.notes.where((n) => n.beat == 84.0).map((n) => (n.string, n.fret)),
+      [(4, 4), (3, 4), (2, 4), (1, 2)],
+    );
+    expect(song.notes.where((n) => n.beat == 86.0), isEmpty);
+    // b25 D7 闷音柱 {①3③2}(②④×不发音);曲末扫 @107.75 = G#7 全四弦。
+    expect(
+      song.notes.where((n) => n.beat == 98.0).map((n) => (n.string, n.fret)),
+      [(3, 2), (1, 3)],
+    );
+    expect(
+      song.notes.where((n) => n.beat == 107.75).map((n) => (n.string, n.fret)),
+      [(4, 1), (3, 3), (2, 2), (1, 3)],
+    );
+
+    // 曲末 112 拍(末扫 107.75 上取整到整小节线)。
+    expect(tabTotalBeats(song), 112);
 
     // 器乐谱无缀字;音域 C#4..F5(61..77,印张 E 调指形原样)。
     expect(song.notes.where((n) => n.lyric != null), isEmpty);
