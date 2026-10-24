@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/beat_scheduling.dart' show beatsPerBar;
 import '../../core/chart/score_sheet_defs.dart';
 import '../../core/model/tab_chart.dart';
 import '../../core/practice/dual_track_timeline.dart';
@@ -45,8 +46,6 @@ enum ScoreTrackMode { accompaniment, dual }
 class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreTrackMode _trackMode = ScoreTrackMode.accompaniment;
   ScoreCursor? _visual;
-  final _scroll = ScrollController();
-  int _followedSystem = -1;
 
   late final TabPracticeController _controller;
 
@@ -65,7 +64,6 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   @override
   void resetVisual() {
     _visual = null;
-    _followedSystem = -1;
   }
 
   /// 轨道 → 会话谱:单轨 = 伴奏原样;双轨 = 合并谱(旋律 +20 拍/+4 半音
@@ -95,21 +93,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     final cursor = _layout.currentAt(mainBeat);
     if (cursor != _visual) {
       setState(() => _visual = cursor);
-      _followSystem(cursor);
     }
-  }
-
-  /// 纵向跟滚(阶梯式,与四线谱跟练同一纪律):当前系统变化才平移,把
-  /// 当前系统锚回视口顶部。布局几何由系统高常量直接换算,无第二布局源。
-  void _followSystem(ScoreCursor cursor) {
-    if (!_scroll.hasClients) return;
-    final system = _systemOfCursor(cursor);
-    if (system == _followedSystem) return;
-    _followedSystem = system;
-    final target = (system * ScoreSheetLayout.systemHeight)
-        .clamp(0.0, _scroll.position.maxScrollExtent);
-    if ((target - _scroll.offset).abs() < 1) return;
-    _scroll.jumpTo(target);
   }
 
   int _systemOfCursor(ScoreCursor cursor) =>
@@ -138,7 +122,6 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
   @override
   void dispose() {
-    _scroll.dispose();
     stopSessionOnUnmount([_controller.stop]);
     super.dispose();
   }
@@ -291,17 +274,29 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     if (visual == null || timeline == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    // 运行态只出当前一行(谱表系统),播完切下一行——真机反馈整页
+    // 折行难追播放点(2026-10-24),与四线谱跟练的阶梯平移同一纪律。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ScoreSheetView(
-            def: widget.def,
-            tabChart: widget.tabChart,
-            melodyChart: widget.melodyChart,
-            cursor: visual,
-            scrollController: _scroll,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: ScoreSheetSystemView(
+              def: widget.def,
+              tabChart: widget.tabChart,
+              melodyChart: widget.melodyChart,
+              system: _systemOfCursor(visual),
+              cursor: visual,
+              layout: _layoutWidth == _contentWidth ? _layoutCache : null,
+            ),
           ),
+        ),
+        Text(
+          '${_beatInBar(visual)}',
+          key: const Key('score-beat-number'),
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -318,6 +313,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
         const SizedBox(height: 8),
       ],
     );
+  }
+
+  /// 小节内拍号(1..4,随当位音所在拍;曲首无当前音记 1)。
+  int _beatInBar(ScoreCursor cursor) {
+    if (cursor.tabIndex < 0) return 1;
+    final beat = _layout.tabNotes[cursor.tabIndex].beat;
+    return (beat % beatsPerBar).floor() + 1;
   }
 
 

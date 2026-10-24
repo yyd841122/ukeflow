@@ -89,11 +89,16 @@ void main() {
     expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
 
-    // 跨过预备(约 3077ms)进正曲:跟随视图就位。
+    // 跨过预备(约 3077ms)进正曲:单系统一行视图就位(整页易乱,真机
+    // 反馈改一行),拍号与进度条在位。
     await advanceAndPump(tester, 3300);
     expect(find.byKey(const Key('score-prep-count')), findsNothing);
+    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget,
+        reason: '运行态只出当前一行');
+    expect(find.byKey(const Key('score-sheet-canvas')), findsNothing,
+        reason: '整页滚动视图不进运行态');
+    expect(find.byKey(const Key('score-beat-number')), findsOneWidget);
     expect(find.byKey(const Key('score-progress')), findsOneWidget);
-    expect(find.byKey(const Key('score-sheet-canvas')), findsOneWidget);
   });
 
   testWidgets('双轨混播换谱起播:合并谱(旋律+20 拍/+4 半音)照常编译走拍', (
@@ -109,6 +114,7 @@ void main() {
     expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
 
     await advanceAndPump(tester, 3300);
+    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget);
     expect(find.byKey(const Key('score-progress')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -100,6 +100,81 @@ class ScoreSheetView extends StatelessWidget {
   }
 }
 
+/// 单系统视图(运行态,GLOSSARY「谱表系统」):只画当前一行四层——
+/// 真机跟练视线只有一行,播完切下一行(用户真机反馈 2026-10-24:整页
+/// 折行难追播放点;与四线谱跟练的阶梯平移同一「以静为主」纪律)。几何
+/// 与整页共用 [ScoreSheetLayout] 与同一画笔。
+class ScoreSheetSystemView extends StatelessWidget {
+  const ScoreSheetSystemView({
+    super.key,
+    required this.def,
+    required this.tabChart,
+    required this.melodyChart,
+    required this.system,
+    this.cursor,
+    this.layout,
+  });
+
+  final ScoreSheetDef def;
+  final TabChart tabChart;
+  final TabChart melodyChart;
+
+  /// 当前系统号(播放头所在行)。
+  final int system;
+
+  final ScoreCursor? cursor;
+
+  /// 预建布局(页缓存注入则不再按帧重建/重排序;缺省自建)。
+  final ScoreSheetLayout? layout;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = this.layout ??
+            ScoreSheetLayout(
+              def: def,
+              tabChart: tabChart,
+              melodyChart: melodyChart,
+              contentWidth: constraints.maxWidth,
+            );
+        return SizedBox(
+          key: const Key('score-sheet-line'),
+          width: constraints.maxWidth,
+          height: ScoreSheetLayout.systemHeight,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ScoreSystemPainter(
+                    layout,
+                    system.clamp(0, math.max(0, layout.systemCount - 1)),
+                    scheme,
+                    cursor,
+                    showKeySignature: true,
+                  ),
+                ),
+              ),
+              for (final glyph in layout.chordsInSystem(system))
+                Positioned(
+                  left: glyph.x,
+                  top: 0,
+                  width: ScoreSheetLayout.chordGlyphWidth,
+                  child: _ChordGlyph(
+                    anchor: glyph.anchor,
+                    highlighted:
+                        cursor != null && cursor!.chordIndex == glyph.anchorIndex,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// 和弦位:名 + 图(44px 窗),当前位描边点亮。
 class _ChordGlyph extends StatelessWidget {
   const _ChordGlyph({required this.anchor, required this.highlighted});
@@ -141,12 +216,21 @@ class _ChordGlyph extends StatelessWidget {
 /// (度数/八度点/时值线/延音线弧/休止 0)+ 歌词缀字 + 谱角调号(首系统)。
 /// 带当位时按三级配色(当前/已过/未到),几何不动。
 class _ScoreSystemPainter extends CustomPainter {
-  _ScoreSystemPainter(this.layout, this.system, this.scheme, this.cursor);
+  _ScoreSystemPainter(
+    this.layout,
+    this.system,
+    this.scheme,
+    this.cursor, {
+    this.showKeySignature = false,
+  });
 
   final ScoreSheetLayout layout;
   final int system;
   final ColorScheme scheme;
   final ScoreCursor? cursor;
+
+  /// 单系统视图每行都标谱角(整页视图只在首系统,行首不重复)。
+  final bool showKeySignature;
 
   static const _numFontSize = 14.0;
   static const _lyricFontSize = 11.0;
@@ -173,6 +257,10 @@ class _ScoreSystemPainter extends CustomPainter {
     _paintTab(canvas);
     _paintNumbered(canvas);
     _paintLyrics(canvas);
+    if (showKeySignature || system == 0) {
+      _text(canvas, layout.def.keySignature, const Offset(4, 12), 13,
+          scheme.onSurface, bold: true);
+    }
   }
 
   void _paintBarlines(Canvas canvas) {
