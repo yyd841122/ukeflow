@@ -102,6 +102,11 @@ class ScoreTabPoint {
     this.x, {
     required this.isChordPluck,
     required this.hiddenByStrum,
+    required this.groupUnderlines,
+    required this.groupDotted,
+    required this.groupDashes,
+    required this.groupHoldBeats,
+    required this.groupEndX,
   });
 
   final int noteIndex;
@@ -115,6 +120,18 @@ class ScoreTabPoint {
 
   /// 被扫弦/卷弦事件覆盖(同拍 4 音组画箭头/波浪,不再逐弦画 ×)。
   final bool hiddenByStrum;
+
+  /// 同拍组的时值记号(距下一组,与简谱同一推导):八分单杠/十六分双杠/
+  /// 附点/整拍横杠——印张 TAB 行的节奏杆。
+  final int groupUnderlines;
+  final bool groupDotted;
+  final int groupDashes;
+
+  /// 组时值 ≥ 2 拍 = 长音(印张圆圈数字/椭圆×柱/延音弧一族)。
+  final double groupHoldBeats;
+
+  /// 组尾 x(下一组的 x 或带尾),长音延音弧画到这儿。
+  final double groupEndX;
 }
 
 class ScoreNumPoint {
@@ -239,6 +256,31 @@ class ScoreSheetLayout {
           stripX(def.chords[i].beat) - chordGlyphWidth / 2,
         ),
     ];
+    // 组时值:同拍一组,距下一组的拍距 = 印张节奏杆(与简谱同推导)。
+    final distinctBeats = _tabBeats.toSet().toList()..sort();
+    double groupDuration(double beat) {
+      final idx = distinctBeats.indexOf(beat);
+      final next = idx + 1 < distinctBeats.length
+          ? distinctBeats[idx + 1]
+          : (distinctBeats.isEmpty
+              ? 0
+              : (distinctBeats.last.ceil() / beatsPerBar).ceil() *
+                  beatsPerBar);
+      return next - beat;
+    }
+
+    double groupEndX(double beat) {
+      final idx = distinctBeats.indexOf(beat);
+      final next = idx + 1 < distinctBeats.length
+          ? distinctBeats[idx + 1]
+          : (distinctBeats.isEmpty
+              ? 0.0
+              : ((distinctBeats.last.ceil() / beatsPerBar).ceil() *
+                  beatsPerBar)
+                  .toDouble());
+      return stripX(next);
+    }
+
     tabPoints = [
       for (var i = 0; i < tabNotes.length; i++)
         ScoreTabPoint(
@@ -247,6 +289,11 @@ class ScoreSheetLayout {
           stripX(_tabBeats[i]),
           isChordPluck: _tabChordPluck[i],
           hiddenByStrum: _tabHiddenByStrum[i],
+          groupUnderlines: durationMarkOf(groupDuration(_tabBeats[i])).underlines,
+          groupDotted: durationMarkOf(groupDuration(_tabBeats[i])).dotted,
+          groupDashes: durationMarkOf(groupDuration(_tabBeats[i])).dashes,
+          groupHoldBeats: groupDuration(_tabBeats[i]),
+          groupEndX: groupEndX(_tabBeats[i]),
         ),
     ];
     numPoints = [
@@ -359,6 +406,26 @@ class ScoreSheetLayout {
   /// 横带总宽:覆盖主轴网格收口 + 右留白。
   double get stripWidth =>
       (barCount == 0 ? stripLeftPad : barX(barCount)) + stripRightPad;
+
+  /// 连音 × 柱(印张「×柱带连音弧=不占拍无攻击」):扫弦段(有 ≥3 个
+  /// 扫弦事件的小节)的小节第 3 拍,若该拍无攻击,画淡 × 柱并从上一组
+  /// 引延音弧(高置段/尾每小节一处,数据空档与印张逐一吻合)。
+  late final List<double> tiedColumns = _computeTiedColumns();
+
+  List<double> _computeTiedColumns() {
+    final barsWithStrums = <int>{};
+    for (final e in def.strums) {
+      barsWithStrums.add(e.beat ~/ beatsPerBar);
+    }
+    final attacked = _tabBeats.toSet();
+    final out = <double>[];
+    for (final bar in barsWithStrums) {
+      final beat = (bar * beatsPerBar + 2).toDouble();
+      if (beat >= barCount * beatsPerBar) continue;
+      if (!attacked.contains(beat)) out.add(beat);
+    }
+    return out..sort();
+  }
 
   /// 跟随高亮的跟滚锚点:播放头恒在视口左 1/3(流水展示,用户 2026-10-24)。
   static const followViewportFraction = 1 / 3;

@@ -58,6 +58,26 @@ void main() {
       expect(l.emptyBars, [0]);
     });
 
+    test('TAB 组时值:八分单杠/整拍/长音(≥2 拍延音)', () {
+      // 主歌两拍单元 @20(距下组 0.5)= 八分单杠。
+      final g20 = l.tabPoints.firstWhere((p) => p.note.beat == 20.0);
+      expect(g20.groupUnderlines, 1);
+      expect(g20.groupDashes, 0);
+      // b5 末音 ①8@18(距下组 20 → 2 拍)= 长音延音 + 无杠。
+      final g18 = l.tabPoints.firstWhere((p) => p.note.beat == 18.0);
+      expect(g18.groupHoldBeats, 2.0);
+      expect(g18.groupUnderlines, 0);
+      expect(g18.groupEndX, l.stripX(20.0));
+    });
+
+    test('连音×柱:扫弦段小节第 3 拍无攻击处(86/90/102/106)', () {
+      expect(l.tiedColumns, [86.0, 90.0, 102.0, 106.0]);
+      // 数据空档互证:这些拍确实无音。
+      for (final beat in l.tiedColumns) {
+        expect(l.tabPoints.where((p) => p.note.beat == beat), isEmpty);
+      }
+    });
+
     test('纵带坐标单源:静态带与当位覆盖层共用(间距改动只动内核)', () {
       // 真机教训:间距调整后覆盖层公式没跟上,当前音/歌词错位 8px。
       expect(ScoreSheetLayout.tabBandTop, 96.0); // 68 + 20 + 8
