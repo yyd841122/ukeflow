@@ -101,6 +101,7 @@ class ScoreTabPoint {
     this.note,
     this.x, {
     required this.isChordPluck,
+    required this.hiddenByStrum,
   });
 
   final int noteIndex;
@@ -111,6 +112,9 @@ class ScoreTabPoint {
   /// 品位按当小节和弦指形」(工单 37);画 × 与画品位数字是同一个物理
   /// 动作,× 照印张更直观。旋律音不落在指形位,保持数字(印张同)。
   final bool isChordPluck;
+
+  /// 被扫弦/卷弦事件覆盖(同拍 4 音组画箭头/波浪,不再逐弦画 ×)。
+  final bool hiddenByStrum;
 }
 
 class ScoreNumPoint {
@@ -226,6 +230,7 @@ class ScoreSheetLayout {
     ];
     _chordBeats = [for (final c in def.chords) c.beat];
     _tabChordPluck = _computeChordPlucks();
+    _tabHiddenByStrum = _computeStrumHidden();
     chordGlyphs = [
       for (var i = 0; i < def.chords.length; i++)
         ScoreGlyph(
@@ -241,6 +246,7 @@ class ScoreSheetLayout {
           tabNotes[i],
           stripX(_tabBeats[i]),
           isChordPluck: _tabChordPluck[i],
+          hiddenByStrum: _tabHiddenByStrum[i],
         ),
     ];
     numPoints = [
@@ -366,6 +372,7 @@ class ScoreSheetLayout {
   );
 
   late final List<bool> _tabChordPluck;
+  late final List<bool> _tabHiddenByStrum;
   late final List<double> _tabBeats;
   late final List<double> _melodyBeats;
   late final List<double> _chordBeats;
@@ -383,6 +390,25 @@ class ScoreSheetLayout {
       plucks[i] = shapeFret == note.fret;
     }
     return plucks;
+  }
+
+  /// 扫弦事件的种类查询(同拍一组);无事件 null。
+  ScoreStrumKind? strumKindAt(double mainBeat) {
+    for (final e in def.strums) {
+      if (e.beat == mainBeat) return e.kind;
+    }
+    return null;
+  }
+
+  /// 被扫弦遮蔽的逐音 ×:该拍有扫弦事件且本音落指形位
+  /// (旋律音即使在扫弦拍也保持数字)。
+  List<bool> _computeStrumHidden() {
+    final hidden = List<bool>.filled(tabNotes.length, false);
+    for (var i = 0; i < tabNotes.length; i++) {
+      hidden[i] =
+          strumKindAt(_tabBeats[i]) != null && _tabChordPluck[i];
+    }
+    return hidden;
   }
 
   /// 升序拍位列表里最后一个 ≤ [beat] 的下标;无则 -1。二分查找。

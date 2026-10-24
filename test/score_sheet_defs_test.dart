@@ -144,4 +144,40 @@ void main() {
       );
     }
   });
+
+  test('扫弦事件表:每个事件拍都有同拍 ≥3 音且落指形的组(与谱卡互证)', () {
+    final def = scoreSheetCatalog.single;
+    final tab = charts[def.tabChartId]!;
+    final shapes = <String, List<int>>{};
+    for (final c in def.chords) {
+      shapes.putIfAbsent(c.label, () => c.fingering.frets);
+    }
+    String chordAt(double beat) {
+      String? hit;
+      for (final c in def.chords) {
+        if (c.beat <= beat) hit = c.label;
+      }
+      return hit!;
+    }
+
+    for (final e in def.strums) {
+      final group = tab.notes.where((n) => n.beat == e.beat).toList();
+      expect(group.length, greaterThanOrEqualTo(3),
+          reason: '@${e.beat} 应为扫弦组');
+      final shape = shapes[chordAt(e.beat)]!;
+      final plucks = group
+          .where((n) => shape[4 - n.string] == n.fret)
+          .length;
+      expect(plucks, greaterThanOrEqualTo(3),
+          reason: '@${e.beat} 扫弦组至少 3 弦落指形');
+    }
+    // 主歌(拍 20-68)无扫弦(全拨堆)。
+    expect(def.strums.where((e) => e.beat >= 20 && e.beat < 68), isEmpty);
+    // b4 @12.0(堆+旋律①2)不是扫弦。
+    expect(def.strums.any((e) => e.beat == 12.0), isFalse);
+    // 升序不重拍。
+    for (var i = 1; i < def.strums.length; i++) {
+      expect(def.strums[i].beat, greaterThan(def.strums[i - 1].beat));
+    }
+  });
 }

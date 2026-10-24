@@ -67,13 +67,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     _visual = null;
   }
 
-  /// 轨道 → 会话谱:单轨 = 伴奏原样;双轨 = 合并谱(旋律 +20 拍/+4 半音
-  /// 在编译处落定)。
-  TabChart _chartFor(ScoreTrackMode mode) => switch (mode) {
-    ScoreTrackMode.accompaniment => widget.tabChart,
-    ScoreTrackMode.dual =>
-      buildDualTrackChart(widget.def, widget.tabChart, widget.melodyChart),
-  };
+  /// 轨道 → 会话谱:单轨 = 伴奏错峰播放谱;双轨 = 合并谱(旋律 +20 拍/
+  /// +4 半音,伴奏同样错峰)。四线谱跟练次入口仍用原谱(模型分界不动)。
+  TabChart _chartFor(ScoreTrackMode mode) => buildScorePlaybackChart(
+    widget.def,
+    widget.tabChart,
+    melodyChart: mode == ScoreTrackMode.dual ? widget.melodyChart : null,
+  );
 
   @override
   void onPoll() {

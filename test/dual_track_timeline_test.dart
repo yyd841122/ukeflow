@@ -17,19 +17,20 @@ void main() {
   final melody = charts[def.melodyChartId]!;
 
   group('双轨合并谱', () {
-    final merged = buildDualTrackChart(def, solo, melody);
+    final merged = buildScorePlaybackChart(def, solo, melodyChart: melody);
 
-    test('两轨全量合并:496 伴奏音原样 + 168 旋律音移位', () {
+    test('两轨全量合并:496 伴奏音 + 168 旋律音移位', () {
       expect(merged.notes.length, solo.notes.length + melody.notes.length);
     });
 
-    test('伴奏轨原样:逐音等值(同弦同品同拍)', () {
+    test('伴奏轨:同弦同品保持(扫弦拍允许错峰位移)', () {
       for (final note in solo.notes) {
         expect(
           merged.notes.any((n) =>
               n.string == note.string &&
               n.fret == note.fret &&
-              n.beat == note.beat),
+              n.beat >= note.beat &&
+              n.beat < note.beat + 0.5),
           isTrue,
           reason: '伴奏音丢失:$note',
         );
@@ -43,7 +44,8 @@ void main() {
           (n) =>
               n.string == note.string &&
               n.fret == note.fret + shift &&
-              n.beat == note.beat + def.melodyAlignBeats,
+              n.beat >= note.beat + def.melodyAlignBeats &&
+              n.beat < note.beat + def.melodyAlignBeats + 0.5,
           orElse: () => throw TestFailure('旋律音移位丢失:$note'),
         );
         expect(
@@ -62,8 +64,33 @@ void main() {
     });
   });
 
+  test('扫弦错峰:卷弦 70ms/弦 ④→①,上扫 ①→④,非扫弦拍不动', () {
+    final single = buildScorePlaybackChart(def, solo);
+    double beatOf(int string, double beat) => single.notes
+        .firstWhere((n) => n.beat >= beat && n.beat < beat + 0.4 && n.string == string)
+        .beat;
+    final msToBeats = solo.tempo / 60000.0;
+
+    // @4.0 卷弦(E,慢扫 70ms/弦,④→①):④ 不动,① +3×70ms。
+    expect(beatOf(4, 4.0), 4.0);
+    expect(beatOf(3, 4.0), closeTo(4.0 + 70 * msToBeats, 1e-9));
+    expect(beatOf(1, 4.0), closeTo(4.0 + 210 * msToBeats, 1e-9));
+
+    // @9.5 下扫(B,快扫 25ms/弦,④→①)。
+    expect(beatOf(4, 9.5), 9.5);
+    expect(beatOf(1, 9.5), closeTo(9.5 + 75 * msToBeats, 1e-9));
+
+    // @7.5 上扫(A,快扫,①→④):① 不动,④ 殿后 +75ms。
+    expect(beatOf(1, 7.5), 7.5);
+    expect(beatOf(4, 7.5), closeTo(7.5 + 75 * msToBeats, 1e-9));
+
+    // 主歌拨堆 @20(非扫弦):同拍不动。
+    expect(beatOf(4, 20.0), 20.0);
+    expect(beatOf(1, 20.0), 20.0);
+  });
+
   test('拍位对齐:编译后旋律轨事件与伴奏轨同拍事件同刻(主轴 +20 恒定)', () {
-    final merged = buildDualTrackChart(def, solo, melody);
+    final merged = buildScorePlaybackChart(def, solo, melodyChart: melody);
     final timeline = compileTabTimeline(
       chart: merged,
       bpm: merged.tempo.toDouble(),

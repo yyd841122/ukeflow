@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/chart/score_sheet_defs.dart';
@@ -197,12 +199,60 @@ class _StripPainter extends CustomPainter {
 
   void _paintTab(Canvas canvas) {
     for (final point in layout.tabPoints) {
+      // 被扫弦/卷弦覆盖的逐弦 × 不画(事件位画箭头/波浪,见下)。
+      if (point.hiddenByStrum) continue;
       final y =
           _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
       final center = Offset(point.x, y);
       // 印张 ×(品位按当前和弦指形,图在其上方)或旋律品位数字。
       _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
           _tabFontSize, scheme.onSurface);
+    }
+    // 扫弦/卷弦记号:直杆+箭头(下/上)、波浪(卷弦),压在事件拍位上。
+    for (final e in layout.def.strums) {
+      _paintStrumGlyph(canvas, layout.stripX(e.beat), e.kind);
+    }
+  }
+
+  /// 扫弦记号:纵杆贯穿四弦,箭头指发声方向;卷弦画波浪(慢扫)。
+  void _paintStrumGlyph(Canvas canvas, double x, ScoreStrumKind kind) {
+    final top = _tabTop - 4;
+    final bottom = _tabTop + 3 * ScoreSheetLayout.tabLineGap + 4;
+    final paint = Paint()
+      ..color = scheme.onSurface
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+    switch (kind) {
+      case ScoreStrumKind.roll:
+        // 波浪:三段小弧连成的竖向 zigzag(慢扫)。
+        final path = Path();
+        var y = top;
+        var dir = 1.0;
+        path.moveTo(x, y);
+        while (y < bottom) {
+          y = math.min(y + 7, bottom);
+          path.quadraticBezierTo(x + 5 * dir, y - 3.5, x, y);
+          dir = -dir;
+        }
+        canvas.drawPath(path, paint..strokeWidth = 1.6);
+      case ScoreStrumKind.strumDown:
+        canvas.drawLine(Offset(x, top), Offset(x, bottom - 4), paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(x - 5, bottom - 9)
+            ..lineTo(x, bottom)
+            ..lineTo(x + 5, bottom - 9),
+          paint..strokeWidth = 1.8,
+        );
+      case ScoreStrumKind.strumUp:
+        canvas.drawLine(Offset(x, top + 4), Offset(x, bottom), paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(x - 5, top + 9)
+            ..lineTo(x, top)
+            ..lineTo(x + 5, top + 9),
+          paint..strokeWidth = 1.8,
+        );
     }
   }
 

@@ -204,6 +204,24 @@ void main() {
       expect(pluckAt(18.0, 1), isFalse);
     });
 
+    test('扫弦拍:落指形的 × 被事件遮蔽,旋律数字保留', () {
+      // @84.0 卷弦段扫弦(下扫):四弦 × 全遮蔽。
+      final strums84 = l.tabPoints.where((p) => p.note.beat == 84.0);
+      expect(strums84, hasLength(4));
+      for (final p in strums84) {
+        expect(p.hiddenByStrum, isTrue, reason: '${p.note}');
+      }
+      // @12.0 堆+旋律(非扫弦):堆 × 保留、旋律 ①2 保留。
+      final b12 = l.tabPoints.where((p) => p.note.beat == 12.0);
+      expect(b12, hasLength(4));
+      expect(b12.every((p) => !p.hiddenByStrum), isTrue);
+      // 种类查询:卷弦 vs 下扫/上扫。
+      expect(l.strumKindAt(4.0), ScoreStrumKind.roll);
+      expect(l.strumKindAt(9.5), ScoreStrumKind.strumDown);
+      expect(l.strumKindAt(7.5), ScoreStrumKind.strumUp);
+      expect(l.strumKindAt(12.0), isNull);
+    });
+
     test('主歌两拍单元(b6 起,拍 20+)逐音 ×', () {
       for (final p in l.tabPoints.where((p) => p.note.beat >= 20)) {
         expect(p.isChordPluck, isTrue, reason: '主歌单元应全 ×:${p.note}');

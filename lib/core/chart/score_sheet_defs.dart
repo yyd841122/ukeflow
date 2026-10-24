@@ -8,6 +8,30 @@ library;
 import '../model/chord.dart';
 import '../model/tab_chart.dart';
 
+/// 扫弦事件(GLOSSARY「双轨混播」的声部记号,照印张):印张 TAB 行的
+/// 箭头/波浪在转录时被解析成同拍逐弦 ×,本表把「这是扫弦不是拨弦」记回
+/// 数据——渲染画箭头/波浪,播放按 [kind] 错峰发声。
+enum ScoreStrumKind {
+  /// 卷弦(印张波浪线)= 慢扫:逐弦慢错峰,④→①。
+  roll,
+
+  /// 下扫(直杆+下箭头)= 快扫,④→①。
+  strumDown,
+
+  /// 上扫(直杆+上箭头)= 快扫,①→④。
+  strumUp,
+}
+
+/// 一个扫弦事件:第 [beat] 拍的同拍和弦音组按 [kind] 扫响。
+class ScoreStrumEvent {
+  const ScoreStrumEvent(this.beat, this.kind);
+
+  /// 主轴拍位(与和弦行同网格)。
+  final double beat;
+
+  final ScoreStrumKind kind;
+}
+
 /// 和弦行的一个拍锚:第 [beat] 拍起换 [label] 和弦,指形照印张自绘
 /// (不走 chords-db 查表——G#7/F#m/C#m7/D7 为印张手读形)。
 class ScoreChordAnchor {
@@ -38,6 +62,7 @@ class ScoreSheetDef {
     required this.melodyAlignBeats,
     required this.keySignature,
     required this.chords,
+    this.strums = const [],
   });
 
   /// 组合定义 id:随主轴谱卡(独奏谱类型,工单 38)。
@@ -64,6 +89,9 @@ class ScoreSheetDef {
 
   /// 和弦行拍锚,严格按拍位升序。
   final List<ScoreChordAnchor> chords;
+
+  /// 扫弦/卷弦事件,严格按拍位升序(印张箭头/波浪;无则全拨弦)。
+  final List<ScoreStrumEvent> strums;
 
   /// 副标题行:「artist · 78 BPM · 1=E」——曲库独奏卡与谱面页元信息共用
   /// (谱面页再前置类型名,单一拼装源在此)。
@@ -129,6 +157,45 @@ const _bsus4 = _cSharpM7; // 同形异名:前奏记 Bsus4,主歌起记 C#m7。
 ScoreChordAnchor _anchor(double beat, String label, ChordFingering shape) =>
     ScoreChordAnchor(beat: beat, label: label, fingering: shape);
 
+// ── 爱你不是两三天:扫弦/卷弦事件表(照印张,工单 37 台账+谱卡互证)──
+// 判据:同拍 4 音且全落当前指形 = 扫弦/卷弦(3 音 = 主歌拨堆,D7 闷音柱
+// 2 音,均不在表);方向:前奏照台账逐个读定,高置段/尾按「整拍下、
+// 后半拍上」惯例预置,目验对印张纠正(工单 39)。
+ScoreStrumEvent _r(double beat) => ScoreStrumEvent(beat, ScoreStrumKind.roll);
+ScoreStrumEvent _sd(double beat) =>
+    ScoreStrumEvent(beat, ScoreStrumKind.strumDown);
+ScoreStrumEvent _su(double beat) =>
+    ScoreStrumEvent(beat, ScoreStrumKind.strumUp);
+
+final _aiNiStrums = <ScoreStrumEvent>[
+  // ── 前奏(台账逐个读定)──
+  _r(4), // b2 卷弦 E
+  _r(6), // b2 卷弦 A
+  _su(7.5), // b2 上扫 A
+  _r(8), // b3 卷弦 B
+  _su(9), // b3 B 上扫
+  _sd(9.5), // b3 B 下扫
+  _su(10), // b3 Bsus4 上扫
+  _sd(14), // b4 B 全弦扫
+  _r(16), // b5 卷弦 E
+  _su(17), // b5 上扫
+  _su(17.5), // b5 上扫
+  // ── 副歌A 收(卷弦)+ 高置段/尾扫弦(方向按惯例预置,目验纠正)──
+  _r(80), // b21 卷弦收
+  _sd(81), _su(81.5), _su(81.75), _sd(82),
+  _sd(84), _sd(85), _su(85.5), _su(85.75),
+  _sd(86.25), _su(86.5), _su(86.75), _sd(87), _su(87.5), _su(87.75),
+  _sd(88), _sd(89), _su(89.5), _su(89.75),
+  _sd(90.25), _sd(91), _su(91.5), _su(91.75),
+  _sd(92), _sd(93), _su(93.5), _su(93.75),
+  _sd(94), _sd(95), _su(95.5), _su(95.75),
+  _sd(96), _sd(97), _su(97.5), _su(97.75),
+  _sd(100), _sd(101), _su(101.5), _su(101.75),
+  _sd(102.25), _su(102.5), _su(102.75), _sd(103), _su(103.5), _su(103.75),
+  _sd(104), _sd(105), _su(105.5), _su(105.75),
+  _sd(106.25), _su(106.5), _su(106.75), _sd(107), _su(107.5), _su(107.75),
+];
+
 /// 组合谱面清单(逐首登记;首曲=爱你不是两三天,数据三源全复用)。
 final scoreSheetCatalog = <ScoreSheetDef>[
   ScoreSheetDef(
@@ -139,6 +206,7 @@ final scoreSheetCatalog = <ScoreSheetDef>[
     melodyChartId: 'ai-ni-bu-shi-liang-san-tian',
     melodyAlignBeats: 20,
     keySignature: '1=E',
+    strums: _aiNiStrums,
     chords: [
       // ── 前奏 b2-5(拍 4-20):E-A-B-Bsus4-A-B-E,工单 37 前奏台账 ──
       _anchor(4, 'E', _e),
