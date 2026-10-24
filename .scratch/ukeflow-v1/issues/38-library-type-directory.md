@@ -14,7 +14,7 @@
 
 **Blocked by:** 无
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 - [x] 目录页四类入口 + 各类型列表页迁移
 - [x] 独奏谱类型位 + 空态
@@ -28,3 +28,5 @@
 - 2026-10-24 (装机机检记录,debug 包 install -r 保数据): 冷启→曲库目录页四入口(弹唱/指弹/独奏/图片)全见;四类列表往返全过——弹唱 17+ 内置全在列+「导入/Cifra Club」随迁;指弹旋律型 9 首在列、独奏版按类型分工排除(数据保留);独奏谱空态文案现身;图片谱内置项+「相册选图」随迁(拉起 documentsui 通道即回,激活留用户)。行为项:弹唱跟练直达(沧海一声笑)、指弹跟练直达(小星星)、图片谱查看器实渲染(截图非黑);文本导入全链(校验→命名→存入→列表「自建」标+元信息行)→删除硬删(DB 行消失)且不株连(Beat It 无恙);内置隐藏(送别)即时退场→设置「隐藏的内置谱」恢复→列表归位。列表页为全屏路由无底栏(导航须先返回目录页,非缺陷)。收尾 logcat 无 E/flutter/FATAL/E/chromium。注释:自建谱排全部内置之后,首屏不可见非回归(LazyListView 折叠线)。待用户听验/玩验后勾 done。
 
 - 2026-10-24 (code-review 双轴 + 折入记录): Standards 6 条(1 硬伤)/Spec 4 条(0 缺失)。折入:改名写库下沉 `ImageChartsDao.renameTitle`(widget 摘掉 drift/database import,architecture.md 模块划分归位);自建无元信息副标题「自建 · 弹唱谱」→「自建」(类型名不凑数);改名对话框保存钮补 Key `image-chart-title-save`。全量 785 复绿、analyze 零告警、重装真机。挂起:类型位下沉数据层除魔法 id → 工单 40。其余(builder map 收敛/isPlaceholder/测试拆分)判为重构口味不入本票,留 /improve-codebase-architecture。
+
+- 2026-10-24 (用户真机验收): 确认没问题,勾 done。修复后构建听验/玩验通过。
