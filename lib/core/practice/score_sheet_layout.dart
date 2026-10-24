@@ -273,16 +273,19 @@ class ScoreSheetLayout {
 
   // ── 纵向参数(系统内四层纵带,自上而下)──
   /// 和弦层带高(名+图窗 52px);其下留 [chordTabGap] 再接琴弦层——
-  /// 真机反馈和弦图与琴弦贴得太近(2026-10-24)。
+  /// 真机两轮反馈:和弦图与琴弦贴得太近,一轮加 10px 仍挤,再加到 20。
   static const chordBandHeight = 68.0;
 
   /// 和弦层与琴弦层的间隔。
-  static const chordTabGap = 10.0;
+  static const chordTabGap = 20.0;
   static const tabTopPad = 8.0;
   static const tabLineGap = 14.0;
   static const tabBandHeight = tabTopPad + 3 * tabLineGap + 8.0;
-  static const numBandHeight = 30.0;
-  static const lyricBandHeight = 18.0;
+
+  /// 简谱带(高音点 8 + 度数 14 + 时值线 6 + 上下余量)与歌词带——
+  /// 琴弦行与歌词行之间同步放宽(真机反馈 2026-10-24)。
+  static const numBandHeight = 38.0;
+  static const lyricBandHeight = 22.0;
   static const systemGap = 16.0;
   static const systemHeight = chordBandHeight +
       chordTabGap +
