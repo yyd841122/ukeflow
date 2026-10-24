@@ -77,24 +77,25 @@ class ScoreSheetDef {
   }
 }
 
-// ── 印张手读指形(frets ④③②① 序;工单 37 台账逐张读定)──────────
+// ── 印张手读指形(frets ④③②① 序,即印张数字串 G 弦起读法;工单 37
+// 台账逐张读定,并与谱卡逐音互证:E 堆 ④4③4②4①2 =「4442」)────────
 // 手指编号印张未标,一律 0(点位不标指号);横按只 4444 同形的
 // C#m7/Bsus4(整排四品)。
 
 const _e = ChordFingering(
-  frets: [2, 4, 4, 4],
+  frets: [4, 4, 4, 2],
   fingers: [0, 0, 0, 0],
   baseFret: 1,
   barres: [],
 );
 const _a = ChordFingering(
-  frets: [0, 0, 1, 2],
+  frets: [2, 1, 0, 0],
   fingers: [0, 0, 0, 0],
   baseFret: 1,
   barres: [],
 );
 const _b = ChordFingering(
-  frets: [2, 2, 3, 4],
+  frets: [4, 3, 2, 2],
   fingers: [0, 0, 0, 0],
   baseFret: 1,
   barres: [],
@@ -106,13 +107,13 @@ const _cSharpM7 = ChordFingering(
   barres: [4],
 );
 const _gSharp7 = ChordFingering(
-  frets: [3, 2, 3, 1],
+  frets: [1, 3, 2, 3],
   fingers: [0, 0, 0, 0],
   baseFret: 1,
   barres: [],
 );
 const _fSharpM = ChordFingering(
-  frets: [0, 2, 1, 2],
+  frets: [2, 1, 2, 0],
   fingers: [0, 0, 0, 0],
   baseFret: 1,
   barres: [],

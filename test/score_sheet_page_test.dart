@@ -67,8 +67,18 @@ void main() {
 
     expect(find.text('爱你不是两三天'), findsOneWidget, reason: 'AppBar 曲名');
     expect(find.text('谱面视图 · 梁静茹 · 78 BPM · 1=E'), findsOneWidget);
-    expect(find.byKey(const Key('score-sheet-canvas')), findsOneWidget);
-    expect(find.text('1=E'), findsOneWidget, reason: '谱角调号画在首系统');
+    // 弹前读谱为一行(首系统)——整页太长会顶走开始示范按钮(真机反馈)。
+    expect(find.byKey(const Key('score-sheet-line')), findsOneWidget);
+    expect(find.text('1=E'), findsOneWidget, reason: '谱角调号画在行首');
+    // 一屏可达开始示范:行高(约 180px)+控件行,按钮在首屏视口内。
+    final startCenter = tester.getCenter(
+      find.byKey(const Key('score-practice-start')),
+    );
+    expect(
+      startCenter.dy,
+      lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
+      reason: '按钮在视口内',
+    );
     expect(find.text('伴奏示范'), findsOneWidget);
     expect(find.text('双轨混播'), findsOneWidget);
     final start = find.byKey(const Key('score-practice-start'));

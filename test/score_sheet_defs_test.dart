@@ -124,13 +124,14 @@ void main() {
       expect(actualBarres, barres, reason: '$label 横按');
     }
 
-    // 闷音柱 × = -1;横按只 C#m7/Bsus4(4444 同形)。
-    expectShape('E', [2, 4, 4, 4], []);
-    expectShape('A', [0, 0, 1, 2], []);
-    expectShape('B', [2, 2, 3, 4], []);
+    // 闷音柱 × = -1;横按只 C#m7/Bsus4(4444 同形)。数字串 ④ 弦起读,
+    // 与谱卡逐音互证(E 堆 ④4③4②4①2 =「4442」)。
+    expectShape('E', [4, 4, 4, 2], []);
+    expectShape('A', [2, 1, 0, 0], []);
+    expectShape('B', [4, 3, 2, 2], []);
     expectShape('C#m7', [4, 4, 4, 4], [4]);
-    expectShape('G#7', [3, 2, 3, 1], []);
-    expectShape('F#m', [0, 2, 1, 2], []);
+    expectShape('G#7', [1, 3, 2, 3], []);
+    expectShape('F#m', [2, 1, 2, 0], []);
     expectShape('D7', [-1, 2, -1, 3], []);
     expectShape('Bsus4', [4, 4, 4, 4], [4]);
     // 同名锚指形一致(数据不漂移)。

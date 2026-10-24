@@ -110,6 +110,49 @@ void main() {
     });
   });
 
+  group('TAB 印张 × 判定:落指形位画 ×,旋律音保持数字', () {
+    // 宽屏 800:4 小节/系统,系统 0 = bar 0-3(拍 0-16,前奏+主歌 b4)。
+    final l = layout(800);
+    final sys0 = l.tabInSystem(0);
+    bool pluckAt(double beat, int string, int fret) => sys0
+        .firstWhere(
+          (p) => p.note.beat == beat && p.note.string == string,
+          orElse: () => throw TestFailure('找不到音 @$beat ①$string'),
+        )
+        .isChordPluck;
+
+    test('和弦堆/拨弦(品位=当前指形按位)判 ×', () {
+      // b4 A 堆 @12.0:A=[2,1,0,0](④2③1②0)→ ④③② 全 ×。
+      expect(pluckAt(12.0, 4, 2), isTrue);
+      expect(pluckAt(12.0, 3, 1), isTrue);
+      expect(pluckAt(12.0, 2, 0), isTrue);
+      // 前奏 b2 E 堆 @4.0:E=[4,4,4,2] → ④③②① 全 ×。
+      for (final p in sys0.where((p) => p.note.beat == 4.0)) {
+        expect(p.isChordPluck, isTrue, reason: '${p.note}');
+      }
+    });
+
+    test('旋律品位不落指形位 → 保持数字(false)', () {
+      // b4 旋律 ①2=B4 @12.0(印张数字②):A 指形 ①=0 ≠ 2。
+      expect(pluckAt(12.0, 1, 2), isFalse);
+      // b5 末音 ①8=F5 @18.0(印张数字⑧):E 指形 ①=2 ≠ 8。bar 5 在系统 1。
+      final sys1 = layout(800).tabInSystem(1);
+      final f5 = sys1.firstWhere(
+        (p) => p.note.beat == 18.0 && p.note.string == 1,
+      );
+      expect(f5.note.fret, 8);
+      expect(f5.isChordPluck, isFalse);
+    });
+
+    test('主歌两拍单元(b6 起,拍 20+)逐音 ×', () {
+      // b6 E 段(拍 20-21.5,E=[4,4,4,2])与 A 段(拍 22-23.5,A=[2,1,0,0])。
+      final sys1 = layout(800).tabInSystem(1); // bar 4-7 = 拍 16-32
+      for (final p in sys1.where((p) => p.note.beat >= 20)) {
+        expect(p.isChordPluck, isTrue, reason: '主歌单元应全 ×:${p.note}');
+      }
+    });
+  });
+
   group('简谱符号推导(合成旋律逐符号)', () {
     // 1=C 第一把位合成旋律:规则全覆盖(八分/十六分/附点/延音线/休止/长音)。
     final synthetic = TabChart(

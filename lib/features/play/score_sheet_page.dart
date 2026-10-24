@@ -146,7 +146,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
   Widget _idleBody(TabSessionState state) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -163,17 +163,15 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           onRetry: () => _controller.warmup(),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 420,
-          child: ScoreSheetView(
-            def: widget.def,
-            tabChart: widget.tabChart,
-            melodyChart: widget.melodyChart,
-          ),
+        // 弹前读谱缩为一行(首系统,与跟练视图同款)——用户反馈整页
+        // 太长,开始示范按钮要一屏可见(2026-10-24)。
+        ScoreSheetSystemView(
+          def: widget.def,
+          tabChart: widget.tabChart,
+          melodyChart: widget.melodyChart,
+          system: 0,
         ),
-        const SizedBox(height: 24),
-        Text('示范轨道', style: _sectionLabelStyle),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         SegmentedButton<ScoreTrackMode>(
           segments: const [
             ButtonSegment(
@@ -196,7 +194,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             _controller.prepareFor(_chartFor(mode));
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text('速度', style: _sectionLabelStyle),
         StepSliderControl(
           value: state.bpm,
@@ -204,16 +202,8 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           max: TabPracticeController.maxBpm,
           onChanged: _controller.setBpm,
         ),
+        // 变速在运行控制行(与四线谱跟练同),空闲面板省一屏。
         const SizedBox(height: 16),
-        Text('变速', style: _sectionLabelStyle),
-        const SizedBox(height: 8),
-        SpeedControl(
-          speed: state.speed,
-          min: TabPracticeController.minSpeed,
-          max: TabPracticeController.maxSpeed,
-          onChanged: _controller.setSpeed,
-        ),
-        const SizedBox(height: 32),
         FilledButton.icon(
           key: const Key('score-practice-start'),
           onPressed: state.engineReady

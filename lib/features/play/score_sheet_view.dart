@@ -7,105 +7,11 @@ import '../../core/model/tab_chart.dart';
 import '../../core/practice/score_sheet_layout.dart';
 import '../chords/chord_diagram.dart';
 
-/// 谱面视图渲染(GLOSSARY「谱面视图」):组合定义 → 四层对齐谱表系统,
-/// 纵向滚动(工单 39)。几何全部出自 [ScoreSheetLayout](纯函数内核),
-/// 本组件只做笔画、和弦图组件落位与滚动——和弦图复用 ChordDiagram 自绘
-/// (工单 37 台账手读指形),其余四层在系统画笔里。
-///
-/// [cursor] 非空 = 跟随高亮(GLOSSARY):当位四层同刻点亮——当前和弦图
-/// 描边、TAB 当前音主色加大、简谱当前音点亮、当前歌词字主色;已过元素
-/// 淡出,未到元素静态。null = 静态读谱。
-class ScoreSheetView extends StatelessWidget {
-  const ScoreSheetView({
-    super.key,
-    required this.def,
-    required this.tabChart,
-    required this.melodyChart,
-    this.cursor,
-    this.scrollController,
-  });
-
-  final ScoreSheetDef def;
-  final TabChart tabChart;
-  final TabChart melodyChart;
-
-  /// 跟随高亮当位;null = 静态读谱。
-  final ScoreCursor? cursor;
-
-  /// 纵向滚动接管口(跟练自动跟滚用);null = 用户手动滚。
-  final ScrollController? scrollController;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final layout = ScoreSheetLayout(
-          def: def,
-          tabChart: tabChart,
-          melodyChart: melodyChart,
-          contentWidth: constraints.maxWidth,
-        );
-        return SingleChildScrollView(
-          controller: scrollController,
-          child: Column(
-            key: const Key('score-sheet-canvas'),
-            children: [
-              for (var s = 0; s < layout.systemCount; s++)
-                SizedBox(
-                  height: ScoreSheetLayout.systemHeight,
-                  width: constraints.maxWidth,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _ScoreSystemPainter(
-                            layout,
-                            s,
-                            scheme,
-                            cursor,
-                            originY: s * ScoreSheetLayout.systemHeight,
-                          ),
-                        ),
-                      ),
-                      // 谱角调号(照印张,首系统行首;真 Text 进语义树)。
-                      if (s == 0)
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          child: Text(
-                            def.keySignature,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      // 和弦图+和弦名落系统顶层行(锚拍对位,防重叠右移
-                      // 已在布局内核算定 x)。
-                      for (final glyph in layout.chordsInSystem(s))
-                        Positioned(
-                          left: glyph.x,
-                          top: 0,
-                          width: ScoreSheetLayout.chordGlyphWidth,
-                          child: _ChordGlyph(
-                            anchor: glyph.anchor,
-                            highlighted:
-                                cursor != null && cursor!.chordIndex == glyph.anchorIndex,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
+/// 谱面视图渲染(GLOSSARY「谱面视图」)的组件层:单行(谱表系统)视图 +
+/// 系统画笔。几何全部出自 [ScoreSheetLayout](纯函数内核),组件只做笔画、
+/// 和弦图组件落位——和弦图复用 ChordDiagram 自绘(工单 37 台账手读指形)。
+/// 整页纵滚视图已删(真机反馈跟练整页易乱,2026-10-24:弹前读谱与跟练
+/// 都只出一行;整页排版能力保留在布局内核,要全谱浏览再从 git 复活)。
 /// 单系统视图(运行态,GLOSSARY「谱表系统」):只画当前一行四层——
 /// 真机跟练视线只有一行,播完切下一行(用户真机反馈 2026-10-24:整页
 /// 折行难追播放点;与四线谱跟练的阶梯平移同一「以静为主」纪律)。几何
@@ -158,8 +64,20 @@ class ScoreSheetSystemView extends StatelessWidget {
                     system.clamp(0, math.max(0, layout.systemCount - 1)),
                     scheme,
                     cursor,
-                    showKeySignature: true,
                     originY: 0,
+                  ),
+                ),
+              ),
+              // 谱角调号每行都标(单行视口换行时不失调号语境)。
+              Positioned(
+                left: 4,
+                top: 0,
+                child: Text(
+                  def.keySignature,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
@@ -228,7 +146,6 @@ class _ScoreSystemPainter extends CustomPainter {
     this.system,
     this.scheme,
     this.cursor, {
-    this.showKeySignature = false,
     required this.originY,
   });
 
@@ -236,9 +153,6 @@ class _ScoreSystemPainter extends CustomPainter {
   final int system;
   final ColorScheme scheme;
   final ScoreCursor? cursor;
-
-  /// 单系统视图每行都标谱角(整页视图只在首系统,行首不重复)。
-  final bool showKeySignature;
 
   /// 本系统在画布上的纵原点:整页画布 = system×系统高;单行画布恒 0
   /// (画布只有一个系统高,再带系统偏移会把四层全画到画布外——真机
@@ -252,7 +166,10 @@ class _ScoreSystemPainter extends CustomPainter {
   double get _y0 => originY;
 
   double get _tabTop =>
-      _y0 + ScoreSheetLayout.chordBandHeight + ScoreSheetLayout.tabTopPad;
+      _y0 +
+      ScoreSheetLayout.chordBandHeight +
+      ScoreSheetLayout.chordTabGap +
+      ScoreSheetLayout.tabTopPad;
 
   /// 简谱带纵排:高音点(8)→ 度数(14)→ 时值线(6),带高 30。
   double get _numBandTop => _y0 +
@@ -270,10 +187,6 @@ class _ScoreSystemPainter extends CustomPainter {
     _paintTab(canvas);
     _paintNumbered(canvas);
     _paintLyrics(canvas);
-    if (showKeySignature || system == 0) {
-      _text(canvas, layout.def.keySignature, const Offset(4, 12), 13,
-          scheme.onSurface, bold: true);
-    }
   }
 
   void _paintBarlines(Canvas canvas) {
@@ -340,8 +253,9 @@ class _ScoreSystemPainter extends CustomPainter {
             ? scheme.onSurface.withValues(alpha: 0.35)
             : scheme.onSurface;
       }
-      _text(canvas, '${point.note.fret}', center, _tabFontSize, label,
-          bold: isCurrent);
+      // 印张 ×(品位按当前和弦指形,图在行首)或旋律品位数字。
+      _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
+          _tabFontSize, label, bold: isCurrent);
     }
   }
 

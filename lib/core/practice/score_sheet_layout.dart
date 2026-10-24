@@ -92,10 +92,21 @@ class ScoreGlyph {
 }
 
 class ScoreTabPoint {
-  const ScoreTabPoint(this.noteIndex, this.note, this.x);
+  const ScoreTabPoint(
+    this.noteIndex,
+    this.note,
+    this.x, {
+    required this.isChordPluck,
+  });
+
   final int noteIndex;
   final TabNote note;
   final double x;
+
+  /// 印张 ×:该音 (弦,品) 恰为当前和弦指形的按位——印张「×=拨该弦,
+  /// 品位按当小节和弦指形」(工单 37);画 × 与画品位数字是同一个物理
+  /// 动作,× 照印张更直观。旋律音不落在指形位,保持数字(印张同)。
+  final bool isChordPluck;
 }
 
 class ScoreNumPoint {
@@ -218,6 +229,7 @@ class ScoreSheetLayout {
       for (final n in melodyNotes) n.beat + def.melodyAlignBeats,
     ];
     _chordBeats = [for (final c in def.chords) c.beat];
+    _tabChordPluck = _computeChordPlucks();
     _tabSlices = _slices(_tabBeats);
     _melodySlices = _slices(_melodyBeats);
 
@@ -260,15 +272,23 @@ class ScoreSheetLayout {
   static const chordGlyphGap = 6.0;
 
   // ── 纵向参数(系统内四层纵带,自上而下)──
-  static const chordBandHeight = 64.0;
+  /// 和弦层带高(名+图窗 52px);其下留 [chordTabGap] 再接琴弦层——
+  /// 真机反馈和弦图与琴弦贴得太近(2026-10-24)。
+  static const chordBandHeight = 68.0;
+
+  /// 和弦层与琴弦层的间隔。
+  static const chordTabGap = 10.0;
   static const tabTopPad = 8.0;
   static const tabLineGap = 14.0;
   static const tabBandHeight = tabTopPad + 3 * tabLineGap + 8.0;
   static const numBandHeight = 30.0;
   static const lyricBandHeight = 18.0;
   static const systemGap = 16.0;
-  static const systemHeight =
-      chordBandHeight + tabBandHeight + numBandHeight + lyricBandHeight;
+  static const systemHeight = chordBandHeight +
+      chordTabGap +
+      tabBandHeight +
+      numBandHeight +
+      lyricBandHeight;
 
   late final List<TabNote> tabNotes;
   late final List<TabNote> melodyNotes;
@@ -335,13 +355,33 @@ class ScoreSheetLayout {
     return glyphs;
   }
 
-  /// 系统的 TAB 层音点(按拍位升序)。
+  /// 系统的 TAB 层音点(按拍位升序,带印张 × 标记)。
   List<ScoreTabPoint> tabInSystem(int system) {
     final (start, end) = _tabSlices[system];
     return [
       for (var i = start; i < end; i++)
-        ScoreTabPoint(i, tabNotes[i], beatXInSystem(system, _tabBeats[i])),
+        ScoreTabPoint(
+          i,
+          tabNotes[i],
+          beatXInSystem(system, _tabBeats[i]),
+          isChordPluck: _tabChordPluck[i],
+        ),
     ];
+  }
+
+  /// 逐音 × 判定:(弦,品) == 当前和弦锚(拍 ≤ 该音)指形的按位。
+  /// 无锚(前奏 bar 1 前)或指形闷音位(-1)不判 ×。
+  List<bool> _computeChordPlucks() {
+    final plucks = List<bool>.filled(tabNotes.length, false);
+    for (var i = 0; i < tabNotes.length; i++) {
+      final anchorIdx = _lastAtOrBefore(_chordBeats, _tabBeats[i]);
+      if (anchorIdx < 0) continue;
+      final note = tabNotes[i];
+      final shapeFret =
+          def.chords[anchorIdx].fingering.frets[4 - note.string];
+      plucks[i] = shapeFret == note.fret;
+    }
+    return plucks;
   }
 
   /// 系统的简谱层符号(含歌词,按拍位升序)。
@@ -365,6 +405,7 @@ class ScoreSheetLayout {
     melodyIndex: _lastAtOrBefore(_melodyBeats, mainBeat),
   );
 
+  late final List<bool> _tabChordPluck;
   late final List<double> _tabBeats;
   late final List<double> _melodyBeats;
   late final List<double> _chordBeats;
