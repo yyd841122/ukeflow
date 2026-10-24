@@ -208,55 +208,56 @@ class _StripPainter extends CustomPainter {
       _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
           _tabFontSize, scheme.onSurface);
     }
-    // 节奏杆:每组一杆(自弦线上方竖起)+ 时值记号(八分单杠/十六分双杠/
-    // 附点/整拍横杠,与简谱同推导);长音(≥2 拍)再画延音弧到组尾。
-    final stems = <double>{};
-    for (final point in layout.tabPoints) {
-      if (stems.contains(point.x)) continue;
-      stems.add(point.x);
-      final stemTop = _tabTop - 12;
+    // 节奏带(industry 画法,照 alphaTab/Songsterr:staff 下方杆下垂、
+    // 同拍组符杠横连、孤立组符尾;四分裸杆,长音杆更长+延音弧)。
+    final beamY = ScoreSheetLayout.rhythmBandTop + 6;
+    for (final stem in layout.rhythmStems) {
+      final stemLen = stem.duration >= 2 ? 22.0 : 15.0;
       canvas.drawLine(
-        Offset(point.x, _tabTop - 2),
-        Offset(point.x, stemTop),
+        Offset(stem.x, ScoreSheetLayout.tabBandBottom),
+        Offset(stem.x, beamY + stemLen),
         Paint()
           ..color = scheme.onSurface
           ..strokeWidth = 1.4,
       );
-      final markPaint = Paint()
-        ..color = scheme.onSurface
-        ..strokeWidth = 1.3;
-      for (var i = 0; i < point.groupUnderlines; i++) {
+    }
+    for (final beam in layout.rhythmBeams) {
+      final y = beamY + (beam.level - 1) * 4;
+      canvas.drawLine(
+        Offset(beam.x0, y),
+        Offset(beam.x1 + 0.5, y),
+        Paint()
+          ..color = scheme.onSurface
+          ..strokeWidth = beam.level == 1 ? 2.6 : 2.0,
+      );
+    }
+    for (final flag in layout.rhythmFlags) {
+      final y = beamY + 15;
+      for (var i = 0; i < flag.flags; i++) {
         canvas.drawLine(
-          Offset(point.x - 5, stemTop - 1 - i * 3.2),
-          Offset(point.x + 5, stemTop - 1 - i * 3.2),
-          markPaint,
-        );
-      }
-      if (point.groupDotted) {
-        canvas.drawCircle(Offset(point.x + 8, stemTop + 2), 1.5, markPaint);
-      }
-      for (var i = 0; i < point.groupDashes; i++) {
-        canvas.drawLine(
-          Offset(point.x + 6 + i * 12, stemTop + 2),
-          Offset(point.x + 16 + i * 12, stemTop + 2),
-          markPaint,
-        );
-      }
-      if (point.groupHoldBeats >= 2) {
-        // 长音延音弧(印张圆圈数字/椭圆×柱一族):弧从组头挂到组尾。
-        canvas.drawPath(
-          Path()
-            ..moveTo(point.x, _tabTop - 14)
-            ..quadraticBezierTo(
-              (point.x + point.groupEndX) / 2, _tabTop - 24,
-              math.max(point.x + 12, point.groupEndX - 4), _tabTop - 14,
-            ),
+          Offset(flag.x + 0.5, y + i * 4),
+          Offset(flag.x + 8, y + 5 + i * 4),
           Paint()
-            ..color = scheme.onSurface.withValues(alpha: 0.7)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2,
+            ..color = scheme.onSurface
+            ..strokeWidth = 1.6,
         );
       }
+    }
+    // 长音延音弧(印张圆圈数字/椭圆×柱一族):弧从组头挂到组尾。
+    for (final point
+        in layout.tabPoints.where((p) => p.groupHoldBeats)) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(point.x, _tabTop - 14)
+          ..quadraticBezierTo(
+            (point.x + point.groupEndX) / 2, _tabTop - 24,
+            math.max(point.x + 12, point.groupEndX - 4), _tabTop - 14,
+          ),
+        Paint()
+          ..color = scheme.onSurface.withValues(alpha: 0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
     }
     // 连音 × 柱(印张不占拍的延音柱):淡 × 四弦 + 自上一组引弧。
     for (final beat in layout.tiedColumns) {

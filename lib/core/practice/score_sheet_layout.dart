@@ -102,10 +102,7 @@ class ScoreTabPoint {
     this.x, {
     required this.isChordPluck,
     required this.hiddenByStrum,
-    required this.groupUnderlines,
-    required this.groupDotted,
-    required this.groupDashes,
-    required this.groupHoldBeats,
+    required this.groupDuration,
     required this.groupEndX,
   });
 
@@ -121,14 +118,12 @@ class ScoreTabPoint {
   /// 被扫弦/卷弦事件覆盖(同拍 4 音组画箭头/波浪,不再逐弦画 ×)。
   final bool hiddenByStrum;
 
-  /// 同拍组的时值记号(距下一组,与简谱同一推导):八分单杠/十六分双杠/
-  /// 附点/整拍横杠——印张 TAB 行的节奏杆。
-  final int groupUnderlines;
-  final bool groupDotted;
-  final int groupDashes;
+  /// 组时值(距下一组;节奏带符杆/符杠由此推导,industry 画法见
+  /// [rhythmBeams])。
+  final double groupDuration;
 
   /// 组时值 ≥ 2 拍 = 长音(印张圆圈数字/椭圆×柱/延音弧一族)。
-  final double groupHoldBeats;
+  bool get groupHoldBeats => groupDuration >= 2;
 
   /// 组尾 x(下一组的 x 或带尾),长音延音弧画到这儿。
   final double groupEndX;
@@ -289,10 +284,7 @@ class ScoreSheetLayout {
           stripX(_tabBeats[i]),
           isChordPluck: _tabChordPluck[i],
           hiddenByStrum: _tabHiddenByStrum[i],
-          groupUnderlines: durationMarkOf(groupDuration(_tabBeats[i])).underlines,
-          groupDotted: durationMarkOf(groupDuration(_tabBeats[i])).dotted,
-          groupDashes: durationMarkOf(groupDuration(_tabBeats[i])).dashes,
-          groupHoldBeats: groupDuration(_tabBeats[i]),
+          groupDuration: groupDuration(_tabBeats[i]),
           groupEndX: groupEndX(_tabBeats[i]),
         ),
     ];
@@ -350,6 +342,9 @@ class ScoreSheetLayout {
 
   /// 简谱带(高音点 8 + 度数 14 + 时值线 6 + 上下余量)与歌词带——
   /// 琴弦行与歌词行之间同步放宽(真机反馈 2026-10-24)。
+  /// 节奏带(TAB staff 下方,industry 惯例:alphaTab rhythmHeight 默认 25,
+  /// 「rendered below the tab staff」;Soundslice/Songsterr 同式)。
+  static const rhythmBandHeight = 25.0;
   static const numBandHeight = 38.0;
   static const lyricBandHeight = 22.0;
 
@@ -364,9 +359,15 @@ class ScoreSheetLayout {
   static double get tabBandTop =>
       chordBandHeight + chordTabGap + tabTopPad;
 
+  /// TAB 弦线区底(④弦线 y)。
+  static double get tabBandBottom => tabBandTop + 3 * tabLineGap;
+
+  /// 节奏带顶(staff 下方符杆/符杠区)。
+  static double get rhythmBandTop => tabBandBottom + 6;
+
   /// 简谱带顶。
   static double get numBandTop =>
-      chordBandHeight + chordTabGap + tabBandHeight;
+      chordBandHeight + chordTabGap + tabBandHeight + rhythmBandHeight;
 
   /// 简谱度数行的纵中心。
   static double get numCenterY => numBandTop + 8 + numFontSize / 2;
@@ -426,6 +427,57 @@ class ScoreSheetLayout {
     }
     return out..sort();
   }
+
+  // ── 节奏带(industry 画法:杆下垂、同拍组符杠横连、孤立组符尾)──
+
+  /// 每组一根符杆(x,时值;二分以上更长裸杆,四分裸杆)。
+  late final List<({double x, double duration})> rhythmStems = [
+    for (final p in tabPoints)
+      if (identical(p, tabPoints.firstWhere((q) => q.note.beat == p.note.beat)))
+        (x: p.x, duration: p.groupDuration),
+  ];
+
+  /// 符杠:同一整数拍窗内连续可连组(时值 ≤ 0.5)横连一条;
+  /// 相邻对都 ≤ 0.25 再加第二条(十六分)。
+  late final List<({double x0, double x1, int level})> rhythmBeams = () {
+    final beams = <({double x0, double x1, int level})>[];
+    final groups = rhythmStems;
+    var i = 0;
+    while (i < groups.length) {
+      if (groups[i].duration > 0.5) {
+        i++;
+        continue;
+      }
+      var j = i;
+      while (j + 1 < groups.length &&
+          groups[j + 1].duration <= 0.5 &&
+          groups[j + 1].x ~/ stripPxPerBeat == groups[i].x ~/ stripPxPerBeat) {
+        j++;
+      }
+      if (j > i) {
+        beams.add((x0: groups[i].x, x1: groups[j].x, level: 1));
+        for (var k = i; k < j; k++) {
+          if (groups[k].duration <= 0.25 && groups[k + 1].duration <= 0.25) {
+            beams.add((x0: groups[k].x, x1: groups[k + 1].x, level: 2));
+          }
+        }
+      }
+      i = j + 1;
+    }
+    return beams;
+  }();
+
+  /// 孤立可连组(无符杠伙伴)的符尾枚数:八分 1、十六分 2。
+  late final List<({double x, int flags})> rhythmFlags = [
+    for (var i = 0; i < rhythmStems.length; i++)
+      if (rhythmStems[i].duration > 0 && rhythmStems[i].duration <= 0.5)
+        if (!rhythmBeams.any((bm) =>
+            rhythmStems[i].x >= bm.x0 - 1 && rhythmStems[i].x <= bm.x1 + 1))
+          (
+            x: rhythmStems[i].x,
+            flags: rhythmStems[i].duration <= 0.25 ? 2 : 1,
+          )
+  ];
 
   /// 跟随高亮的跟滚锚点:播放头恒在视口左 1/3(流水展示,用户 2026-10-24)。
   static const followViewportFraction = 1 / 3;

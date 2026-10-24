@@ -58,16 +58,69 @@ void main() {
       expect(l.emptyBars, [0]);
     });
 
-    test('TAB 组时值:八分单杠/整拍/长音(≥2 拍延音)', () {
-      // 主歌两拍单元 @20(距下组 0.5)= 八分单杠。
+    test('TAB 节奏带:符杆下垂、同拍组符杠横连、孤立组符尾(industry 画法)', () {
+      // 主歌两拍单元 @20(距下组 0.5)= 八分:有杆有杠。
       final g20 = l.tabPoints.firstWhere((p) => p.note.beat == 20.0);
-      expect(g20.groupUnderlines, 1);
-      expect(g20.groupDashes, 0);
-      // b5 末音 ①8@18(距下组 20 → 2 拍)= 长音延音 + 无杠。
+      expect(g20.groupDuration, 0.5);
+      expect(
+        l.rhythmBeams.any((bm) => bm.x0 <= g20.x && g20.x <= bm.x1),
+        isTrue,
+        reason: '连续八分组应符杠横连',
+      );
+      // b5 末音 ①8@18(距下组 2 拍)= 长音:裸长杆 + 延音,无杠无尾。
       final g18 = l.tabPoints.firstWhere((p) => p.note.beat == 18.0);
-      expect(g18.groupHoldBeats, 2.0);
-      expect(g18.groupUnderlines, 0);
+      expect(g18.groupDuration, 2.0);
+      expect(g18.groupHoldBeats, isTrue);
       expect(g18.groupEndX, l.stripX(20.0));
+      expect(l.rhythmBeams.any((bm) => bm.x0 == g18.x), isFalse);
+      // 符尾只出现在无杠的可连组上。
+      for (final f in l.rhythmFlags) {
+        expect(
+          l.rhythmBeams.any((bm) => f.x >= bm.x0 && f.x <= bm.x1),
+          isFalse,
+        );
+      }
+    });
+
+    test('节奏带合成小节:四分裸杆/八分连杠/十六分双杠/孤立符尾', () {
+      const synthetic = TabChart(
+        title: '节奏用',
+        tempo: 78,
+        notes: [
+          TabNote(string: 1, fret: 0, beat: 0), // 四分:裸杆
+          TabNote(string: 1, fret: 0, beat: 1), // 八分 ┐同拍窗符杠
+          TabNote(string: 1, fret: 0, beat: 1.5), // 八分 ┘
+          TabNote(string: 1, fret: 0, beat: 2), // 十六分 ┐双杠
+          TabNote(string: 1, fret: 0, beat: 2.25), // 十六分 ┘
+          TabNote(string: 1, fret: 0, beat: 2.5), // 八分(裸杆,时值到 3.5)
+          TabNote(string: 1, fret: 0, beat: 3.5), // 孤立八分:符尾 1
+        ],
+      );
+      final rl = ScoreSheetLayout(
+        def: def,
+        tabChart: synthetic,
+        melodyChart: synthetic,
+      );
+      expect(rl.rhythmStems, hasLength(7)); // 0/1/1.5/2/2.25/2.5/3.5
+      // 四分裸杆:不在任何杠上。
+      final x0 = rl.stripX(0);
+      expect(rl.rhythmBeams.any((bm) => x0 >= bm.x0 && x0 <= bm.x1), isFalse);
+      // 八分对 @1/@1.5 一条一级杠。
+      expect(
+        rl.rhythmBeams.where((bm) => bm.level == 1).map((bm) => bm.x0),
+        contains(rl.stripX(1)),
+      );
+      // 十六分对 @2/@2.25 有二级杠。
+      expect(
+        rl.rhythmBeams.any((bm) =>
+            bm.level == 2 &&
+            bm.x0 == rl.stripX(2) &&
+            bm.x1 == rl.stripX(2.25)),
+        isTrue,
+      );
+      // 孤立八分 @3.5:符尾 1(不在同拍窗伙伴)。
+      final flag35 = rl.rhythmFlags.firstWhere((f) => f.x == rl.stripX(3.5));
+      expect(flag35.flags, 1);
     });
 
     test('连音×柱:扫弦段小节第 3 拍无攻击处(86/90/102/106)', () {
@@ -81,7 +134,9 @@ void main() {
     test('纵带坐标单源:静态带与当位覆盖层共用(间距改动只动内核)', () {
       // 真机教训:间距调整后覆盖层公式没跟上,当前音/歌词错位 8px。
       expect(ScoreSheetLayout.tabBandTop, 96.0); // 68 + 20 + 8
-      expect(ScoreSheetLayout.numBandTop, 146.0); // 68 + 20 + 58
+      expect(ScoreSheetLayout.tabBandBottom, 138.0); // 96 + 42
+      expect(ScoreSheetLayout.rhythmBandTop, 144.0); // 底 + 6
+      expect(ScoreSheetLayout.numBandTop, 171.0); // 68 + 20 + 58 + 25(节奏带)
       expect(
         ScoreSheetLayout.numCenterY,
         ScoreSheetLayout.numBandTop + 8 + ScoreSheetLayout.numFontSize / 2,
