@@ -5,7 +5,9 @@ import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
 import 'package:ukeflow/core/chart/score_sheet_defs.dart';
+import 'package:ukeflow/core/practice/score_sheet_layout.dart';
 import 'package:ukeflow/features/play/score_sheet_page.dart';
+import 'package:ukeflow/features/play/score_sheet_view.dart';
 
 /// 谱面视图会话页(工单 39):引擎一律 FakeAudioEngine,时间用
 /// engine.advance 推进。锁页面结构与流转:空闲(谱面+轨道选择)→ 预备
@@ -128,6 +130,46 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('爱你不是两三天'), findsNothing, reason: '已退页');
+  });
+
+
+  testWidgets('单行视图:任意系统的画布都从原点画(第 2 行起四层可见)', (tester) async {
+    engine = FakeAudioEngine();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [audioEngineProvider.overrideWithValue(engine)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ScoreSheetSystemView(
+              def: def,
+              tabChart: solo,
+              melodyChart: melody,
+              system: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 画布只有一个系统高;画笔纵原点必须为 0——带系统偏移会把
+    // 琴弦/简谱/歌词画到画布外(真机第 2 行起只剩和弦图,2026-10-24)。
+    final canvas = tester.renderObject<RenderBox>(
+      find.byKey(const Key('score-sheet-line')),
+    );
+    expect(canvas.size.height, ScoreSheetLayout.systemHeight);
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (w) =>
+            w is CustomPaint &&
+            w.painter != null &&
+            w.painter.runtimeType.toString() == '_ScoreSystemPainter',
+      ),
+    );
+    final painter = paint.painter as dynamic;
+    expect(painter.originY, 0.0);
+    expect(painter.system, 2);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('引擎初始化失败:错误可见、开始禁用,重试钮在位', (tester) async {

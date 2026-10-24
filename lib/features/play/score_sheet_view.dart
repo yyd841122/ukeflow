@@ -59,7 +59,13 @@ class ScoreSheetView extends StatelessWidget {
                     children: [
                       Positioned.fill(
                         child: CustomPaint(
-                          painter: _ScoreSystemPainter(layout, s, scheme, cursor),
+                          painter: _ScoreSystemPainter(
+                            layout,
+                            s,
+                            scheme,
+                            cursor,
+                            originY: s * ScoreSheetLayout.systemHeight,
+                          ),
                         ),
                       ),
                       // 谱角调号(照印张,首系统行首;真 Text 进语义树)。
@@ -153,6 +159,7 @@ class ScoreSheetSystemView extends StatelessWidget {
                     scheme,
                     cursor,
                     showKeySignature: true,
+                    originY: 0,
                   ),
                 ),
               ),
@@ -222,6 +229,7 @@ class _ScoreSystemPainter extends CustomPainter {
     this.scheme,
     this.cursor, {
     this.showKeySignature = false,
+    required this.originY,
   });
 
   final ScoreSheetLayout layout;
@@ -232,11 +240,16 @@ class _ScoreSystemPainter extends CustomPainter {
   /// 单系统视图每行都标谱角(整页视图只在首系统,行首不重复)。
   final bool showKeySignature;
 
+  /// 本系统在画布上的纵原点:整页画布 = system×系统高;单行画布恒 0
+  /// (画布只有一个系统高,再带系统偏移会把四层全画到画布外——真机
+  /// 第 2 行起只余和弦图组件的教训)。
+  final double originY;
+
   static const _numFontSize = 14.0;
   static const _lyricFontSize = 11.0;
   static const _tabFontSize = 10.0;
 
-  double get _y0 => system * ScoreSheetLayout.systemHeight;
+  double get _y0 => originY;
 
   double get _tabTop =>
       _y0 + ScoreSheetLayout.chordBandHeight + ScoreSheetLayout.tabTopPad;
