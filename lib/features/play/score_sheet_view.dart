@@ -213,38 +213,48 @@ class _StripPainter extends CustomPainter {
             scheme.onSurface);
       }
     }
-    // 节奏带(industry 画法,照 alphaTab/Songsterr:staff 下方杆下垂、
-    // 同拍组符杠横连、孤立组符尾;四分裸杆,长音杆更长+延音弧)。
-    final beamY = ScoreSheetLayout.rhythmBandTop + 6;
+    // 节奏带(印张 2026-10-25 全深度实测):杆自琴弦垂下长 40px;相邻
+    // 八分在**杆底**横杠相连(⊔ 缺口框,非杆顶 H);孤立可连组杆底小旗;
+    // 十六分第二道杠在主杠上方 4px。长音(数字套椭圆)不另画杆
+    // (印张 ①8@18 实测无杆)。
+    const stemLen = 40.0;
+    final tipY = ScoreSheetLayout.tabBandBottom + stemLen;
+    final holdXs = <double>{
+      for (final p in layout.tabPoints
+          .where((p) => p.groupHoldBeats && !p.isChordPluck))
+        p.x,
+    };
     for (final stem in layout.rhythmStems) {
-      final stemLen = stem.duration >= 2 ? 22.0 : 15.0;
+      if (holdXs.any((hx) => (hx - stem.x).abs() < 1)) continue;
       canvas.drawLine(
         Offset(stem.x, ScoreSheetLayout.tabBandBottom),
-        Offset(stem.x, beamY + stemLen),
+        Offset(stem.x, tipY),
         Paint()
           ..color = scheme.onSurface
-          ..strokeWidth = 1.4,
+          ..strokeWidth = 1.6,
       );
     }
     for (final beam in layout.rhythmBeams) {
-      final y = beamY + (beam.level - 1) * 4;
+      final y = tipY - (beam.level - 1) * 4;
       canvas.drawLine(
         Offset(beam.x0, y),
         Offset(beam.x1 + 0.5, y),
         Paint()
           ..color = scheme.onSurface
-          ..strokeWidth = beam.level == 1 ? 2.6 : 2.0,
+          ..strokeWidth = beam.level == 1 ? 3.0 : 2.2,
       );
     }
     for (final flag in layout.rhythmFlags) {
-      final y = beamY + 15;
       for (var i = 0; i < flag.flags; i++) {
-        canvas.drawLine(
-          Offset(flag.x + 0.5, y + i * 4),
-          Offset(flag.x + 8, y + 5 + i * 4),
+        canvas.drawPath(
+          Path()
+            ..moveTo(flag.x + 1, tipY - 26 + i * 6)
+            ..quadraticBezierTo(
+                flag.x + 9, tipY - 14 + i * 6, flag.x + 1, tipY - i * 6),
           Paint()
             ..color = scheme.onSurface
-            ..strokeWidth = 1.6,
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0,
         );
       }
     }
