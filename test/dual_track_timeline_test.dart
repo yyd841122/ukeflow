@@ -19,7 +19,7 @@ void main() {
   group('双轨合并谱', () {
     final merged = buildScorePlaybackChart(def, solo, melodyChart: melody);
 
-    test('两轨全量合并:496 伴奏音 + 168 旋律音移位', () {
+    test('两轨全量合并:488 伴奏音 + 168 旋律音移位', () {
       expect(merged.notes.length, solo.notes.length + melody.notes.length);
     });
 
@@ -76,11 +76,14 @@ void main() {
     expect(beatOf(3, 4.0), closeTo(4.0 + 70 * msToBeats, 1e-9));
     expect(beatOf(1, 4.0), closeTo(4.0 + 210 * msToBeats, 1e-9));
 
-    // @14.0 下扫(B 全弦扫,快扫 25ms/弦,④→①)。
+    // @14.0 卷弦(B 全弦,印张实测为波浪非下扫;70ms/弦,④→①)。
     expect(beatOf(4, 14.0), 14.0);
-    expect(beatOf(1, 14.0), closeTo(14.0 + 75 * msToBeats, 1e-9));
-    // @9.5 已改二拍休止占位(印张):发声回到同拍(不再错峰)。
-    expect(beatOf(4, 9.5), 9.5);
+    expect(beatOf(1, 14.0), closeTo(14.0 + 210 * msToBeats, 1e-9));
+    // @9.5-10.5 照印张为二拍休止占位:数据无音(2026-10-25 删误读堆音)。
+    expect(
+      single.notes.where((n) => n.beat >= 9.5 && n.beat < 10.5),
+      isEmpty,
+    );
 
     // @7.5 上扫(A,快扫,①→④):① 不动,④ 殿后 +75ms。
     expect(beatOf(1, 7.5), 7.5);

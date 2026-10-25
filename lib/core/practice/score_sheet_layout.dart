@@ -122,7 +122,8 @@ class ScoreTabPoint {
   /// [rhythmBeams])。
   final double groupDuration;
 
-  /// 组时值 ≥ 2 拍 = 长音(印张圆圈数字/椭圆×柱/延音弧一族)。
+  /// 组时值 ≥ 2 拍 = 长音(印张画法 2026-10-25 实测:品位数字外套椭圆;
+  /// × 柱长音不套框,只由节奏带长杆表达——「不添加原版没有的符号」)。
   bool get groupHoldBeats => groupDuration >= 2;
 
   /// 组尾 x(下一组的 x 或带尾),长音延音弧画到这儿。
@@ -413,6 +414,11 @@ class ScoreSheetLayout {
     for (final e in def.rests) (x: stripX(e.beat), beat: e.beat, beats: e.beats),
   ];
 
+  /// 震音记号(照印张渲染:瘦椭圆罩四弦 × 柱;x 坐标预计算)。
+  late final List<({double x, double beat})> tremoloMarks = [
+    for (final e in def.tremolos) (x: stripX(e.beat), beat: e.beat),
+  ];
+
   /// 连音 × 柱(印张「×柱带连音弧=不占拍无攻击」):扫弦段(有 ≥3 个
   /// 扫弦事件的小节)的小节第 3 拍,若该拍无攻击,画淡 × 柱并从上一组
   /// 引延音弧(高置段/尾每小节一处,数据空档与印张逐一吻合)。
@@ -428,7 +434,12 @@ class ScoreSheetLayout {
     for (final bar in barsWithStrums) {
       final beat = (bar * beatsPerBar + 2).toDouble();
       if (beat >= barCount * beatsPerBar) continue;
-      if (!attacked.contains(beat)) out.add(beat);
+      if (attacked.contains(beat)) continue;
+      // 休止区间内不画连音柱(那是休止记号的地盘,照印张)。
+      if (def.rests.any((r) => beat >= r.beat && beat < r.beat + r.beats)) {
+        continue;
+      }
+      out.add(beat);
     }
     return out..sort();
   }
@@ -525,14 +536,16 @@ class ScoreSheetLayout {
   }
 
   /// 被扫弦遮蔽的逐音 ×:该拍有扫弦事件且本音落指形位
-  /// (旋律音即使在扫弦拍也保持数字)。休止事件拍同样遮蔽
-  /// (显示照印张画休止钩;发声不受影响)。
+  /// (旋律音即使在扫弦拍也保持数字)。休止区间 [beat, beat+beats) 内的
+  /// 音同样遮蔽(显示照印张画休止记号;发声不受影响)。
   List<bool> _computeStrumHidden() {
     final hidden = List<bool>.filled(tabNotes.length, false);
     for (var i = 0; i < tabNotes.length; i++) {
-      final isRest = def.rests.any((r) => r.beat == _tabBeats[i]);
+      final inRest = def.rests.any(
+        (r) => _tabBeats[i] >= r.beat && _tabBeats[i] < r.beat + r.beats,
+      );
       hidden[i] =
-          (strumKindAt(_tabBeats[i]) != null && _tabChordPluck[i]) || isRest;
+          (strumKindAt(_tabBeats[i]) != null && _tabChordPluck[i]) || inRest;
     }
     return hidden;
   }

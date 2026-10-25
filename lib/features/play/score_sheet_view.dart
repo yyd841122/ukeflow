@@ -204,9 +204,14 @@ class _StripPainter extends CustomPainter {
       final y =
           _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
       final center = Offset(point.x, y);
-      // 印张 ×(品位按当前和弦指形,图在其上方)或旋律品位数字。
-      _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}', center,
-          _tabFontSize, scheme.onSurface);
+      // 印张 ×(品位按当前和弦指形)或旋律品位数字。× 照印张画两笔交叉
+      // (10×14、笔画 2.2,2026-10-25 实测;字号 × 仅 ~6×7 太小)。
+      if (point.isChordPluck) {
+        paintCross(canvas, center: center, color: scheme.onSurface);
+      } else {
+        _text(canvas, '${point.note.fret}', center, _tabFontSize,
+            scheme.onSurface);
+      }
     }
     // 节奏带(industry 画法,照 alphaTab/Songsterr:staff 下方杆下垂、
     // 同拍组符杠横连、孤立组符尾;四分裸杆,长音杆更长+延音弧)。
@@ -243,34 +248,24 @@ class _StripPainter extends CustomPainter {
         );
       }
     }
-    // 长音(印张圆圈数字/二分音符:数字外套椭圆,guitar.ch 规范)+ 延音弧。
-    for (final point
-        in layout.tabPoints.where((p) => p.groupHoldBeats)) {
+    // 长音(印张 2026-10-25 实测:品位数字外套椭圆 ~21×25,无延音弧;
+    // × 柱长音不套框,只由节奏带长杆表达——不添加原版没有的符号)。
+    for (final point in layout.tabPoints.where(
+      (p) => p.groupHoldBeats && !p.isChordPluck,
+    )) {
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(
             point.x + 0.5,
             _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap,
           ),
-          width: 18,
-          height: 22,
+          width: 21,
+          height: 25,
         ),
         Paint()
           ..color = scheme.onSurface.withValues(alpha: 0.75)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.3,
-      );
-      canvas.drawPath(
-        Path()
-          ..moveTo(point.x, _tabTop - 14)
-          ..quadraticBezierTo(
-            (point.x + point.groupEndX) / 2, _tabTop - 24,
-            math.max(point.x + 12, point.groupEndX - 4), _tabTop - 14,
-          ),
-        Paint()
-          ..color = scheme.onSurface.withValues(alpha: 0.7)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
       );
     }
     // 连音 × 柱(印张不占拍的延音柱):淡 × 四弦 + 自上一组引弧。
@@ -311,16 +306,34 @@ class _StripPainter extends CustomPainter {
         bottom: _tabTop + 3 * ScoreSheetLayout.tabLineGap,
       );
     }
-    // 休止记号(照印张):钩形符尾(TAB 惯例);占位 ≥2 拍在钩上标拍数
-    // (经典多小节休止编号法,印张「带数字 2 的鱼钩」)。
+    // 休止记号(照印张 2026-10-25 实测):八分 = 实心圆点+左下拖尾钩;
+    // 二拍占位 = 「钩+带底杠数字+钩」三件套,坐①弦线。
     for (final rest in layout.restEvents) {
-      paintRestHook(
-        canvas,
-        x: rest.x,
-        top: _tabTop,
-        bottom: ScoreSheetLayout.tabBandBottom,
-        color: scheme.onSurface,
-        beats: rest.beats,
+      if (rest.beats >= 2) {
+        paintMultiBeatRest(
+          canvas,
+          x: rest.x,
+          top: _tabTop,
+          color: scheme.onSurface,
+          beats: rest.beats.round(),
+        );
+      } else {
+        paintEighthRest(canvas, x: rest.x, top: _tabTop,
+            color: scheme.onSurface);
+      }
+    }
+    // 震音记号:瘦椭圆整罩四弦 × 柱(印张实测 19×59,工单 39)。
+    for (final t in layout.tremoloMarks) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(t.x, _tabTop + 1.5 * ScoreSheetLayout.tabLineGap),
+          width: 19,
+          height: 59,
+        ),
+        Paint()
+          ..color = scheme.onSurface.withValues(alpha: 0.85)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
       );
     }
   }
@@ -491,9 +504,13 @@ class _StripHighlightPainter extends CustomPainter {
             ..strokeWidth = 2
             ..color = scheme.primary);
           canvas.drawCircle(center, 8, Paint()..color = scheme.primary);
-          _text(canvas, point.isChordPluck ? '×' : '${point.note.fret}',
-              center, ScoreSheetLayout.tabFontSize, scheme.onPrimary,
-              bold: true);
+          if (point.isChordPluck) {
+            paintCross(canvas, center: center, color: scheme.onPrimary,
+                strokeWidth: 2.4);
+          } else {
+            _text(canvas, '${point.note.fret}', center,
+                ScoreSheetLayout.tabFontSize, scheme.onPrimary, bold: true);
+          }
         }
       }
     }
@@ -531,32 +548,86 @@ class _StripHighlightPainter extends CustomPainter {
       old.layout != layout || old.cursor != cursor;
 }
 
-/// 休止钩公共画法(TAB 惯例:休止 = 符尾钩;占位 ≥2 拍钩上标拍数)。
-void paintRestHook(
+/// 印张 × 的公共画法:两笔交叉,10×14、笔画 2.2(2026-10-25 实测)。
+void paintCross(
+  Canvas canvas, {
+  required Offset center,
+  required Color color,
+  double strokeWidth = 2.2,
+}) {
+  final paint = Paint()
+    ..color = color
+    ..strokeWidth = strokeWidth
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
+  canvas.drawLine(
+    Offset(center.dx - 5, center.dy - 6.5),
+    Offset(center.dx + 5, center.dy + 6.5),
+    paint,
+  );
+  canvas.drawLine(
+    Offset(center.dx + 5, center.dy - 6.5),
+    Offset(center.dx - 5, center.dy + 6.5),
+    paint,
+  );
+}
+
+/// 八分休止(印张 2026-10-25 实测):实心圆点(10×6.5,坐②③弦间、
+/// ③弦上 4.5px)+ 自点右下向左下拖的尾钩(跨过③弦,共 ~15px)。
+void paintEighthRest(
   Canvas canvas, {
   required double x,
   required double top,
-  required double bottom,
   required Color color,
-  required double beats,
 }) {
-  // 钩:自上向下的斜杆 + 底部圆头(八分休止「7」形;小尺寸下似圆点)。
+  final cy = top + 2 * ScoreSheetLayout.tabLineGap - 4.5;
+  canvas.drawOval(
+    Rect.fromCenter(center: Offset(x, cy), width: 10, height: 6.5),
+    Paint()..color = color,
+  );
+  canvas.drawPath(
+    Path()
+      ..moveTo(x + 2, cy + 3.5)
+      ..quadraticBezierTo(x + 1, cy + 10, x - 3, cy + 14.5),
+    Paint()
+      ..color = color
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round,
+  );
+}
+
+/// 二拍休止占位(印张 2026-10-25 实测):「左钩 + 带底杠数字 + 右钩」
+/// 三件套,总宽 ~41px,全部坐①弦线上——经典多拍休止编号法。
+void paintMultiBeatRest(
+  Canvas canvas, {
+  required double x,
+  required double top,
+  required Color color,
+  required int beats,
+}) {
   final paint = Paint()
     ..color = color
     ..strokeWidth = 2.0
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round;
-  final midY = (top + bottom) / 2;
-  final path = Path()
-    ..moveTo(x + 3, midY - 9)
-    ..lineTo(x - 2, midY + 2)
-    ..quadraticBezierTo(x - 1, midY + 6, x + 3, midY + 4);
-  canvas.drawPath(path, paint);
-  if (beats >= 2) {
-    // 占位拍数标注(印张「带数字 2」)。
-    _text(canvas, '${beats.round()}', Offset(x + 8, midY - 9), 10, color,
-        bold: true);
+  // 左/右钩:宽顶横杆 + 向左下收的尾。
+  for (final hx in [x + 0.5, x + 37.0]) {
+    canvas.drawLine(Offset(hx, top - 5), Offset(hx + 8, top - 5), paint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(hx + 4.5, top - 3)
+        ..quadraticBezierTo(hx + 2.5, top + 2, hx + 1, top + 6),
+      paint,
+    );
   }
+  // 底杠(27×2.4 实心,坐弦线上)。
+  canvas.drawRect(
+    Rect.fromLTWH(x + 9.5, top - 1, 27, 2.4),
+    Paint()..color = color,
+  );
+  // 数字(印张 ~15×8,骑在底杠上)。
+  _text(canvas, '$beats', Offset(x + 23, top - 6), 12, color, bold: true);
 }
 
 /// 扫弦记号公共画法(静态带普通色,当位覆盖层主色描粗——同一形状)。
@@ -575,34 +646,39 @@ void paintStrumGlyph(
     ..style = PaintingStyle.stroke;
   switch (kind) {
     case ScoreStrumKind.roll:
-      // 波浪:竖向 zigzag 小弧连成(慢扫)。
+      // 波浪(印张 2026-10-25 实测):蛇形细摆,上探弦上 9px、跨四弦,
+      // ±4px 摆幅、步距 7.6px、笔画 ~3px。
       final path = Path();
-      var y = top;
+      var y = top - 9.0;
       var dir = 1.0;
-      path.moveTo(x, y);
-      while (y < bottom) {
-        y = math.min(y + 7, bottom);
-        path.quadraticBezierTo(x + 5 * dir, y - 3.5, x, y);
+      path.moveTo(x + 4 * dir, y);
+      while (y < bottom + 2) {
+        y = math.min(y + 7.6, bottom + 2);
+        path.quadraticBezierTo(x + 6 * dir, y - 3.8, x, y);
         dir = -dir;
       }
-      canvas.drawPath(path, paint..strokeWidth = strokeWidth * 0.8);
+      canvas.drawPath(path, paint..strokeWidth = strokeWidth * 1.2);
     case ScoreStrumKind.strumDown:
-      canvas.drawLine(Offset(x, top), Offset(x, bottom - 4), paint);
+      // 直杆+下箭头(印张:头宽 9、杆贯穿谱高,上探 5px 下探 12px)。
+      canvas.drawLine(
+          Offset(x, top - 5), Offset(x, bottom + 6), paint);
       canvas.drawPath(
         Path()
-          ..moveTo(x - 5, bottom - 9)
-          ..lineTo(x, bottom)
-          ..lineTo(x + 5, bottom - 9),
-        paint..strokeWidth = strokeWidth * 0.9,
+          ..moveTo(x - 4.5, bottom + 0.5)
+          ..lineTo(x, bottom + 7)
+          ..lineTo(x + 4.5, bottom + 0.5),
+        paint,
       );
     case ScoreStrumKind.strumUp:
-      canvas.drawLine(Offset(x, top + 4), Offset(x, bottom), paint);
+      // 直杆+上箭头(印张实测:尖朝上、头宽 9、杆下探过④弦 12px)。
+      canvas.drawLine(
+          Offset(x, top - 7), Offset(x, bottom + 5), paint);
       canvas.drawPath(
         Path()
-          ..moveTo(x - 5, top + 9)
-          ..lineTo(x, top)
-          ..lineTo(x + 5, top + 9),
-        paint..strokeWidth = strokeWidth * 0.9,
+          ..moveTo(x - 4.5, top - 0.5)
+          ..lineTo(x, top - 7)
+          ..lineTo(x + 4.5, top - 0.5),
+        paint,
       );
   }
 }

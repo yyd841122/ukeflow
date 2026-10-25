@@ -32,9 +32,18 @@ class ScoreStrumEvent {
   final ScoreStrumKind kind;
 }
 
+/// 震音记号(照印张):印张把密集拨弦 × 柱整柱套进瘦椭圆(实测高 59px
+/// 罩满四弦),本表记回位置——渲染画椭圆框,柱内 × 照常画。
+class ScoreTremoloEvent {
+  const ScoreTremoloEvent(this.beat);
+
+  /// 主轴拍位(柱所在拍)。
+  final double beat;
+}
+
 /// 休止事件(照印张):印张 TAB 行的休止被转录拍平,本表记回——渲染画
-/// 休止记号(TAB 惯例:休止 = 符尾钩;二拍占位 = 钩上标拍数,经典多小节
-/// 休止编号法),发声本就是静默(数据无 attack,不动)。
+/// 休止记号(八分 = 实心圆点+左下拖尾钩;二拍占位 = 「钩+带底杠数字+
+/// 钩」三件套,工单 39 实测),发声本就是静默(数据无 attack,不动)。
 class ScoreRestEvent {
   const ScoreRestEvent(this.beat, this.beats);
 
@@ -77,6 +86,7 @@ class ScoreSheetDef {
     required this.chords,
     this.strums = const [],
     this.rests = const [],
+    this.tremolos = const [],
   });
 
   /// 组合定义 id:随主轴谱卡(独奏谱类型,工单 38)。
@@ -109,6 +119,9 @@ class ScoreSheetDef {
 
   /// 休止事件,严格按拍位升序(印张休止记号;发声不受影响)。
   final List<ScoreRestEvent> rests;
+
+  /// 震音记号,严格按拍位升序(印张椭圆框 × 柱)。
+  final List<ScoreTremoloEvent> tremolos;
 
   /// 副标题行:「artist · 78 BPM · 1=E」——曲库独奏卡与谱面页元信息共用
   /// (谱面页再前置类型名,单一拼装源在此)。
@@ -190,15 +203,13 @@ final _aiNiStrums = <ScoreStrumEvent>[
   _r(6), // b2 卷弦 A
   _su(7.5), // b2 上扫 A
   _r(8), // b3 卷弦 B
-  _su(9), // b3 B 上扫
-  _su(10), // b3 Bsus4 上扫(下扫位照印张为二拍休止占位,见 rests)
-  _sd(14), // b4 B 全弦扫
+  // b3 拍 9.5-10.5 照印张为二拍休止占位(钩+带底杠数字 2+钩),无扫弦。
+  _r(14), // b4 B 全弦卷弦(印张波浪,2026-10-25 实测;旧讹下扫)
   _r(16), // b5 卷弦 E
-  _su(17), // b5 上扫
-  _su(17.5), // b5 上扫
   // ── 副歌A 收(卷弦)+ 高置段/尾扫弦(方向按惯例预置,目验纠正)──
   _r(80), // b21 卷弦收
-  _sd(81), _su(81.5), _su(81.75), _sd(82),
+  _sd(81), _su(81.5), _su(81.75),
+  // 拍 82 照印张为椭圆框震音 × 柱(见 tremolos),非下扫。
   _sd(84), _sd(85), _su(85.5), _su(85.75),
   _sd(86.25), _su(86.5), _su(86.75), _sd(87), _su(87.5), _su(87.75),
   _sd(88), _sd(89), _su(89.5), _su(89.75),
@@ -224,8 +235,11 @@ final scoreSheetCatalog = <ScoreSheetDef>[
     keySignature: '1=E',
     strums: _aiNiStrums,
     rests: const [
-      ScoreRestEvent(7, 0.5), // b2:卷弦A(四分)后八分休止,再上扫 A
-      ScoreRestEvent(9.5, 2), // b3:二拍休止占位(印张钩形带数字 2)
+      ScoreRestEvent(7, 0.5), // b2:卷弦A(四分)后八分休止(实心点+拖尾钩),再上扫 A
+      ScoreRestEvent(9.5, 2), // b3:二拍休止占位(钩+带底杠数字 2+钩,2026-10-25 实测)
+    ],
+    tremolos: const [
+      ScoreTremoloEvent(82), // b22:椭圆框震音 × 柱(印张实测 19×59 瘦椭圆罩四弦)
     ],
     chords: [
       // ── 前奏 b2-5(拍 4-20):E-A-B-Bsus4-A-B-E,工单 37 前奏台账 ──

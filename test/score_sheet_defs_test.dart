@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
 import 'package:ukeflow/core/chart/score_sheet_defs.dart';
 
@@ -19,7 +20,7 @@ void main() {
     }
   });
 
-  test('爱你不是两三天:主轴=独奏谱 496 音 78bpm,旋律 168 音 +20 对齐', () {
+  test('爱你不是两三天:主轴=独奏谱 488 音 78bpm,旋律 168 音 +20 对齐', () {
     final def = scoreSheetCatalog.single;
     expect(def.id, 'ai-ni-bu-shi-liang-san-tian-solo');
     expect(def.title, '爱你不是两三天');
@@ -27,7 +28,7 @@ void main() {
     final tab = charts[def.tabChartId]!;
     final melody = charts[def.melodyChartId]!;
     expect(tab.tempo, 78);
-    expect(tab.notes.length, 496);
+    expect(tab.notes.length, 488);
     expect(melody.notes.length, 168);
     // 恒定偏移:旋律任一音 +20 必须落在主轴网格内(抽样首尾)。
     final melodyBeats = melody.notes.map((n) => n.beat).toList()..sort();
@@ -180,6 +181,27 @@ void main() {
         containsAll([(7.0, 0.5), (9.5, 2.0)]));
     expect(def.strums.any((e) => e.beat == 9.5), isFalse,
         reason: '下扫位照印张为休止占位');
+    // 2026-10-25 印张像素实测:b3 拍 9.5-10.5 整段休止;b4@14 为卷弦;
+    // b5 无上扫箭头;b22@82 为椭圆框震音柱(非下扫)。
+    expect(
+      def.strums.where((e) => e.beat >= 9.5 && e.beat < 10.5),
+      isEmpty,
+      reason: '二拍休止区间内无扫弦',
+    );
+    expect(def.strums.firstWhere((e) => e.beat == 14.0).kind,
+        ScoreStrumKind.roll, reason: '@14 印张为波浪(卷弦)');
+    expect(def.strums.where((e) => e.beat == 17.0 || e.beat == 17.5),
+        isEmpty, reason: 'b5 印张无上扫箭头');
+    expect(def.strums.any((e) => e.beat == 82.0), isFalse,
+        reason: '@82 为震音柱');
+    expect(def.tremolos.map((t) => t.beat), [82.0]);
+    // 数据侧:休止区间内无音(误读堆音已删,发声与印张一致)。
+    final charts2 = {
+      for (final e in builtinTabChartCatalog) e.id: e.chart,
+    };
+    final solo2 = charts2[def.tabChartId]!;
+    expect(solo2.notes.where((n) => n.beat >= 9.5 && n.beat < 10.5),
+        isEmpty, reason: '拍 9.5-10.5 照印张为休止');
     // 升序不重拍。
     for (var i = 1; i < def.strums.length; i++) {
       expect(def.strums[i].beat, greaterThan(def.strums[i - 1].beat));
