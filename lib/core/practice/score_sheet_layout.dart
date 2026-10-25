@@ -458,11 +458,12 @@ class ScoreSheetLayout {
 
   // ── 节奏带(industry 画法:杆下垂、同拍组符杠横连、孤立组符尾)──
 
-  /// 每组一根符杆(x,时值;二分以上更长裸杆,四分裸杆)。
-  late final List<({double x, double duration})> rhythmStems = [
+  /// 每组一根符杆(x,拍位,时值)。拍位参与符杠分组——小节空气后
+  /// x 与拍不再成比例,像素桶判定会错连(2026-10-25 真机)。
+  late final List<({double x, double beat, double duration})> rhythmStems = [
     for (final p in tabPoints)
       if (identical(p, tabPoints.firstWhere((q) => q.note.beat == p.note.beat)))
-        (x: p.x, duration: p.groupDuration),
+        (x: p.x, beat: p.note.beat, duration: p.groupDuration),
   ];
 
   /// 符杠:同一整数拍窗内连续可连组(时值 ≤ 0.5)横连一条;
@@ -479,7 +480,8 @@ class ScoreSheetLayout {
       var j = i;
       while (j + 1 < groups.length &&
           groups[j + 1].duration <= 0.5 &&
-          groups[j + 1].x ~/ stripPxPerBeat == groups[i].x ~/ stripPxPerBeat) {
+          (groups[j + 1].beat + 1e-9).floor() ==
+              (groups[i].beat + 1e-9).floor()) {
         j++;
       }
       if (j > i) {
