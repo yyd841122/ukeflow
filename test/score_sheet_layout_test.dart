@@ -20,10 +20,15 @@ void main() {
   );
 
   group('横带几何:时值即距离,和弦图居中压锚拍', () {
-    test('stripX 线性:拍位×像素 + 带首留白', () {
-      expect(l.stripX(0), ScoreSheetLayout.stripLeftPad);
+    test('stripX 分段线性:拍位×像素 + 带首留白 + 小节空气', () {
+      final inset = ScoreSheetLayout.barInset;
+      // 拍 0 在带首 + 一格空气(不压行首)。
+      expect(l.stripX(0), ScoreSheetLayout.stripLeftPad + inset);
+      // 跨小节线:整体再右移一格(小节加宽)。
       expect(l.stripX(4),
-          ScoreSheetLayout.stripLeftPad + 4 * ScoreSheetLayout.stripPxPerBeat);
+          ScoreSheetLayout.stripLeftPad + 4 * ScoreSheetLayout.stripPxPerBeat + 2 * inset);
+      // 同小节内仍线性(时值即距离)。
+      expect(l.stripX(4.5) - l.stripX(4), 0.5 * ScoreSheetLayout.stripPxPerBeat);
     });
 
     test('横带宽度收在主轴网格(27 小节)+ 右留白', () {

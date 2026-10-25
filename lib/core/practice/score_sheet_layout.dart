@@ -322,6 +322,11 @@ class ScoreSheetLayout {
   /// 一档拍位的像素宽:16 分符位 10px 可辨,全曲 108 拍约 4.3kpx。
   static const stripPxPerBeat = 40.0;
 
+  /// 小节空气(印张 2026-10-25 实测 ~25px):内容不压小节线——每过一根
+  /// 小节线,该小节全部元素(和弦图/音符/杆)整体右移一格,小节随之
+  /// 加宽;拍距在小节内恒定。
+  static const barInset = 24.0;
+
   /// 带首留白:谱角调号 + 首和弦与左缘的距离(照印张行首留气口)。
   static const stripLeftPad = 56.0;
   static const stripRightPad = 24.0;
@@ -398,9 +403,14 @@ class ScoreSheetLayout {
   /// 四层皆无元素的小节(全休止,画 0)。
   late final List<int> emptyBars;
 
-  /// 主轴拍位 → 横带绝对 x(线性:时值即距离)。
-  double stripX(double mainBeat) =>
-      stripLeftPad + mainBeat * stripPxPerBeat;
+  /// 主轴拍位 → 横带绝对 x:拍位×像素 + 带首留白 + 小节空气
+  /// (每跨一根小节线加一格 [barInset];同小节内时值即距离)。
+  double stripX(double mainBeat) {
+    final bar = (mainBeat / beatsPerBar + 1e-9).floor();
+    return stripLeftPad +
+        mainBeat * stripPxPerBeat +
+        (bar + 1) * barInset;
+  }
 
   /// 第 [bar] 小节线(0 起)的绝对 x。
   double barX(int bar) => stripX(bar * beatsPerBar.toDouble());
