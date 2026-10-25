@@ -319,12 +319,12 @@ void main() {
     expect(song.notes.last.beat, 87.5);
   });
 
-  test('爱你不是两三天·独奏:前奏+主歌+副歌 485 音,权威源 TAB 行转录抽查', () {
+  test('爱你不是两三天·独奏:前奏+主歌+副歌 484 音,权威源 TAB 行转录抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian-solo')
         .chart;
 
-    expect(song.notes, hasLength(485));
+    expect(song.notes, hasLength(484));
     expect(song.tempo, 78);
 
     // 小节2 卷弦起 = E 和弦 4442 块(低弦→高弦),接 ③④②③ 拨弦序列。
@@ -353,8 +353,13 @@ void main() {
       [(2, 0, 13.0), (1, 0, 13.25), (1, 2, 13.5)],
     );
 
-    // 拍 9.5-10.5 照印张为二拍休止占位(2026-10-25 实测后删误读堆音)。
-    expect(song.notes.where((n) => n.beat >= 9.5 && n.beat < 10.5), isEmpty);
+    // 拍 9-10 照印张 = ①8/①7/①4 单音+滑音(原三组堆音系误读)。
+    expect(
+      song.notes
+          .where((n) => n.beat >= 9.0 && n.beat <= 10.0)
+          .map((n) => (n.beat, n.string, n.fret)),
+      [(9.0, 1, 8), (9.5, 1, 7), (10.0, 1, 4)],
+    );
 
     // 前奏末音 = ①8=F5 @18(印张数字外套椭圆,二拍长音)。
     final fermata = song.notes.singleWhere((n) => n.beat == 18.0);

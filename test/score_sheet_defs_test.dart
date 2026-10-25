@@ -20,7 +20,7 @@ void main() {
     }
   });
 
-  test('爱你不是两三天:主轴=独奏谱 485 音 78bpm,旋律 168 音 +20 对齐', () {
+  test('爱你不是两三天:主轴=独奏谱 484 音 78bpm,旋律 168 音 +20 对齐', () {
     final def = scoreSheetCatalog.single;
     expect(def.id, 'ai-ni-bu-shi-liang-san-tian-solo');
     expect(def.title, '爱你不是两三天');
@@ -28,7 +28,7 @@ void main() {
     final tab = charts[def.tabChartId]!;
     final melody = charts[def.melodyChartId]!;
     expect(tab.tempo, 78);
-    expect(tab.notes.length, 485);
+    expect(tab.notes.length, 484);
     expect(melody.notes.length, 168);
     // 恒定偏移:旋律任一音 +20 必须落在主轴网格内(抽样首尾)。
     final melodyBeats = melody.notes.map((n) => n.beat).toList()..sort();
@@ -177,8 +177,9 @@ void main() {
     // b4 @12.0(堆+旋律①2)不是扫弦。
     expect(def.strums.any((e) => e.beat == 12.0), isFalse);
     // 休止事件:b2 卷弦 A 后八分休止(拍 7)、b3 下扫位为二拍休止占位(9.5)。
-    expect(def.rests.map((r) => (r.beat, r.beats)),
-        containsAll([(7.0, 0.5), (9.5, 2.0)]));
+    expect(def.rests.map((r) => (r.beat, r.beats)), containsAll([(7.0, 0.5)]));
+    // 滑音:b3 ①7→①4(2026-10-25 印张实测,原"二拍休止占位"系误读)。
+    expect(def.slides.map((e) => (e.fromBeat, e.toBeat)), [(9.5, 10.0)]);
     expect(def.strums.any((e) => e.beat == 9.5), isFalse,
         reason: '下扫位照印张为休止占位');
     // 2026-10-25 印张像素实测:b3 拍 9.5-10.5 整段休止;b4@14 为卷弦;
@@ -195,13 +196,17 @@ void main() {
     expect(def.strums.any((e) => e.beat == 82.0), isFalse,
         reason: '@82 为震音柱');
     expect(def.tremolos.map((t) => t.beat), [82.0]);
-    // 数据侧:休止区间内无音(误读堆音已删,发声与印张一致)。
+    // 数据侧:拍 9-10 = ①8/①7/①4 三个单音(滑音线,2026-10-25 实测)。
     final charts2 = {
       for (final e in builtinTabChartCatalog) e.id: e.chart,
     };
     final solo2 = charts2[def.tabChartId]!;
-    expect(solo2.notes.where((n) => n.beat >= 9.5 && n.beat < 10.5),
-        isEmpty, reason: '拍 9.5-10.5 照印张为休止');
+    expect(
+      solo2.notes
+          .where((n) => n.beat >= 9.0 && n.beat <= 10.0)
+          .map((n) => (n.beat, n.string, n.fret)),
+      [(9.0, 1, 8), (9.5, 1, 7), (10.0, 1, 4)],
+    );
     // 升序不重拍。
     for (var i = 1; i < def.strums.length; i++) {
       expect(def.strums[i].beat, greaterThan(def.strums[i - 1].beat));

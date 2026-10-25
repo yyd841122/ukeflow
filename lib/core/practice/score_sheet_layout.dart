@@ -436,6 +436,12 @@ class ScoreSheetLayout {
     for (final e in def.tremolos) (x: stripX(e.beat), beat: e.beat),
   ];
 
+  /// 滑音记号(照印张渲染:两品位数字间斜线;x 坐标预计算)。
+  late final List<({double x0, double x1})> slideMarks = [
+    for (final e in def.slides)
+      (x0: stripX(e.fromBeat), x1: stripX(e.toBeat)),
+  ];
+
   /// 连音 × 柱(印张「×柱带连音弧=不占拍无攻击」):扫弦段(有 ≥3 个
   /// 扫弦事件的小节)的小节第 3 拍,若该拍无攻击,画淡 × 柱并从上一组
   /// 引延音弧(高置段/尾每小节一处,数据空档与印张逐一吻合)。

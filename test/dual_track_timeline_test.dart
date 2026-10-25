@@ -19,7 +19,7 @@ void main() {
   group('双轨合并谱', () {
     final merged = buildScorePlaybackChart(def, solo, melodyChart: melody);
 
-    test('两轨全量合并:488 伴奏音 + 168 旋律音移位', () {
+    test('两轨全量合并:484 伴奏音 + 168 旋律音移位', () {
       expect(merged.notes.length, solo.notes.length + melody.notes.length);
     });
 
@@ -79,10 +79,12 @@ void main() {
     // @14.0 卷弦(B 全弦,印张实测为波浪非下扫;70ms/弦,④→①)。
     expect(beatOf(4, 14.0), 14.0);
     expect(beatOf(1, 14.0), closeTo(14.0 + 210 * msToBeats, 1e-9));
-    // @9.5-10.5 照印张为二拍休止占位:数据无音(2026-10-25 删误读堆音)。
+    // @9-10 照印张为 ①8/①7/①4 单音(滑音,2026-10-25 实测)。
     expect(
-      single.notes.where((n) => n.beat >= 9.5 && n.beat < 10.5),
-      isEmpty,
+      single.notes
+          .where((n) => n.beat >= 9.0 && n.beat <= 10.0)
+          .map((n) => (n.beat, n.string, n.fret)),
+      [(9.0, 1, 8), (9.5, 1, 7), (10.0, 1, 4)],
     );
 
     // @7.5 照印张为单音 ①2(独立八分,杆+符尾),非上扫堆。

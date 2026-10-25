@@ -344,6 +344,19 @@ class _StripPainter extends CustomPainter {
             color: scheme.onSurface);
       }
     }
+    // 滑音记号:两品位数字间的斜线,方向随音高(降=向右下;印张惯例)。
+    for (final sl in layout.slideMarks) {
+      final y0 = _tabTop - 3;
+      final y1 = _tabTop + 5;
+      canvas.drawLine(
+        Offset(sl.x0 + 6, sl.x0 <= sl.x1 ? y0 : y1),
+        Offset(sl.x1 - 3, sl.x0 <= sl.x1 ? y1 : y0),
+        Paint()
+          ..color = scheme.onSurface
+          ..strokeWidth = 2.0
+          ..strokeCap = StrokeCap.round,
+      );
+    }
     // 震音记号:瘦椭圆整罩四弦 × 柱(印张实测 19×59,工单 39)。
     for (final t in layout.tremoloMarks) {
       canvas.drawOval(
