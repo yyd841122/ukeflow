@@ -1,0 +1,55 @@
+{
+ "gt_notes": 246,
+ "note_recall": 0.024,
+ "note_events": 134,
+ "note_precision": 0.127,
+ "gt_strums": 60,
+ "strum_recall": 0.0,
+ "gt_rests": 2,
+ "rest_recall": 0.0,
+ "gt_tremolos": 1,
+ "tremolo_recall": 0.0,
+ "beyond_truth_events": 13,
+ "miss_examples": [
+  {
+   "beat": 4.5,
+   "string": 3,
+   "fret": 4
+  },
+  {
+   "beat": 5.0,
+   "string": 2,
+   "fret": 4
+  },
+  {
+   "beat": 5.5,
+   "string": 3,
+   "fret": 4
+  },
+  {
+   "beat": 9.0,
+   "string": 4,
+   "fret": 4
+  },
+  {
+   "beat": 9.0,
+   "string": 3,
+   "fret": 3
+  },
+  {
+   "beat": 9.0,
+   "string": 2,
+   "fret": 2
+  },
+  {
+   "beat": 9.0,
+   "string": 1,
+   "fret": 2
+  },
+  {
+   "beat": 11.5,
+   "string": 3,
+   "fret": 4
+  }
+ ]
+}
