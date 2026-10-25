@@ -36,12 +36,14 @@ void main() {
       expect(l.stripWidth, l.barX(27) + ScoreSheetLayout.stripRightPad);
     });
 
-    test('和弦图居中压在其锚拍上,与带首留有距离(照印张对应关系)', () {
-      // 首锚 E@4:中心在 stripX(4),不贴行首。
+    test('和弦图压在其锚拍右侧 12px,与带首留有距离(照印张对应关系)', () {
+      // 首锚 E@4:中心在拍位右侧 12px(印张名牌不居中压拍),不贴行首。
       final first = l.chordGlyphs.first;
       expect(first.anchor.label, 'E');
       expect(first.x,
-          l.stripX(4) - ScoreSheetLayout.chordGlyphWidth / 2);
+          l.stripX(4) +
+              ScoreSheetLayout.chordRightNudge -
+              ScoreSheetLayout.chordGlyphWidth / 2);
       expect(first.x, greaterThan(ScoreSheetLayout.stripLeftPad),
           reason: '和弦图与带首有距离');
       // 两两不叠且按拍序排布。

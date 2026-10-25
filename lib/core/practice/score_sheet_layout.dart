@@ -249,7 +249,9 @@ class ScoreSheetLayout {
         ScoreGlyph(
           i,
           def.chords[i],
-          stripX(def.chords[i].beat) - chordGlyphWidth / 2,
+          stripX(def.chords[i].beat) +
+              chordRightNudge -
+              chordGlyphWidth / 2,
         ),
     ];
     // 组时值:同拍一组,距下一组的拍距 = 印张节奏杆(与简谱同推导)。
@@ -326,6 +328,9 @@ class ScoreSheetLayout {
   /// 小节线,该小节全部元素(和弦图/音符/杆)整体右移一格,小节随之
   /// 加宽;拍距在小节内恒定。
   static const barInset = 24.0;
+
+  /// 和弦名/图右偏(印张实测:名牌中心压在拍位右侧 ~12px,不居中压拍)。
+  static const chordRightNudge = 12.0;
 
   /// 带首留白:谱角调号 + 首和弦与左缘的距离(照印张行首留气口)。
   static const stripLeftPad = 56.0;
