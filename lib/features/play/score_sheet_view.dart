@@ -217,8 +217,16 @@ class _StripPainter extends CustomPainter {
     // 八分在**杆底**横杠相连(⊔ 缺口框,非杆顶 H);孤立可连组杆底小旗;
     // 十六分第二道杠在主杠上方 4px。长音(数字套椭圆)不另画杆
     // (印张 ①8@18 实测无杆)。
-    const stemLen = 40.0;
-    final tipY = ScoreSheetLayout.tabBandBottom + stemLen;
+    final tipY = ScoreSheetLayout.tabBandBottom + 48.0;
+    // 杆顶 = 组内最低弦线 +13(印张:杆自音符字形底下 ~6px 起;
+    // 数字在①弦的音,杆穿谱而下直到公共杆底——①2@7.5 实测)。
+    final groupTopY = <double, double>{};
+    for (final p in layout.tabPoints) {
+      final lineY = ScoreSheetLayout.tabBandTop +
+          (p.note.string - 1) * ScoreSheetLayout.tabLineGap;
+      final cur = groupTopY[p.x];
+      if (cur == null || lineY > cur) groupTopY[p.x] = lineY;
+    }
     final holdXs = <double>{
       for (final p in layout.tabPoints
           .where((p) => p.groupHoldBeats && !p.isChordPluck))
@@ -226,8 +234,12 @@ class _StripPainter extends CustomPainter {
     };
     for (final stem in layout.rhythmStems) {
       if (holdXs.any((hx) => (hx - stem.x).abs() < 1)) continue;
+      final top = math.min(
+        (groupTopY[stem.x] ?? ScoreSheetLayout.tabBandBottom) + 13,
+        tipY - 12,
+      );
       canvas.drawLine(
-        Offset(stem.x, ScoreSheetLayout.tabBandBottom),
+        Offset(stem.x, top),
         Offset(stem.x, tipY),
         Paint()
           ..color = scheme.onSurface
