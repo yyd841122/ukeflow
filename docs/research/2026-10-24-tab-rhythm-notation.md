@@ -32,3 +32,21 @@ LilyPond。结论已落 `score_sheet_layout.dart` 的节奏带体系。
 - VexTab tutorial(tab-stems): https://vexflow.com/vextab/tutorial.html
 - LilyPond tablature stems/beams: https://lilypond.org/doc/v2.24/Documentation/snippets/stems-and-beams-in-tablatures
 - Guitar Tricks tab symbols(slides/H/P/×): https://www.guitartricks.com/blog/Guitar-Tab-Symbols-Explained
+
+## 补充(2026-10-25):休止与音符头的 TAB 画法(guitar.ch 节奏 TAB 规范)
+
+- **音符头**:全音符 = 数字外套椭圆(无杆,4 拍);二分 = 椭圆+杆(2 拍);
+  四分 = 数字带杆;八分 = 数字+旗/杠;十六分 = 两条杠。
+  → 长音(≥2 拍)已实现为「数字外套椭圆」。
+- **休止(TAB 内直接画)**:全休止 = 矩形挂第 3 弦;二分休止 = 矩形坐第 4 弦
+  (2 拍);四分 = 弯钩;**八分 = 单条符尾钩;十六分 = 双钩**。
+  → 采纳:休止钩(八分)+ 钩上标拍数的占位画法(经典多小节休止编号法,
+  印张「带数字 2 的鱼钩」)。
+- **其他**:三连音 = 括号/弧线标 3(本谱三连音直化段暂不标,数据在案);
+  附点 = 延长一半;tie = 连接保持音;fermata = 弧+点。
+
+## 引用(补充)
+
+- guitar.ch 节奏 TAB 规范(音符头/休止/装饰音逐一图文): https://www.guitar.ch/en/guitars/theory/theory-rhythmic-tablature.html
+- 古典吉他休止教学(休止形状): https://www.classicalguitarcorner.com/rests-in-music
+- Guitar Pro Academy(全/二/四分休止): https://www.guitar-pro.com/academy/l/49284-whole-rest-half-rest-and-quarter-rest

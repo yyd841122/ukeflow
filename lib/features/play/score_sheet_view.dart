@@ -243,9 +243,23 @@ class _StripPainter extends CustomPainter {
         );
       }
     }
-    // 长音延音弧(印张圆圈数字/椭圆×柱一族):弧从组头挂到组尾。
+    // 长音(印张圆圈数字/二分音符:数字外套椭圆,guitar.ch 规范)+ 延音弧。
     for (final point
         in layout.tabPoints.where((p) => p.groupHoldBeats)) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(
+            point.x + 0.5,
+            _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap,
+          ),
+          width: 18,
+          height: 22,
+        ),
+        Paint()
+          ..color = scheme.onSurface.withValues(alpha: 0.75)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3,
+      );
       canvas.drawPath(
         Path()
           ..moveTo(point.x, _tabTop - 14)
@@ -295,6 +309,18 @@ class _StripPainter extends CustomPainter {
         color: scheme.onSurface,
         top: _tabTop,
         bottom: _tabTop + 3 * ScoreSheetLayout.tabLineGap,
+      );
+    }
+    // 休止记号(照印张):钩形符尾(TAB 惯例);占位 ≥2 拍在钩上标拍数
+    // (经典多小节休止编号法,印张「带数字 2 的鱼钩」)。
+    for (final rest in layout.restEvents) {
+      paintRestHook(
+        canvas,
+        x: rest.x,
+        top: _tabTop,
+        bottom: ScoreSheetLayout.tabBandBottom,
+        color: scheme.onSurface,
+        beats: rest.beats,
       );
     }
   }
@@ -503,6 +529,34 @@ class _StripHighlightPainter extends CustomPainter {
   @override
   bool shouldRepaint(_StripHighlightPainter old) =>
       old.layout != layout || old.cursor != cursor;
+}
+
+/// 休止钩公共画法(TAB 惯例:休止 = 符尾钩;占位 ≥2 拍钩上标拍数)。
+void paintRestHook(
+  Canvas canvas, {
+  required double x,
+  required double top,
+  required double bottom,
+  required Color color,
+  required double beats,
+}) {
+  // 钩:自上向下的斜杆 + 底部圆头(八分休止「7」形;小尺寸下似圆点)。
+  final paint = Paint()
+    ..color = color
+    ..strokeWidth = 2.0
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
+  final midY = (top + bottom) / 2;
+  final path = Path()
+    ..moveTo(x + 3, midY - 9)
+    ..lineTo(x - 2, midY + 2)
+    ..quadraticBezierTo(x - 1, midY + 6, x + 3, midY + 4);
+  canvas.drawPath(path, paint);
+  if (beats >= 2) {
+    // 占位拍数标注(印张「带数字 2」)。
+    _text(canvas, '${beats.round()}', Offset(x + 8, midY - 9), 10, color,
+        bold: true);
+  }
 }
 
 /// 扫弦记号公共画法(静态带普通色,当位覆盖层主色描粗——同一形状)。

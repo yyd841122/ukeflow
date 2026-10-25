@@ -76,9 +76,11 @@ void main() {
     expect(beatOf(3, 4.0), closeTo(4.0 + 70 * msToBeats, 1e-9));
     expect(beatOf(1, 4.0), closeTo(4.0 + 210 * msToBeats, 1e-9));
 
-    // @9.5 下扫(B,快扫 25ms/弦,④→①)。
+    // @14.0 下扫(B 全弦扫,快扫 25ms/弦,④→①)。
+    expect(beatOf(4, 14.0), 14.0);
+    expect(beatOf(1, 14.0), closeTo(14.0 + 75 * msToBeats, 1e-9));
+    // @9.5 已改二拍休止占位(印张):发声回到同拍(不再错峰)。
     expect(beatOf(4, 9.5), 9.5);
-    expect(beatOf(1, 9.5), closeTo(9.5 + 75 * msToBeats, 1e-9));
 
     // @7.5 上扫(A,快扫,①→④):① 不动,④ 殿后 +75ms。
     expect(beatOf(1, 7.5), 7.5);

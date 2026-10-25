@@ -408,6 +408,11 @@ class ScoreSheetLayout {
   double get stripWidth =>
       (barCount == 0 ? stripLeftPad : barX(barCount)) + stripRightPad;
 
+  /// 休止事件(照印张渲染;x 坐标预计算)。
+  late final List<({double x, double beat, double beats})> restEvents = [
+    for (final e in def.rests) (x: stripX(e.beat), beat: e.beat, beats: e.beats),
+  ];
+
   /// 连音 × 柱(印张「×柱带连音弧=不占拍无攻击」):扫弦段(有 ≥3 个
   /// 扫弦事件的小节)的小节第 3 拍,若该拍无攻击,画淡 × 柱并从上一组
   /// 引延音弧(高置段/尾每小节一处,数据空档与印张逐一吻合)。
@@ -520,12 +525,14 @@ class ScoreSheetLayout {
   }
 
   /// 被扫弦遮蔽的逐音 ×:该拍有扫弦事件且本音落指形位
-  /// (旋律音即使在扫弦拍也保持数字)。
+  /// (旋律音即使在扫弦拍也保持数字)。休止事件拍同样遮蔽
+  /// (显示照印张画休止钩;发声不受影响)。
   List<bool> _computeStrumHidden() {
     final hidden = List<bool>.filled(tabNotes.length, false);
     for (var i = 0; i < tabNotes.length; i++) {
+      final isRest = def.rests.any((r) => r.beat == _tabBeats[i]);
       hidden[i] =
-          strumKindAt(_tabBeats[i]) != null && _tabChordPluck[i];
+          (strumKindAt(_tabBeats[i]) != null && _tabChordPluck[i]) || isRest;
     }
     return hidden;
   }

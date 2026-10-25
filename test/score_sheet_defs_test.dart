@@ -175,6 +175,11 @@ void main() {
     expect(def.strums.where((e) => e.beat >= 20 && e.beat < 68), isEmpty);
     // b4 @12.0(堆+旋律①2)不是扫弦。
     expect(def.strums.any((e) => e.beat == 12.0), isFalse);
+    // 休止事件:b2 卷弦 A 后八分休止(拍 7)、b3 下扫位为二拍休止占位(9.5)。
+    expect(def.rests.map((r) => (r.beat, r.beats)),
+        containsAll([(7.0, 0.5), (9.5, 2.0)]));
+    expect(def.strums.any((e) => e.beat == 9.5), isFalse,
+        reason: '下扫位照印张为休止占位');
     // 升序不重拍。
     for (var i = 1; i < def.strums.length; i++) {
       expect(def.strums[i].beat, greaterThan(def.strums[i - 1].beat));

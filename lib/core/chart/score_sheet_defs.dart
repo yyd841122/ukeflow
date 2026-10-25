@@ -32,6 +32,19 @@ class ScoreStrumEvent {
   final ScoreStrumKind kind;
 }
 
+/// 休止事件(照印张):印张 TAB 行的休止被转录拍平,本表记回——渲染画
+/// 休止记号(TAB 惯例:休止 = 符尾钩;二拍占位 = 钩上标拍数,经典多小节
+/// 休止编号法),发声本就是静默(数据无 attack,不动)。
+class ScoreRestEvent {
+  const ScoreRestEvent(this.beat, this.beats);
+
+  /// 主轴拍位。
+  final double beat;
+
+  /// 休止拍数(0.5 = 八分;2 = 二分占位,渲染标数字)。
+  final double beats;
+}
+
 /// 和弦行的一个拍锚:第 [beat] 拍起换 [label] 和弦,指形照印张自绘
 /// (不走 chords-db 查表——G#7/F#m/C#m7/D7 为印张手读形)。
 class ScoreChordAnchor {
@@ -63,6 +76,7 @@ class ScoreSheetDef {
     required this.keySignature,
     required this.chords,
     this.strums = const [],
+    this.rests = const [],
   });
 
   /// 组合定义 id:随主轴谱卡(独奏谱类型,工单 38)。
@@ -92,6 +106,9 @@ class ScoreSheetDef {
 
   /// 扫弦/卷弦事件,严格按拍位升序(印张箭头/波浪;无则全拨弦)。
   final List<ScoreStrumEvent> strums;
+
+  /// 休止事件,严格按拍位升序(印张休止记号;发声不受影响)。
+  final List<ScoreRestEvent> rests;
 
   /// 副标题行:「artist · 78 BPM · 1=E」——曲库独奏卡与谱面页元信息共用
   /// (谱面页再前置类型名,单一拼装源在此)。
@@ -174,8 +191,7 @@ final _aiNiStrums = <ScoreStrumEvent>[
   _su(7.5), // b2 上扫 A
   _r(8), // b3 卷弦 B
   _su(9), // b3 B 上扫
-  _sd(9.5), // b3 B 下扫
-  _su(10), // b3 Bsus4 上扫
+  _su(10), // b3 Bsus4 上扫(下扫位照印张为二拍休止占位,见 rests)
   _sd(14), // b4 B 全弦扫
   _r(16), // b5 卷弦 E
   _su(17), // b5 上扫
@@ -207,6 +223,10 @@ final scoreSheetCatalog = <ScoreSheetDef>[
     melodyAlignBeats: 20,
     keySignature: '1=E',
     strums: _aiNiStrums,
+    rests: const [
+      ScoreRestEvent(7, 0.5), // b2:卷弦A(四分)后八分休止,再上扫 A
+      ScoreRestEvent(9.5, 2), // b3:二拍休止占位(印张钩形带数字 2)
+    ],
     chords: [
       // ── 前奏 b2-5(拍 4-20):E-A-B-Bsus4-A-B-E,工单 37 前奏台账 ──
       _anchor(4, 'E', _e),
