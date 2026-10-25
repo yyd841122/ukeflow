@@ -85,9 +85,9 @@ void main() {
       isEmpty,
     );
 
-    // @7.5 上扫(A,快扫,①→④):① 不动,④ 殿后 +75ms。
+    // @7.5 照印张为单音 ①2(独立八分,杆+符尾),非上扫堆。
     expect(beatOf(1, 7.5), 7.5);
-    expect(beatOf(4, 7.5), closeTo(7.5 + 75 * msToBeats, 1e-9));
+    expect(single.notes.where((n) => n.beat == 7.5), hasLength(1));
 
     // 主歌拨堆 @20(非扫弦):同拍不动。
     expect(beatOf(4, 20.0), 20.0);

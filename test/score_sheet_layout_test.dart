@@ -293,7 +293,7 @@ void main() {
       // 种类查询:卷弦 vs 上扫;@9.5 已改休止占位(不再是下扫)。
       expect(l.strumKindAt(4.0), ScoreStrumKind.roll);
       expect(l.strumKindAt(9.5), isNull, reason: '照印张为二拍休止占位');
-      expect(l.strumKindAt(7.5), ScoreStrumKind.strumUp);
+      expect(l.strumKindAt(7.5), isNull, reason: '拍7.5 照印张为单音①2,非扫弦');
       expect(l.strumKindAt(12.0), isNull);
       // 休止事件:x 落在两个卷弦波浪之间(拍 7)。
       expect(l.restEvents.map((r) => r.beat), contains(7.0));

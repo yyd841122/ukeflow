@@ -20,7 +20,7 @@ void main() {
     }
   });
 
-  test('爱你不是两三天:主轴=独奏谱 488 音 78bpm,旋律 168 音 +20 对齐', () {
+  test('爱你不是两三天:主轴=独奏谱 485 音 78bpm,旋律 168 音 +20 对齐', () {
     final def = scoreSheetCatalog.single;
     expect(def.id, 'ai-ni-bu-shi-liang-san-tian-solo');
     expect(def.title, '爱你不是两三天');
@@ -28,7 +28,7 @@ void main() {
     final tab = charts[def.tabChartId]!;
     final melody = charts[def.melodyChartId]!;
     expect(tab.tempo, 78);
-    expect(tab.notes.length, 488);
+    expect(tab.notes.length, 485);
     expect(melody.notes.length, 168);
     // 恒定偏移:旋律任一音 +20 必须落在主轴网格内(抽样首尾)。
     final melodyBeats = melody.notes.map((n) => n.beat).toList()..sort();

@@ -319,12 +319,12 @@ void main() {
     expect(song.notes.last.beat, 87.5);
   });
 
-  test('爱你不是两三天·独奏:前奏+主歌+副歌 488 音,权威源 TAB 行转录抽查', () {
+  test('爱你不是两三天·独奏:前奏+主歌+副歌 485 音,权威源 TAB 行转录抽查', () {
     final song = loadBuiltinTabCharts()
         .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian-solo')
         .chart;
 
-    expect(song.notes, hasLength(488));
+    expect(song.notes, hasLength(485));
     expect(song.tempo, 78);
 
     // 小节2 卷弦起 = E 和弦 4442 块(低弦→高弦),接 ③④②③ 拨弦序列。
