@@ -403,17 +403,19 @@ class ScoreSheetLayout {
   /// 四层皆无元素的小节(全休止,画 0)。
   late final List<int> emptyBars;
 
-  /// 主轴拍位 → 横带绝对 x:拍位×像素 + 带首留白 + 小节空气
-  /// (每跨一根小节线加一格 [barInset];同小节内时值即距离)。
+  /// 主轴拍位 → 横带绝对 x:小节线 + [barInset] 空气 + 小节内拍距。
+  /// 小节线独立定位(barX 不由本式推导,否则空气会连带小节线平移,
+  /// 内容永远压线——2026-10-25 真机验证的教训)。
   double stripX(double mainBeat) {
     final bar = (mainBeat / beatsPerBar + 1e-9).floor();
-    return stripLeftPad +
-        mainBeat * stripPxPerBeat +
-        (bar + 1) * barInset;
+    return barX(bar) +
+        barInset +
+        (mainBeat - bar * beatsPerBar) * stripPxPerBeat;
   }
 
-  /// 第 [bar] 小节线(0 起)的绝对 x。
-  double barX(int bar) => stripX(bar * beatsPerBar.toDouble());
+  /// 第 [bar] 小节线(0 起)的绝对 x:带首 + bar×(4拍 + 一格空气)。
+  double barX(int bar) =>
+      stripLeftPad + bar * (4 * stripPxPerBeat + barInset);
 
   /// 横带总宽:覆盖主轴网格收口 + 右留白。
   double get stripWidth =>
