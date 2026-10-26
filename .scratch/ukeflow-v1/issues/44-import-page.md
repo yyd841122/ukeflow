@@ -11,3 +11,5 @@
 ## Comments
 
 - 2026-10-26 (落地·914 绿): 五件套——①core 预检缝 `checkScoreIrSource`(imported_solo_charts.dart):一次解析两用,坏源逐条人话全量列(与读出管线首异常即抛 deliberately 分岔,入口要一次亮全问题),合法则 IR 在手;②DAO `getByContentSha` + `_shaOf`→公开 `shaOf`(查重与入库同一指纹函数,口径不许漂移);③`ScoreSourceImportFlow`(image_pick_flow 模式):选 .json→解码→校验全检→查重→试物化,picker/查重注入;校验先行于查重(坏源不值得查重);④`ImportScoreSourcePage`:ScoreStripView 静态读谱预览 + 命名(建议名=文件名去扩展名,回退源内曲名)+ 入库名覆盖照 43 纪律,reviewedAt 照录;⑤独奏谱类目「导入识谱源」入口,坏源对话框逐条列 + 「重新选择」闭环,重复 contentSha 提示已有条目名。测试 25 新增(core 4/dao 2/flow 9/页 5/曲库 5);全量 914 绿 + analyzer 净。评审消化:真库"关掉再写"不炸(探针证伪)故落库故障走 provider 覆盖注入;9 个无关文件被 dart format 重排已还原保持提交聚焦。真机验走装机后(选源→预览→入库→跟练全链)。
+
+- 2026-10-26 (真机验收·用户过目): 四条全过——选 Download 金标准源→预览改名入库自动出卡;导入谱跟练同内置待遇;重复导入提示已有;坏文件逐条错误清单。验收样例=/tmp/aini-source.json(金标准经导出器,115KB,已推 Download)。本票收口。
