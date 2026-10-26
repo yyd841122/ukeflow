@@ -3,9 +3,60 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/chart/score_sheet_defs.dart';
+import '../../core/import/score_ir_editor.dart';
 import '../../core/model/tab_chart.dart';
 import '../../core/practice/score_sheet_layout.dart';
 import '../chords/chord_diagram.dart';
+
+/// 横带点选(工单 45 轻改):带内一点 → 音引用((弦,拍) 声部内唯一);
+/// 不在音区或无近音返回 null。命中带 = 琴弦层与简谱/歌词层,横向容差
+/// 半拍(16 分符位 10px,±20px 不串邻音);同拍多音按纵距就近。
+ScoreIrNoteRef? pickStripNote(ScoreSheetLayout layout, Offset local) {
+  ({ScoreIrNoteRef ref, double dy})? hit;
+  void consider({
+    required ScoreIrVoiceKind voice,
+    required double x,
+    required int string,
+    required double beat,
+    required double y,
+  }) {
+    if ((x - local.dx).abs() > ScoreSheetLayout.stripPxPerBeat / 2) return;
+    final dy = (y - local.dy).abs();
+    if (hit != null && dy >= hit!.dy) return;
+    hit = (
+      ref: ScoreIrNoteRef(voice: voice, string: string, beat: beat),
+      dy: dy,
+    );
+  }
+
+  if (local.dy >= ScoreSheetLayout.tabBandTop - 8 &&
+      local.dy <= ScoreSheetLayout.tabBandBottom + 8) {
+    for (final p in layout.tabPoints) {
+      consider(
+        voice: ScoreIrVoiceKind.accompaniment,
+        x: p.x,
+        string: p.note.string,
+        beat: p.note.beat,
+        y:
+            ScoreSheetLayout.tabBandTop +
+            (p.note.string - 1) * ScoreSheetLayout.tabLineGap,
+      );
+    }
+  }
+  if (local.dy >= ScoreSheetLayout.numBandTop - 6 &&
+      local.dy <= ScoreSheetLayout.lyricCenterY + 10) {
+    for (final p in layout.numPoints) {
+      consider(
+        voice: ScoreIrVoiceKind.melody,
+        x: p.x,
+        string: layout.melodyNotes[p.noteIndex].string,
+        beat: layout.melodyNotes[p.noteIndex].beat,
+        y: ScoreSheetLayout.numCenterY,
+      );
+    }
+  }
+  return hit?.ref;
+}
 
 /// 谱面视图渲染(GLOSSARY「谱面视图」)的组件层:**连续横带**——四层
 /// 纵带(和弦图+和弦名 / TAB 伴奏 / 简谱旋律 / 歌词)排成一条横向长带,
@@ -26,6 +77,7 @@ class ScoreStripView extends StatelessWidget {
     this.cursor,
     this.scrollController,
     this.layout,
+    this.onNoteTap,
   });
 
   final ScoreSheetDef def;
@@ -41,7 +93,12 @@ class ScoreStripView extends StatelessWidget {
   /// 预建布局(页缓存注入则不再重复构造;缺省自建)。
   final ScoreSheetLayout? layout;
 
-  double get _bandHeight => ScoreSheetLayout.chordBandHeight +
+  /// 点选回调(工单 45 轻改:导入谱页注入,轻改面板由此唤起);
+  /// null = 纯静态读谱不接点选(内置谱/导入预览)。
+  final ValueChanged<ScoreIrNoteRef>? onNoteTap;
+
+  double get _bandHeight =>
+      ScoreSheetLayout.chordBandHeight +
       ScoreSheetLayout.chordTabGap +
       ScoreSheetLayout.tabBandHeight +
       ScoreSheetLayout.numBandHeight +
@@ -51,8 +108,13 @@ class ScoreStripView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final layout = this.layout ??
-        ScoreSheetLayout(def: def, tabChart: tabChart, melodyChart: melodyChart);
+    final layout =
+        this.layout ??
+        ScoreSheetLayout(
+          def: def,
+          tabChart: tabChart,
+          melodyChart: melodyChart,
+        );
     return SingleChildScrollView(
       key: const Key('score-strip-scroll'),
       controller: scrollController,
@@ -61,46 +123,57 @@ class ScoreStripView extends StatelessWidget {
         key: const Key('score-strip'),
         width: layout.stripWidth,
         height: _bandHeight,
-        child: Stack(
-          children: [
-            RepaintBoundary(
-              child: CustomPaint(
-                size: Size(layout.stripWidth, _bandHeight),
-                painter: _StripPainter(layout, scheme),
+        child: onNoteTap == null
+            ? _stripStack(layout, scheme)
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (details) {
+                  final ref = pickStripNote(layout, details.localPosition);
+                  if (ref != null) onNoteTap!(ref);
+                },
+                child: _stripStack(layout, scheme),
               ),
-            ),
-            RepaintBoundary(
-              child: CustomPaint(
-                size: Size(layout.stripWidth, _bandHeight),
-                painter: _StripHighlightPainter(layout, scheme, cursor),
-              ),
-            ),
-            // 谱角调号(真 Text 进语义树;带首留白里,与首和弦有距离)。
-            Positioned(
-              left: 4,
-              top: 0,
-              child: Text(
-                def.keySignature,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface,
-                ),
-              ),
-            ),
-            // 和弦图+和弦名照印张居中压在锚拍上(x 已在内核算定)。
-            for (final glyph in layout.chordGlyphs)
-              Positioned(
-                left: glyph.x,
-                top: 0,
-                width: ScoreSheetLayout.chordGlyphWidth,
-                child: _ChordGlyph(anchor: glyph.anchor),
-              ),
-          ],
-        ),
       ),
     );
   }
+
+  Widget _stripStack(ScoreSheetLayout layout, ColorScheme scheme) => Stack(
+    children: [
+      RepaintBoundary(
+        child: CustomPaint(
+          size: Size(layout.stripWidth, _bandHeight),
+          painter: _StripPainter(layout, scheme),
+        ),
+      ),
+      RepaintBoundary(
+        child: CustomPaint(
+          size: Size(layout.stripWidth, _bandHeight),
+          painter: _StripHighlightPainter(layout, scheme, cursor),
+        ),
+      ),
+      // 谱角调号(真 Text 进语义树;带首留白里,与首和弦有距离)。
+      Positioned(
+        left: 4,
+        top: 0,
+        child: Text(
+          def.keySignature,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+          ),
+        ),
+      ),
+      // 和弦图+和弦名照印张居中压在锚拍上(x 已在内核算定)。
+      for (final glyph in layout.chordGlyphs)
+        Positioned(
+          left: glyph.x,
+          top: 0,
+          width: ScoreSheetLayout.chordGlyphWidth,
+          child: _ChordGlyph(anchor: glyph.anchor),
+        ),
+    ],
+  );
 }
 
 /// 和弦位:名 + 图(44px 窗),纯静态(当位点亮归覆盖层画笔)。
@@ -157,9 +230,13 @@ class _StripPainter extends CustomPainter {
     _paintLyrics(canvas);
     // 全休止小节:四层皆无,简谱带画全休止 0。
     for (final bar in layout.emptyBars) {
-      _text(canvas, '0',
-          Offset(layout.barX(bar) + ScoreSheetLayout.stripPxPerBeat, _numCenterY),
-          _numFontSize, scheme.onSurface.withValues(alpha: 0.55));
+      _text(
+        canvas,
+        '0',
+        Offset(layout.barX(bar) + ScoreSheetLayout.stripPxPerBeat, _numCenterY),
+        _numFontSize,
+        scheme.onSurface.withValues(alpha: 0.55),
+      );
     }
   }
 
@@ -183,8 +260,13 @@ class _StripPainter extends CustomPainter {
       final x = layout.barX(bar);
       canvas.drawLine(Offset(x, top), Offset(x, bottom), barPaint);
       if (bar < layout.barCount) {
-        _text(canvas, '${bar + 1}', Offset(x + 3, _tabTop - 7), 9,
-            scheme.onSurfaceVariant);
+        _text(
+          canvas,
+          '${bar + 1}',
+          Offset(x + 3, _tabTop - 7),
+          9,
+          scheme.onSurfaceVariant,
+        );
       }
     }
     // TAB 弦线。
@@ -201,16 +283,20 @@ class _StripPainter extends CustomPainter {
     for (final point in layout.tabPoints) {
       // 被扫弦/卷弦覆盖的逐弦 × 不画(事件位画箭头/波浪,见下)。
       if (point.hiddenByStrum) continue;
-      final y =
-          _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
+      final y = _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
       final center = Offset(point.x, y);
       // 印张 ×(品位按当前和弦指形)或旋律品位数字。× 照印张画两笔交叉
       // (10×14、笔画 2.2,2026-10-25 实测;字号 × 仅 ~6×7 太小)。
       if (point.isChordPluck) {
         paintCross(canvas, center: center, color: scheme.onSurface);
       } else {
-        _text(canvas, '${point.note.fret}', center, _tabFontSize,
-            scheme.onSurface);
+        _text(
+          canvas,
+          '${point.note.fret}',
+          center,
+          _tabFontSize,
+          scheme.onSurface,
+        );
       }
     }
     // 节奏带(印张 2026-10-25 全深度实测):杆自琴弦垂下长 40px;相邻
@@ -222,14 +308,16 @@ class _StripPainter extends CustomPainter {
     // 数字在①弦的音,杆穿谱而下直到公共杆底——①2@7.5 实测)。
     final groupTopY = <double, double>{};
     for (final p in layout.tabPoints) {
-      final lineY = ScoreSheetLayout.tabBandTop +
+      final lineY =
+          ScoreSheetLayout.tabBandTop +
           (p.note.string - 1) * ScoreSheetLayout.tabLineGap;
       final cur = groupTopY[p.x];
       if (cur == null || lineY > cur) groupTopY[p.x] = lineY;
     }
     final holdXs = <double>{
-      for (final p in layout.tabPoints
-          .where((p) => p.groupHoldBeats && !p.isChordPluck))
+      for (final p in layout.tabPoints.where(
+        (p) => p.groupHoldBeats && !p.isChordPluck,
+      ))
         p.x,
     };
     for (final stem in layout.rhythmStems) {
@@ -262,7 +350,11 @@ class _StripPainter extends CustomPainter {
           Path()
             ..moveTo(flag.x + 1, tipY - 26 + i * 6)
             ..quadraticBezierTo(
-                flag.x + 9, tipY - 14 + i * 6, flag.x + 1, tipY - i * 6),
+              flag.x + 9,
+              tipY - 14 + i * 6,
+              flag.x + 1,
+              tipY - i * 6,
+            ),
           Paint()
             ..color = scheme.onSurface
             ..style = PaintingStyle.stroke
@@ -295,9 +387,13 @@ class _StripPainter extends CustomPainter {
       final x = layout.stripX(beat);
       final dim = scheme.onSurface.withValues(alpha: 0.45);
       for (var st = 1; st <= 4; st++) {
-        _text(canvas, '×',
-            Offset(x, _tabTop + (st - 1) * ScoreSheetLayout.tabLineGap),
-            _tabFontSize, dim);
+        _text(
+          canvas,
+          '×',
+          Offset(x, _tabTop + (st - 1) * ScoreSheetLayout.tabLineGap),
+          _tabFontSize,
+          dim,
+        );
       }
       final prev = layout.tabPoints
           .where((p) => p.note.beat < beat)
@@ -308,7 +404,10 @@ class _StripPainter extends CustomPainter {
           Path()
             ..moveTo(prev.x + 4, _tabTop - 14)
             ..quadraticBezierTo(
-              (prev.x + x) / 2, _tabTop - 24, x, _tabTop - 14,
+              (prev.x + x) / 2,
+              _tabTop - 24,
+              x,
+              _tabTop - 14,
             ),
           Paint()
             ..color = scheme.onSurface.withValues(alpha: 0.55)
@@ -340,8 +439,12 @@ class _StripPainter extends CustomPainter {
           beats: rest.beats.round(),
         );
       } else {
-        paintEighthRest(canvas, x: rest.x, top: _tabTop,
-            color: scheme.onSurface);
+        paintEighthRest(
+          canvas,
+          x: rest.x,
+          top: _tabTop,
+          color: scheme.onSurface,
+        );
       }
     }
     // 滑音记号:两品位数字间的斜线,方向随音高(降=向右下;印张惯例)。
@@ -377,19 +480,29 @@ class _StripPainter extends CustomPainter {
     for (final point in layout.numPoints) {
       final symbol = point.symbol;
       final x = point.x + 2;
-      _text(canvas, '${symbol.degree}', Offset(x, _numCenterY), _numFontSize,
-          scheme.onSurface, alignLeft: true);
+      _text(
+        canvas,
+        '${symbol.degree}',
+        Offset(x, _numCenterY),
+        _numFontSize,
+        scheme.onSurface,
+        alignLeft: true,
+      );
 
       final dotPaint = Paint()..color = scheme.onSurface;
       for (var d = 0; d < symbol.highDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, _numCenterY - _numFontSize / 2 - 3 - d * 3.5), 1.4,
-          dotPaint);
+          Offset(x + 4, _numCenterY - _numFontSize / 2 - 3 - d * 3.5),
+          1.4,
+          dotPaint,
+        );
       }
       for (var d = 0; d < symbol.lowDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, _numCenterY + _numFontSize / 2 + 3 + d * 3.5), 1.4,
-          dotPaint);
+          Offset(x + 4, _numCenterY + _numFontSize / 2 + 3 + d * 3.5),
+          1.4,
+          dotPaint,
+        );
       }
       _paintDurationMark(canvas, x, symbol);
       if (symbol.arcOut) _paintArc(canvas, point);
@@ -405,15 +518,24 @@ class _StripPainter extends CustomPainter {
       ..strokeWidth = 1.2;
     for (var i = 0; i < symbol.underlines; i++) {
       canvas.drawLine(
-          Offset(x, topY + i * 3.2), Offset(x + 11, topY + i * 3.2), paint);
+        Offset(x, topY + i * 3.2),
+        Offset(x + 11, topY + i * 3.2),
+        paint,
+      );
     }
     if (symbol.dotted) {
-      canvas.drawCircle(Offset(x + 14, topY - 4), 1.5,
-          paint..style = PaintingStyle.fill);
+      canvas.drawCircle(
+        Offset(x + 14, topY - 4),
+        1.5,
+        paint..style = PaintingStyle.fill,
+      );
     }
     for (var i = 0; i < symbol.dashes; i++) {
-      canvas.drawLine(Offset(x + 6 + i * 14, topY - 4),
-          Offset(x + 18 + i * 14, topY - 4), paint);
+      canvas.drawLine(
+        Offset(x + 6 + i * 14, topY - 4),
+        Offset(x + 18 + i * 14, topY - 4),
+        paint,
+      );
     }
   }
 
@@ -445,24 +567,38 @@ class _StripPainter extends CustomPainter {
     final restX = point.x + ScoreSheetLayout.stripPxPerBeat;
     final mark = durationMarkOf(rest);
     final color = scheme.onSurface.withValues(alpha: 0.55);
-    _text(canvas, '0', Offset(restX, _numCenterY), _numFontSize, color,
-        alignLeft: true);
+    _text(
+      canvas,
+      '0',
+      Offset(restX, _numCenterY),
+      _numFontSize,
+      color,
+      alignLeft: true,
+    );
     final topY = _numCenterY + _numFontSize / 2 + 2;
     final paint = Paint()
       ..color = color
       ..strokeWidth = 1.2;
     for (var i = 0; i < mark.underlines; i++) {
       canvas.drawLine(
-          Offset(restX, topY + i * 3.2), Offset(restX + 11, topY + i * 3.2),
-          paint);
+        Offset(restX, topY + i * 3.2),
+        Offset(restX + 11, topY + i * 3.2),
+        paint,
+      );
     }
     if (mark.dotted) {
-      canvas.drawCircle(Offset(restX + 14, topY - 4), 1.5,
-          paint..style = PaintingStyle.fill);
+      canvas.drawCircle(
+        Offset(restX + 14, topY - 4),
+        1.5,
+        paint..style = PaintingStyle.fill,
+      );
     }
     for (var i = 0; i < mark.dashes; i++) {
-      canvas.drawLine(Offset(restX + 6 + i * 14, topY - 4),
-          Offset(restX + 18 + i * 14, topY - 4), paint);
+      canvas.drawLine(
+        Offset(restX + 6 + i * 14, topY - 4),
+        Offset(restX + 18 + i * 14, topY - 4),
+        paint,
+      );
     }
   }
 
@@ -470,8 +606,14 @@ class _StripPainter extends CustomPainter {
     for (final point in layout.numPoints) {
       final lyric = point.symbol.lyric;
       if (lyric == null) continue;
-      _text(canvas, lyric, Offset(point.x + 2, _lyricY), _lyricFontSize,
-          scheme.onSurface, alignLeft: true);
+      _text(
+        canvas,
+        lyric,
+        Offset(point.x + 2, _lyricY),
+        _lyricFontSize,
+        scheme.onSurface,
+        alignLeft: true,
+      );
     }
   }
 
@@ -498,7 +640,8 @@ class _StripHighlightPainter extends CustomPainter {
     if (cursor == null) return;
 
     // 当前和弦图描边。
-    if (cursor.chordIndex >= 0 && cursor.chordIndex < layout.chordGlyphs.length) {
+    if (cursor.chordIndex >= 0 &&
+        cursor.chordIndex < layout.chordGlyphs.length) {
       final g = layout.chordGlyphs[cursor.chordIndex];
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -528,23 +671,38 @@ class _StripHighlightPainter extends CustomPainter {
           strokeWidth: 3.0,
         );
       } else {
-        for (final point
-            in layout.tabPoints.where((p) => p.note.beat == currentBeat)) {
+        for (final point in layout.tabPoints.where(
+          (p) => p.note.beat == currentBeat,
+        )) {
           if (point.hiddenByStrum) continue;
           final y =
               _tabTop + (point.note.string - 1) * ScoreSheetLayout.tabLineGap;
           final center = Offset(point.x, y);
-          canvas.drawCircle(center, 10.5, Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..color = scheme.primary);
+          canvas.drawCircle(
+            center,
+            10.5,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2
+              ..color = scheme.primary,
+          );
           canvas.drawCircle(center, 8, Paint()..color = scheme.primary);
           if (point.isChordPluck) {
-            paintCross(canvas, center: center, color: scheme.onPrimary,
-                strokeWidth: 2.4);
+            paintCross(
+              canvas,
+              center: center,
+              color: scheme.onPrimary,
+              strokeWidth: 2.4,
+            );
           } else {
-            _text(canvas, '${point.note.fret}', center,
-                ScoreSheetLayout.tabFontSize, scheme.onPrimary, bold: true);
+            _text(
+              canvas,
+              '${point.note.fret}',
+              center,
+              ScoreSheetLayout.tabFontSize,
+              scheme.onPrimary,
+              bold: true,
+            );
           }
         }
       }
@@ -556,24 +714,52 @@ class _StripHighlightPainter extends CustomPainter {
       final point = layout.numPoints[cursor.melodyIndex];
       final symbol = point.symbol;
       final x = point.x + 2;
-      _text(canvas, '${symbol.degree}', Offset(x, ScoreSheetLayout.numCenterY),
-          ScoreSheetLayout.numFontSize, scheme.primary, bold: true,
-          alignLeft: true);
+      _text(
+        canvas,
+        '${symbol.degree}',
+        Offset(x, ScoreSheetLayout.numCenterY),
+        ScoreSheetLayout.numFontSize,
+        scheme.primary,
+        bold: true,
+        alignLeft: true,
+      );
       final dotPaint = Paint()..color = scheme.primary;
       for (var d = 0; d < symbol.highDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, ScoreSheetLayout.numCenterY -
-              ScoreSheetLayout.numFontSize / 2 - 3 - d * 3.5), 1.4, dotPaint);
+          Offset(
+            x + 4,
+            ScoreSheetLayout.numCenterY -
+                ScoreSheetLayout.numFontSize / 2 -
+                3 -
+                d * 3.5,
+          ),
+          1.4,
+          dotPaint,
+        );
       }
       for (var d = 0; d < symbol.lowDots; d++) {
         canvas.drawCircle(
-          Offset(x + 4, ScoreSheetLayout.numCenterY +
-              ScoreSheetLayout.numFontSize / 2 + 3 + d * 3.5), 1.4, dotPaint);
+          Offset(
+            x + 4,
+            ScoreSheetLayout.numCenterY +
+                ScoreSheetLayout.numFontSize / 2 +
+                3 +
+                d * 3.5,
+          ),
+          1.4,
+          dotPaint,
+        );
       }
       if (symbol.lyric != null) {
-        _text(canvas, symbol.lyric!, Offset(point.x + 2,
-            ScoreSheetLayout.lyricCenterY), ScoreSheetLayout.lyricFontSize,
-            scheme.primary, bold: true, alignLeft: true);
+        _text(
+          canvas,
+          symbol.lyric!,
+          Offset(point.x + 2, ScoreSheetLayout.lyricCenterY),
+          ScoreSheetLayout.lyricFontSize,
+          scheme.primary,
+          bold: true,
+          alignLeft: true,
+        );
       }
     }
   }
@@ -695,8 +881,7 @@ void paintStrumGlyph(
       canvas.drawPath(path, paint..strokeWidth = strokeWidth * 1.2);
     case ScoreStrumKind.strumDown:
       // 直杆+下箭头(印张:头宽 9、杆贯穿谱高,上探 5px 下探 12px)。
-      canvas.drawLine(
-          Offset(x, top - 5), Offset(x, bottom + 6), paint);
+      canvas.drawLine(Offset(x, top - 5), Offset(x, bottom + 6), paint);
       canvas.drawPath(
         Path()
           ..moveTo(x - 4.5, bottom + 0.5)
@@ -706,8 +891,7 @@ void paintStrumGlyph(
       );
     case ScoreStrumKind.strumUp:
       // 直杆+上箭头(印张实测:尖朝上、头宽 9、杆下探过④弦 12px)。
-      canvas.drawLine(
-          Offset(x, top - 7), Offset(x, bottom + 5), paint);
+      canvas.drawLine(Offset(x, top - 7), Offset(x, bottom + 5), paint);
       canvas.drawPath(
         Path()
           ..moveTo(x - 4.5, top - 0.5)

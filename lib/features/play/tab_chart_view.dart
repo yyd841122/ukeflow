@@ -2,8 +2,40 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio/beat_scheduling.dart' show beatsPerBar;
 
+import '../../core/import/score_ir_editor.dart';
 import '../../core/model/tab_chart.dart';
 import 'tab_chart_layout.dart';
+
+/// 四线谱点选(工单 45 轻改):谱面一点 → 音引用((弦,拍) 声部内唯一);
+/// 不在弦区或无近音返回 null。横向容差半拍(缺省 44px/拍,±22px 不串
+/// 邻音),同拍多音按纵距就近(弦线 y)。
+ScoreIrNoteRef? pickTabNote(TabChartLayout layout, Offset local) {
+  if (local.dy < TabChartLayout.stringY(1) - 12 ||
+      local.dy > TabChartLayout.stringY(4) + 12) {
+    return null;
+  }
+  ({ScoreIrNoteRef ref, double dx, double dy})? best;
+  for (final note in layout.notes) {
+    final x = layout.noteX(note.beat);
+    if ((x - local.dx).abs() > layout.pxPerBeat / 2) continue;
+    final y = TabChartLayout.stringY(note.string);
+    final candidate = (
+      ref: ScoreIrNoteRef(
+        voice: ScoreIrVoiceKind.accompaniment,
+        string: note.string,
+        beat: note.beat,
+      ),
+      dx: (x - local.dx).abs(),
+      dy: (y - local.dy).abs(),
+    );
+    final better =
+        best == null ||
+        candidate.dx < best.dx - 1 ||
+        (candidate.dx <= best.dx + 1 && candidate.dy < best.dy);
+    if (better) best = candidate;
+  }
+  return best?.ref;
+}
 
 /// 逐音高亮(工单 13 跟练):当前音与预亮窗内音的下标。下标与
 /// [TabChartLayout.notes] 同序(同为 sortedTabNotes 序,与时间轴事件
@@ -46,6 +78,7 @@ class TabChartView extends StatelessWidget {
     this.pxPerBeat = 44,
     this.highlight,
     this.scrollController,
+    this.onNoteTap,
   });
 
   final TabChart chart;
@@ -58,6 +91,10 @@ class TabChartView extends StatelessWidget {
 
   /// 横向滚动的接管口(跟练自动平移用);null = 用户手动滚。
   final ScrollController? scrollController;
+
+  /// 点选回调(工单 45 轻改:导入谱页注入,轻改面板由此唤起);
+  /// null = 纯静态读谱不接点选。
+  final ValueChanged<ScoreIrNoteRef>? onNoteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -78,17 +115,28 @@ class TabChartView extends StatelessWidget {
             child: SingleChildScrollView(
               controller: scrollController,
               scrollDirection: Axis.horizontal,
-              child: CustomPaint(
-                key: const Key('tab-chart-canvas'),
-                size: Size(layout.chartWidth, layout.height),
-                painter: _TabChartPainter(layout, scheme, highlight),
-              ),
+              child: onNoteTap == null
+                  ? _canvas(layout, scheme)
+                  : GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: (details) {
+                        final ref = pickTabNote(layout, details.localPosition);
+                        if (ref != null) onNoteTap!(ref);
+                      },
+                      child: _canvas(layout, scheme),
+                    ),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _canvas(TabChartLayout layout, ColorScheme scheme) => CustomPaint(
+    key: const Key('tab-chart-canvas'),
+    size: Size(layout.chartWidth, layout.height),
+    painter: _TabChartPainter(layout, scheme, highlight),
+  );
 }
 
 /// 弦号标注列宽(①A…④G 紧凑排布)。

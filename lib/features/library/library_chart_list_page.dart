@@ -191,6 +191,8 @@ class LibraryChartListPage extends ConsumerWidget {
                             def: entry.def,
                             tabChart: entry.accompaniment,
                             melodyChart: entry.melody,
+                            // 轻改入口随行 id 进页(工单 45)。
+                            importedSoloRowId: entry.id,
                           ),
                         ),
                       ),
@@ -201,8 +203,10 @@ class LibraryChartListPage extends ConsumerWidget {
                           icon: const Icon(Icons.grid_on),
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  TabChartPage(chart: entry.accompaniment),
+                              builder: (_) => TabChartPage(
+                                chart: entry.accompaniment,
+                                importedSoloRowId: entry.id,
+                              ),
                             ),
                           ),
                         ),

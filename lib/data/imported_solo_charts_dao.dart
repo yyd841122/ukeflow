@@ -40,6 +40,28 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// 轻改存回(工单 45):源 JSON 改后整行落回——contentSha 随新源
+  /// 现算,updatedAt/reviewedAt 随写随 bump(轻改自动记复核时刻,
+  /// 与源内 review.reviewedAt 同步由会话层盖章),title/createdAt/
+  /// schemaVersion 不动。行不存在静默无操作(update 语义)。
+  Future<void> updateSource({
+    required int id,
+    required String sourceJson,
+    String? reviewedAt,
+  }) {
+    final now = DateTime.now();
+    return (update(
+      importedSoloCharts,
+    )..where((row) => row.id.equals(id))).write(
+      ImportedSoloChartsCompanion(
+        sourceJson: Value(sourceJson),
+        contentSha: Value(shaOf(sourceJson)),
+        updatedAt: Value(now),
+        reviewedAt: Value(reviewedAt),
+      ),
+    );
+  }
+
   /// 全部导入独奏谱,按入库序(id 升序)。
   Future<List<ImportedSoloChart>> getAll() {
     return (select(
@@ -53,6 +75,13 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
     return (select(
       importedSoloCharts,
     )..where((row) => row.contentSha.equals(sha))).getSingleOrNull();
+  }
+
+  /// 按行 id 取单行(工单 45 轻改会话读源用)。未入库返回 null。
+  Future<ImportedSoloChart?> getById(int id) {
+    return (select(
+      importedSoloCharts,
+    )..where((row) => row.id.equals(id))).getSingleOrNull();
   }
 
   /// 响应式导入独奏谱流:曲库独奏谱类目订阅,导入写入即自动入列。

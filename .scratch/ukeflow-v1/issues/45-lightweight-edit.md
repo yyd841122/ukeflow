@@ -1,9 +1,14 @@
 # 45: App 内轻改（单音微调，改源存回）
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 43
 
 **What to build:** 谱面视图/四线谱跟练中选中当前音 → 微调面板（弦/品/拍位微移/删除）→ 改 IR JSON 存回 → 重物化刷新，自动记 reviewedAt。编辑对象是识谱源（GLOSSARY），物化始终纯函数。
 
 **Non-goals:** 批量编辑、技巧编辑（校对台管）、和弦行编辑。
+
+## Comments
+
+- 2026-10-26 (落地·948 绿): 四件套——①core 纯函数编辑器 `score_ir_editor.dart`:换弦品(midi 现算)/拍位微移/删除,引用=(声部,弦,拍) 三元组((弦,拍) 声部内唯一,校验器契约);微移语义「槽尾锚定,前槽跟随」——音槽终点不动、起点随音走、前一事件槽(音堆或声部休止)终点跟到新拍位,拍长闭合在两次微移间恒保持(自由改 beat 必开洞,校验器堵死);限界查询 `scoreIrShiftLimits` 供面板预禁用(右受本槽时值收、压线音不可拽前槽跨线、左受当小节+前槽余量收);删除=堆内余音填槽/独槽相邻吞位(前槽同小节则延长否则后槽回拉);滑音端点等事件表不碰,校验器拦「滑音起点无音」由会话层堵门。②DAO `updateSource`(contentSha 随新源现算,updatedAt/reviewedAt 随写随 bump)+`getById`。③`ScoreIrEditSession`(features/play):load 现读现析、apply=改 IR→validateScoreIr 全检→不过行不动逐条人话回面板(轻改不把谱改坏成 Broken)→过则 jsonEncode 存回+reviewedAt 自动盖章(源内 review 与行列同步)。④UI:`pickStripNote`/`pickTabNote` 纯函数点选(命中带=琴弦层+简谱层,容差半拍,同拍多音纵距就近)→ ScoreStripView/TabChartView 可选 onNoteTap(内置谱/预览不接)→ NoteTunePanel 底部面板(工作副本,存回一次提交;微移+换弦两步编辑落一个终态);ScoreSheetPage/TabChartPage 加 `importedSoloRowId`,听 importedSoloChartsProvider 流,逐音实变才换三源+作废布局缓存+重定会话谱(物化始终纯函数,刷新走既有读出管线);曲库两处推入带行 id。测试 34 新增(编辑器 16/DAO 1/会话 5/点选 5/面板 5/页面接线 2);全量 948 绿+analyzer 净。裁量:微移非自由改 beat(否则每动一个音必坏闭合)、「存回」而非边点边存(单次校验门,少写库)、轻改不改名不碰和弦行(non-goals)。真机验走装机后(点音→改品→存回→刷新全链)。
+- 2026-10-26 (两轴评审消化·949 绿): Standards 轴 4 条——①mounted 守卫硬违规(load().then 续体写状态,补 `if (!mounted) return ir;`);②两页轻改接线同形四处(弹面板+SnackBar 收共享 `openNoteTunePanel`,逐音等值收共享 `tabNotesContentEqual`);③toString 比较换逐字段 record 相等(与 fixtures 深比较器同一「不搭便车」立场);④GLOSSARY 补「轻改」条目(槽尾锚定语义+Avoid 校对台/自由改拍位)。Spec 轴 2+2——组合编辑半提交破坏「被拦库无变动」契约:微移落库+换弦被拦后重试重放微移必落「引用不存在」死锁,修=被拦时基线跟进已提交态(_beat0=_beat),重试只补被拦一步,新回归测试先红(探针实证「弦1 @1.0 引用不存在」)后绿;「首槽右移必坏闭合」**证伪不采纳**——validator 闭合游标自 firstStart 起(音头右移=声部起点随移,不开洞),堆移测试 validateScoreIr 全绿即此形。SnackBar 存回提示属无害 UX 附加保留;format 重排全在实改文件内合规。

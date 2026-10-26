@@ -3,13 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/beat_scheduling.dart' show beatsPerBar;
 import '../../core/chart/score_sheet_defs.dart';
+import '../../core/import/score_ir_editor.dart';
 import '../../core/model/tab_chart.dart';
 import '../../core/practice/dual_track_timeline.dart';
 import '../../core/practice/score_sheet_layout.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
 import '../../core/ui/step_slider_control.dart';
+import '../../data/chart_providers.dart';
+import '../../data/providers.dart';
+import 'note_tune_panel.dart';
 import 'practice_session_shell.dart';
+import 'score_ir_edit_session.dart';
 import 'score_sheet_view.dart';
 import 'tab_practice_controller.dart';
 
@@ -29,11 +34,16 @@ class ScoreSheetPage extends ConsumerStatefulWidget {
     required this.def,
     required this.tabChart,
     required this.melodyChart,
+    this.importedSoloRowId,
   });
 
   final ScoreSheetDef def;
   final TabChart tabChart;
   final TabChart melodyChart;
+
+  /// 导入独奏谱的数据库行 id(工单 45):非空 = 谱面音符可点选轻改,
+  /// 改源存回后本页经导入谱流重物化换源。内置谱为 null(不可轻改)。
+  final int? importedSoloRowId;
 
   @override
   ConsumerState<ScoreSheetPage> createState() => _ScoreSheetPageState();
@@ -47,6 +57,19 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreTrackMode _trackMode = ScoreTrackMode.accompaniment;
   ScoreCursor? _visual;
   final _scroll = ScrollController();
+
+  /// 当前展示的三源(初始照 widget;轻改落库后经导入谱流换新)。
+  late ScoreSheetDef _def = widget.def;
+  late TabChart _tabChart = widget.tabChart;
+  late TabChart _melodyChart = widget.melodyChart;
+
+  /// 轻改会话(工单 45;仅导入谱持有)。
+  ScoreIrEditSession? get _editSession => widget.importedSoloRowId == null
+      ? null
+      : ScoreIrEditSession(
+          ref.read(importedSoloChartsDaoProvider),
+          rowId: widget.importedSoloRowId!,
+        );
 
   late final TabPracticeController _controller;
 
@@ -67,12 +90,51 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     _visual = null;
   }
 
+  /// 轻改落库后的重物化换源(工单 45):导入谱流推送新条目,三源有实
+  /// 变才换(无关行的写库也会推流,内容同就不折腾会话),布局缓存一并
+  /// 作废,空闲态重定会话谱;运行中不动(轻改只在空闲面板发生)。
+  void _onImportedSoloChanged(List<ImportedSoloEntry> entries) {
+    final entry = entries
+        .where((e) => e.id == widget.importedSoloRowId)
+        .firstOrNull;
+    if (entry is! ReadyImportedSolo) return;
+    if (_sameSources(entry)) return;
+    setState(() {
+      _def = entry.def;
+      _tabChart = entry.accompaniment;
+      _melodyChart = entry.melody;
+      _layoutCache = null;
+    });
+    if (!ref.read(tabPracticeProvider).running) {
+      _controller.prepareFor(_chartFor(_trackMode));
+    }
+  }
+
+  /// 三源实变判定:逐音 (弦,品,拍) + 定义字段(物化逐次新建实例,
+  /// 不能比身份;无关行推流时内容不变,免一次会话重定)。
+  bool _sameSources(ReadyImportedSolo entry) {
+    bool sameNotes(List<TabNote> a, List<TabNote> b) =>
+        a.length == b.length &&
+        [for (var i = 0; i < a.length; i++) (a[i].string, a[i].fret, a[i].beat)]
+                .toString() ==
+            [
+              for (var i = 0; i < b.length; i++)
+                (b[i].string, b[i].fret, b[i].beat),
+            ].toString();
+    return identical(entry.def, _def) ||
+        (entry.def.id == _def.id &&
+            entry.def.melodyAlignBeats == _def.melodyAlignBeats &&
+            entry.def.keySignature == _def.keySignature &&
+            sameNotes(entry.accompaniment.notes, _tabChart.notes) &&
+            sameNotes(entry.melody.notes, _melodyChart.notes));
+  }
+
   /// 轨道 → 会话谱:单轨 = 伴奏错峰播放谱;双轨 = 合并谱(旋律 +20 拍/
   /// +4 半音,伴奏同样错峰)。四线谱跟练次入口仍用原谱(模型分界不动)。
   TabChart _chartFor(ScoreTrackMode mode) => buildScorePlaybackChart(
-    widget.def,
-    widget.tabChart,
-    melodyChart: mode == ScoreTrackMode.dual ? widget.melodyChart : null,
+    _def,
+    _tabChart,
+    melodyChart: mode == ScoreTrackMode.dual ? _melodyChart : null,
   );
 
   @override
@@ -94,9 +156,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     // 流水跟滚:每帧按引擎时刻平移横带(播放头恒在视口左 1/3),
     // 弹过的向左滑出、后面的从右补上;高亮仍只在当位变化才重绘。
     final viewportWidth = _contentWidth ?? 360;
-    final target = (_layout.stripX(mainBeat) -
-            viewportWidth * ScoreSheetLayout.followViewportFraction)
-        .clamp(0.0, _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0);
+    final target =
+        (_layout.stripX(mainBeat) -
+                viewportWidth * ScoreSheetLayout.followViewportFraction)
+            .clamp(
+              0.0,
+              _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0,
+            );
     if (_scroll.hasClients && (_scroll.offset - target).abs() >= 0.5) {
       _scroll.jumpTo(target);
     }
@@ -107,13 +173,12 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     }
   }
 
-  /// 布局缓存:横带几何一次构造(onPoll 每帧查询共享)。
-  ScoreSheetLayout get _layout =>
-      _layoutCache ??= ScoreSheetLayout(
-        def: widget.def,
-        tabChart: widget.tabChart,
-        melodyChart: widget.melodyChart,
-      );
+  /// 布局缓存:横带几何一次构造(onPoll 每帧查询共享;轻改换源作废)。
+  ScoreSheetLayout get _layout => _layoutCache ??= ScoreSheetLayout(
+    def: _def,
+    tabChart: _tabChart,
+    melodyChart: _melodyChart,
+  );
 
   ScoreSheetLayout? _layoutCache;
   double? _contentWidth;
@@ -133,8 +198,15 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
         next.running ? startPolling() : stopPolling();
       }
     });
+    // 轻改刷新源(工单 45):导入谱流推送即换三源。
+    if (widget.importedSoloRowId != null) {
+      ref.listen(importedSoloChartsProvider, (_, next) {
+        final entries = next.value;
+        if (entries != null) _onImportedSoloChanged(entries);
+      });
+    }
     return Scaffold(
-      appBar: AppBar(title: Text(widget.def.title)),
+      appBar: AppBar(title: Text(_def.title)),
       body: SafeArea(
         child: state.running ? _runningBody(state) : _idleBody(state),
       ),
@@ -149,72 +221,90 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-        Text(
-          _metaLine,
-          key: const Key('score-meta'),
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
-        ),
-        const SizedBox(height: 12),
-        EngineStatusLine(
-          ready: state.engineReady,
-          error: state.error,
-          onRetry: () => _controller.warmup(),
-        ),
-        const SizedBox(height: 16),
-        // 弹前读谱 = 横带全景(横向可拖;开始示范按钮一屏可见)。
-        ScoreStripView(
-          def: widget.def,
-          tabChart: widget.tabChart,
-          melodyChart: widget.melodyChart,
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<ScoreTrackMode>(
-          segments: const [
-            ButtonSegment(
-              value: ScoreTrackMode.accompaniment,
-              icon: Icon(Icons.music_note),
-              label: Text('伴奏示范'),
-            ),
-            ButtonSegment(
-              value: ScoreTrackMode.dual,
-              icon: Icon(Icons.layers),
-              label: Text('双轨混播'),
-            ),
-          ],
-          selected: {_trackMode},
-          onSelectionChanged: (selection) {
-            final mode = selection.first;
-            if (mode == _trackMode) return;
-            setState(() => _trackMode = mode);
-            // 换轨即换会话谱:BPM 重定 + 该轨拨弦音源预注入。
-            _controller.prepareFor(_chartFor(mode));
-          },
-        ),
-        const SizedBox(height: 12),
-        Text('速度', style: _sectionLabelStyle),
-        StepSliderControl(
-          value: state.bpm,
-          min: TabPracticeController.minBpm,
-          max: TabPracticeController.maxBpm,
-          onChanged: _controller.setBpm,
-        ),
-        // 变速在运行控制行(与四线谱跟练同),空闲面板省一屏。
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          key: const Key('score-practice-start'),
-          onPressed: state.engineReady
-              ? () => _controller.start(chart: _chartFor(_trackMode))
-              : null,
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('开始示范'),
-        ),
+          Text(
+            _metaLine,
+            key: const Key('score-meta'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(height: 12),
+          EngineStatusLine(
+            ready: state.engineReady,
+            error: state.error,
+            onRetry: () => _controller.warmup(),
+          ),
+          const SizedBox(height: 16),
+          // 弹前读谱 = 横带全景(横向可拖;开始示范按钮一屏可见)。
+          // 导入谱接点选轻改(工单 45):点音弹微调面板。
+          ScoreStripView(
+            def: _def,
+            tabChart: _tabChart,
+            melodyChart: _melodyChart,
+            onNoteTap: _editSession == null ? null : _openTunePanel,
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<ScoreTrackMode>(
+            segments: const [
+              ButtonSegment(
+                value: ScoreTrackMode.accompaniment,
+                icon: Icon(Icons.music_note),
+                label: Text('伴奏示范'),
+              ),
+              ButtonSegment(
+                value: ScoreTrackMode.dual,
+                icon: Icon(Icons.layers),
+                label: Text('双轨混播'),
+              ),
+            ],
+            selected: {_trackMode},
+            onSelectionChanged: (selection) {
+              final mode = selection.first;
+              if (mode == _trackMode) return;
+              setState(() => _trackMode = mode);
+              // 换轨即换会话谱:BPM 重定 + 该轨拨弦音源预注入。
+              _controller.prepareFor(_chartFor(mode));
+            },
+          ),
+          const SizedBox(height: 12),
+          Text('速度', style: _sectionLabelStyle),
+          StepSliderControl(
+            value: state.bpm,
+            min: TabPracticeController.minBpm,
+            max: TabPracticeController.maxBpm,
+            onChanged: _controller.setBpm,
+          ),
+          // 变速在运行控制行(与四线谱跟练同),空闲面板省一屏。
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            key: const Key('score-practice-start'),
+            onPressed: state.engineReady
+                ? () => _controller.start(chart: _chartFor(_trackMode))
+                : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('开始示范'),
+          ),
         ],
       ),
     );
   }
 
-  String get _metaLine => '谱面视图 · ${widget.def.subtitleLine(widget.tabChart)}';
+  /// 点选音 → 微调面板(工单 45);存回 true = 源已落库,流会推新源。
+  Future<void> _openTunePanel(ScoreIrNoteRef noteRef) async {
+    final session = _editSession;
+    if (session == null) return;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => NoteTunePanel(session: session, noteRef: noteRef),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已存回,谱面已刷新')));
+    }
+  }
+
+  String get _metaLine => '谱面视图 · ${_def.subtitleLine(_tabChart)}';
 
   TextStyle get _sectionLabelStyle => Theme.of(context).textTheme.labelLarge!;
 
@@ -226,7 +316,9 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
         _contentWidth = constraints.maxWidth;
         return Column(
           children: [
-            Expanded(child: prepCount != null ? _prepPanel(prepCount!) : _songBody()),
+            Expanded(
+              child: prepCount != null ? _prepPanel(prepCount!) : _songBody(),
+            ),
             _controls(state),
           ],
         );
@@ -271,9 +363,9 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             children: [
               Positioned.fill(
                 child: ScoreStripView(
-                  def: widget.def,
-                  tabChart: widget.tabChart,
-                  melodyChart: widget.melodyChart,
+                  def: _def,
+                  tabChart: _tabChart,
+                  melodyChart: _melodyChart,
                   cursor: visual,
                   scrollController: _scroll,
                   layout: _layoutCache,
@@ -281,17 +373,17 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
               ),
               // 播放头标线(视口左 1/3,与跟滚锚点同位)。
               Positioned(
-                left: (_contentWidth ?? 360) *
+                left:
+                    (_contentWidth ?? 360) *
                         ScoreSheetLayout.followViewportFraction -
                     1,
                 top: 0,
                 bottom: 0,
                 width: 2,
                 child: ColoredBox(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.35),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.35),
                 ),
               ),
             ],
@@ -327,7 +419,6 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     return (beat % beatsPerBar).floor() + 1;
   }
 
-
   Widget _controls(TabSessionState state) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -347,8 +438,10 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
               ),
               if (state.loop) ...[
                 const SizedBox(width: 12),
-                Text('第 ${state.pass} 遍',
-                    style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  '第 ${state.pass} 遍',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ],
             ],
           ),
@@ -358,7 +451,9 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
               Expanded(
                 child: FilledButton.tonalIcon(
                   key: const Key('score-practice-pause'),
-                  onPressed: state.paused ? _controller.resume : _controller.pause,
+                  onPressed: state.paused
+                      ? _controller.resume
+                      : _controller.pause,
                   icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
                   label: Text(state.paused ? '继续' : '暂停'),
                 ),

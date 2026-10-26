@@ -81,6 +81,48 @@ void main() {
     await expectation;
   });
 
+  group('轻改存回(工单 45)', () {
+    test('updateSource:源 JSON/contentSha/updatedAt/reviewedAt 随写随 bump,'
+        '其余字段不动,watchAll 推送', () async {
+      final source = '{"schemaVersion":1,"id":"x"}';
+      final id = await dao.add(
+        title: '我的独奏',
+        sourceJson: source,
+        schemaVersion: 1,
+        reviewedAt: '2026-10-26T10:00:00.000',
+      );
+      final created = (await dao.getAll()).single.createdAt;
+
+      final updated = '$source,"edited":true';
+      await dao.updateSource(
+        id: id,
+        sourceJson: updated,
+        reviewedAt: '2026-10-26T11:00:00.000',
+      );
+
+      final row = (await dao.getAll()).single;
+      expect(row.sourceJson, updated);
+      expect(
+        row.contentSha,
+        sha256.convert(utf8.encode(updated)).toString(),
+        reason: 'contentSha 随新源现算(改源漂移检测面)',
+      );
+      expect(
+        row.reviewedAt,
+        '2026-10-26T11:00:00.000',
+        reason: '轻改自动记 reviewedAt',
+      );
+      expect(row.title, '我的独奏', reason: '入库名不随轻改变');
+      expect(row.schemaVersion, 1);
+      expect(row.createdAt, created, reason: 'createdAt 不动');
+      expect(
+        row.updatedAt.isBefore(row.createdAt),
+        isFalse,
+        reason: 'updatedAt bump 到落库时刻(秒精度下 ≥ createdAt)',
+      );
+    });
+  });
+
   group('重导入查重(工单 44)', () {
     test('shaOf:静态指纹与入库 contentSha 同源', () async {
       const source = '{"schemaVersion":1,"id":"x"}';

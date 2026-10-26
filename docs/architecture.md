@@ -34,6 +34,11 @@ lib/
 │   │                 # tab_practice_state.dart 逐音练习状态((时间轴,引擎时刻)→当前音/预亮窗/拍,工单 13)
 │   ├── backup/       # 备份文档编解码(工单 21,纯数据变换零 drift 依赖):四表↔单个版本化 JSON,
 │   │                 # 解析层拦坏文件(版本/形状/主键重复/全空),可读中文错误
+│   ├── import/       # 识谱源(ADR-0009,纯 Dart):score_ir(源模型,JSON 交换契约)、score_ir_validator(校验缝:
+│   │                 # 拍长闭合/弦品 midi/同弦同刻/不支持记号阻塞)、score_ir_materializer(物化纯函数→双
+│   │                 # TabChart+ScoreSheetDef)、score_ir_exporter(金标准导出)、imported_solo_charts(读出管线
+│   │                 # 解码→校验→物化,坏源逐条人话)、score_ir_editor(单音微调:换弦品/拍位微移/删除,
+│   │                 # 「槽尾锚定前槽跟随」保拍长闭合,工单 45)
 │   ├── scoring/      # 评分内核(纯 Dart,工单 33,零引擎依赖):OnsetDetector(滤波链 HP150+880/1320 双陷波)、
 │   │                 # strum_scorer(贪心全局最近配对,拍域判定)、calibration(延迟校准)、chroma(封闭验证)、
 │   │                 # mic_audio_buffer、report(报告组装)
