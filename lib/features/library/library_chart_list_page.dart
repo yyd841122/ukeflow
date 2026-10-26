@@ -15,6 +15,8 @@ import '../play/tab_chart_page.dart';
 import 'cifraclub_search_page.dart';
 import 'image_chart_viewer_page.dart';
 import 'image_pick_flow.dart';
+import 'score_source_import_flow.dart';
+import 'score_source_import_page.dart';
 import 'text_import_page.dart';
 
 /// 一条独奏谱:组合定义 × 两层谱卡(主轴自曲库列表取=已滤隐藏集;
@@ -31,14 +33,13 @@ List<SoloChartEntry> _soloEntries(List<BuiltInTabChart> tabCharts) => [
     for (final tab in tabCharts)
       if (tab.id == def.tabChartId)
         (
-        def: def,
-        tab: tab,
-        melody: builtinTabChartCatalog.firstWhere(
-          (entry) => entry.id == def.melodyChartId,
+          def: def,
+          tab: tab,
+          melody: builtinTabChartCatalog.firstWhere(
+            (entry) => entry.id == def.melodyChartId,
+          ),
         ),
-      ),
 ];
-
 
 /// 曲库类型目录:增加类型时在此添加一项,目录自动跟进。
 enum LibraryCategory {
@@ -59,10 +60,14 @@ class LibraryChartListPage extends ConsumerWidget {
     super.key,
     required this.category,
     this.imagePickFlow,
+    this.scoreSourceImportFlow,
   });
 
   final LibraryCategory category;
   final ImagePickFlow? imagePickFlow;
+
+  /// 识谱源导入流程(工单 44),注入缝同 imagePickFlow。
+  final ScoreSourceImportFlow? scoreSourceImportFlow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -85,6 +90,11 @@ class LibraryChartListPage extends ConsumerWidget {
           if (category == LibraryCategory.strum) _strumActions(context),
           if (category == LibraryCategory.image)
             _imageActions(context, onPick: () => _pickImageChart(context, ref)),
+          if (category == LibraryCategory.solo)
+            _soloActions(
+              context,
+              onImport: () => _importScoreSource(context, ref),
+            ),
           ...libraryAsync.when(
             loading: () => [const _SectionLoading()],
             error: (error, _) => [LoadErrorView(title: '曲库加载失败', error: error)],
@@ -149,8 +159,7 @@ class LibraryChartListPage extends ConsumerWidget {
                         icon: const Icon(Icons.grid_on),
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            builder: (_) =>
-                                TabChartPage(chart: solo.tab.chart),
+                            builder: (_) => TabChartPage(chart: solo.tab.chart),
                           ),
                         ),
                       ),
@@ -173,7 +182,8 @@ class LibraryChartListPage extends ConsumerWidget {
                     ReadyImportedSolo() => _ChartCard(
                       cardKey: 'imported-solo-${entry.id}',
                       title: entry.title,
-                      subtitle: '导入 · '
+                      subtitle:
+                          '导入 · '
                           '${entry.def.subtitleLine(entry.accompaniment)}',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -191,9 +201,8 @@ class LibraryChartListPage extends ConsumerWidget {
                           icon: const Icon(Icons.grid_on),
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => TabChartPage(
-                                chart: entry.accompaniment,
-                              ),
+                              builder: (_) =>
+                                  TabChartPage(chart: entry.accompaniment),
                             ),
                           ),
                         ),
@@ -210,19 +219,15 @@ class LibraryChartListPage extends ConsumerWidget {
                   },
 
                 if (soloEntries.isEmpty && importedSolos.isEmpty)
-                  const CenteredHint(
-                    message: '暂无独奏谱',
-                    detail: '隐藏的谱可在设置页恢复。',
-                  ),
+                  const CenteredHint(message: '暂无独奏谱', detail: '隐藏的谱可在设置页恢复。'),
               ],
               if (category == LibraryCategory.tab) ...[
                 // 「·独奏」版主轴归独奏谱类型(组合定义引用,工单 39),
                 // 指弹谱列表只列旋律型。
                 for (final entry in library.tab.where(
-                  (entry) =>
-                      !scoreSheetCatalog.any(
-                        (def) => def.tabChartId == entry.id,
-                      ),
+                  (entry) => !scoreSheetCatalog.any(
+                    (def) => def.tabChartId == entry.id,
+                  ),
                 ))
                   _ChartCard(
                     cardKey: 'tab-chart-${entry.id}',
@@ -331,6 +336,87 @@ class LibraryChartListPage extends ConsumerWidget {
             context,
           ).showSnackBar(const SnackBar(content: Text('没存进曲库——请再试一次')));
         }
+    }
+  }
+
+  /// 识谱源导入入口(工单 44):选 JSON → 校验/查重 → 预览命名入库。
+  /// 取消静默、坏源逐条人话对话框(可「重新选择」闭环——修源在电脑端
+  /// 工作台,重选即重验)、同内容提示已有;合法源进预览页,落库后曲库
+  /// 流自动入列。选文件环节的权限姿态见 score_source_import_flow.dart。
+  Future<void> _importScoreSource(BuildContext context, WidgetRef ref) async {
+    final flow =
+        scoreSourceImportFlow ??
+        ScoreSourceImportFlow(
+          findDuplicateTitle: (sha) async =>
+              (await ref
+                      .read(importedSoloChartsDaoProvider)
+                      .getByContentSha(sha))
+                  ?.title,
+        );
+    final outcome = await flow.pickAndValidate();
+    if (!context.mounted) return;
+    switch (outcome) {
+      case ScoreSourceCancelled():
+        break;
+      case ScoreSourceFailed(:final message):
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      case ScoreSourceDuplicate(:final existingTitle):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('曲库已有内容相同的谱「$existingTitle」,不用重复导入')),
+        );
+      case ScoreSourceInvalid(:final errors):
+        await _showSourceErrors(context, ref, errors);
+      case ScoreSourceReady ready:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ImportScoreSourcePage(ready: ready),
+          ),
+        );
+    }
+  }
+
+  /// 校验阻塞清单(工单 44):逐条人话整屏列出。「重新选择」闭环回选
+  /// 文件(修源在电脑端,源好了直接换);关闭退回列表。库无变动。
+  Future<void> _showSourceErrors(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> errors,
+  ) async {
+    final retry = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('这份识谱源还进不了曲库'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final error in errors)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('· $error'),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('source-errors-close'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('关闭'),
+          ),
+          FilledButton(
+            key: const Key('source-errors-retry'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('重新选择'),
+          ),
+        ],
+      ),
+    );
+    if (retry == true && context.mounted) {
+      await _importScoreSource(context, ref);
     }
   }
 
@@ -608,6 +694,22 @@ Widget _strumActions(BuildContext context) {
         ).push(MaterialPageRoute<void>(builder: (_) => const TextImportPage())),
         icon: const Icon(Icons.post_add),
         label: const Text('导入'),
+      ),
+    ],
+  );
+}
+
+/// 独奏谱列表操作:识谱源导入入口(工单 44)。入口不依赖曲库数据,
+/// 加载/错误态也在。
+Widget _soloActions(BuildContext context, {required VoidCallback onImport}) {
+  return Row(
+    children: [
+      const Spacer(),
+      TextButton.icon(
+        key: const Key('import-score-source'),
+        onPressed: onImport,
+        icon: const Icon(Icons.file_open_outlined),
+        label: const Text('导入识谱源'),
       ),
     ],
   );

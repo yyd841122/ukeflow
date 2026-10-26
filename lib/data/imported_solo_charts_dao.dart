@@ -32,7 +32,7 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
         title: title,
         schemaVersion: schemaVersion,
         sourceJson: sourceJson,
-        contentSha: _shaOf(sourceJson),
+        contentSha: shaOf(sourceJson),
         createdAt: now,
         updatedAt: now,
         reviewedAt: Value(reviewedAt),
@@ -47,6 +47,14 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
     )..orderBy([(row) => OrderingTerm.asc(row.id)])).get();
   }
 
+  /// 按内容指纹查行(工单 44 重导入去重:同内容已入库则提示已有,
+  /// 不重复落行)。未入库返回 null。
+  Future<ImportedSoloChart?> getByContentSha(String sha) {
+    return (select(
+      importedSoloCharts,
+    )..where((row) => row.contentSha.equals(sha))).getSingleOrNull();
+  }
+
   /// 响应式导入独奏谱流:曲库独奏谱类目订阅,导入写入即自动入列。
   Stream<List<ImportedSoloChart>> watchAll() {
     return (select(
@@ -54,7 +62,8 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
     )..orderBy([(row) => OrderingTerm.asc(row.id)])).watch();
   }
 
-  /// 源内容指纹:sha256 十六进制串(源 JSON 的 UTF-8 字节)。
-  static String _shaOf(String sourceJson) =>
+  /// 源内容指纹:sha256 十六进制串(源 JSON 的 UTF-8 字节)。静态公开:
+  /// 导入页查重(工单 44)与入库算同一函数,指纹口径不许漂移。
+  static String shaOf(String sourceJson) =>
       sha256.convert(Uint8List.fromList(utf8.encode(sourceJson))).toString();
 }

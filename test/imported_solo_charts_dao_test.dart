@@ -80,4 +80,29 @@ void main() {
     await dao.add(title: '第一首', sourceJson: '{}', schemaVersion: 1);
     await expectation;
   });
+
+  group('重导入查重(工单 44)', () {
+    test('shaOf:静态指纹与入库 contentSha 同源', () async {
+      const source = '{"schemaVersion":1,"id":"x"}';
+      await dao.add(title: 'a', sourceJson: source, schemaVersion: 1);
+      expect(
+        (await dao.getAll()).single.contentSha,
+        ImportedSoloChartsDao.shaOf(source),
+        reason: '查重与入库必须用同一指纹函数(重导入去重的判定面)',
+      );
+    });
+
+    test('getByContentSha:命中返回行,未命中 null', () async {
+      const source = '{"schemaVersion":1,"id":"x"}';
+      await dao.add(title: '已有谱', sourceJson: source, schemaVersion: 1);
+
+      final hit = await dao.getByContentSha(
+        ImportedSoloChartsDao.shaOf(source),
+      );
+      expect(hit, isNotNull);
+      expect(hit!.title, '已有谱');
+
+      expect(await dao.getByContentSha('no-such-sha'), isNull);
+    });
+  });
 }

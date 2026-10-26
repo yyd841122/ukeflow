@@ -98,4 +98,48 @@ void main() {
       );
     });
   });
+
+  group('导入页预检 checkScoreIrSource(工单 44)', () {
+    test('合法源 → 空表,IR 在手', () {
+      final check = checkScoreIrSource(jsonEncode(validTinyIr().toJson()));
+      expect(check.isValid, isTrue);
+      expect(check.errors, isEmpty);
+      expect(check.ir, isNotNull);
+      expect(check.ir!.id, 'test-tiny-solo');
+      expect(check.ir!.review?.reviewedAt, '2026-10-26T10:00:00.000');
+    });
+
+    test('非 JSON 文本 → 单条解码错误,IR 不出', () {
+      final check = checkScoreIrSource('{bad');
+      expect(check.isValid, isFalse);
+      expect(check.errors, hasLength(1));
+      expect(check.errors.single, contains('源 JSON 解析失败'));
+      expect(check.ir, isNull);
+    });
+
+    test('schemaVersion 不符 → 单条,IR 不出', () {
+      final stale = jsonEncode({
+        ...validTinyIr().toJson(),
+        'schemaVersion': scoreIrSchemaVersion + 1,
+      });
+      final check = checkScoreIrSource(stale);
+      expect(check.errors, hasLength(1));
+      expect(check.errors.single, contains('schemaVersion 不符'));
+      expect(check.ir, isNull);
+    });
+
+    test('校验阻塞 → 逐条全量(不首错即停):不支持记号 + 空白曲名并列', () {
+      final json = tinyScoreIr().toJson();
+      json['title'] = ' ';
+      final check = checkScoreIrSource(jsonEncode(json));
+      expect(check.isValid, isFalse);
+      expect(check.errors.any((e) => e.contains('title')), isTrue);
+      expect(check.errors.any((e) => e.contains('不支持记号')), isTrue);
+      expect(
+        check.errors.length,
+        greaterThanOrEqualTo(2),
+        reason: '校验器全检,导入页一次把问题亮全',
+      );
+    });
+  });
 }

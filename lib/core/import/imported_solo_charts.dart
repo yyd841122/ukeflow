@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'score_ir.dart';
 import 'score_ir_materializer.dart';
+import 'score_ir_validator.dart';
 
 /// 导入独奏谱(GLOSSARY「识谱源」落地,ADR-0009)源 JSON → 弹练三源。
 /// 存储里存的是识谱源 JSON(唯一真源,自建弹唱谱存源文本同型),读出
@@ -40,4 +41,32 @@ Map<String, dynamic> _decode(String sourceJson) {
   }
   if (decoded is Map<String, dynamic>) return decoded;
   throw ScoreIrFormatException('源 JSON 根应为对象,实际 ${decoded?.runtimeType}');
+}
+
+/// 识谱源预检结果:合法([errors] 空)则 [ir] 在手,非法为 null。
+class ScoreIrSourceCheck {
+  const ScoreIrSourceCheck({required this.ir, required this.errors});
+
+  /// 解析出的识谱源;解码/验形失败时为 null。
+  final ScoreIr? ir;
+
+  /// 全部阻塞错误,逐条人话;空表 = 合法。
+  final List<String> errors;
+
+  bool get isValid => errors.isEmpty;
+}
+
+/// 导入页预检(工单 44):源 JSON → 全部阻塞错误逐条人话;合法 = 空表
+/// 且 IR 在手(一次解析两用:列错清单 / 出预览试物化)。解码/验形失败
+/// 单条报;校验阻塞全量报——校验器本就不首错即停,与读出管线
+/// [materializeImportedSoloChart] 的「首异常即抛」不同:入口要一次把
+/// 所有问题亮给用户回工作台修。
+ScoreIrSourceCheck checkScoreIrSource(String sourceJson) {
+  final ScoreIr ir;
+  try {
+    ir = ScoreIr.fromJson(_decode(sourceJson));
+  } on ScoreIrFormatException catch (error) {
+    return ScoreIrSourceCheck(ir: null, errors: [error.message]);
+  }
+  return ScoreIrSourceCheck(ir: ir, errors: validateScoreIr(ir));
 }
