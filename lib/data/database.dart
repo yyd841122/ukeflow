@@ -5,6 +5,7 @@ import '../core/model/checkin.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
 import 'image_charts_dao.dart';
+import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
 
 part 'database.g.dart';
@@ -58,11 +59,50 @@ class ImageCharts extends Table {
   BlobColumn get image => blob()();
 }
 
+/// 导入独奏谱表(工单 43,ADR-0009):一行 = 一份工作台导出的识谱源。
+/// 存源 JSON 全文(唯一真源,自建谱存源文本同型),读出过解析+校验+
+/// 物化管线(core/import/imported_solo_charts.dart)才成弹练三源——
+/// 坏源不阻塞读路径,降级为「已损坏」条目,源保留可重试。
+class ImportedSoloCharts extends Table {
+  /// 自增主键:入库序即曲库展示序,亦是曲目稳定标识(隐藏集以此为准)。
+  IntColumn get id => integer().autoIncrement()();
+
+  /// 入库时的命名——展示名以它为准(自建谱同一纪律,可覆盖源内曲名)。
+  TextColumn get title => text()();
+
+  /// 源的识谱源格式版本(ScoreIr.schemaVersion 照录):格式演进时
+  /// 按它识别陈年源,迁移/重导出的判定面。
+  IntColumn get schemaVersion => integer()();
+
+  /// 识谱源 JSON 全文。
+  TextColumn get sourceJson => text()();
+
+  /// 源内容指纹(sha256,入库时现算):重导入去重/改源漂移检测的
+  /// 判定面(导入 UI 工单 44、轻改工单 45 消费)。
+  TextColumn get contentSha => text()();
+
+  /// 入库时刻。
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// 最近一次源更新时刻(入库 = 创建;轻改随写随 bump,工单 45)。
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// 校对台全曲人工确认时刻(源 review.reviewedAt 照录,ISO 串原样
+  /// 存放不转格式);null = 源未带复核状态。
+  TextColumn get reviewedAt => text().nullable()();
+}
+
 /// UkeFlow 本地数据库(drift/SQLite)。
 /// 加表时 schemaVersion 递增并写迁移。
 @DriftDatabase(
-  tables: [CheckIns, CustomCharts, ImageCharts, Settings],
-  daos: [CheckInsDao, CustomChartsDao, ImageChartsDao, SettingsDao],
+  tables: [CheckIns, CustomCharts, ImageCharts, ImportedSoloCharts, Settings],
+  daos: [
+    CheckInsDao,
+    CustomChartsDao,
+    ImageChartsDao,
+    ImportedSoloChartsDao,
+    SettingsDao,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   /// 默认连接设备上的 ukeflow.sqlite;测试注入内存执行器。
@@ -70,7 +110,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'ukeflow'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   // v1 前期 schema 只加不改:建库与升级都 createAll(生成 IF NOT EXISTS,幂等),
   // 后续工单加表只需建表 + 递增 schemaVersion,升级安装也能拿到新表;

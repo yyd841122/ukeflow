@@ -25,6 +25,8 @@ dependencies:
   photo_view: ^0.15.0
   image_picker: ^1.2.4
   file_selector: ^1.1.0
+  # 导入独奏谱内容指纹(工单 43):源 JSON 的 sha256 落 contentSha 列。
+  crypto: ^3.0.0
 
 dev_dependencies:
   flutter_test:

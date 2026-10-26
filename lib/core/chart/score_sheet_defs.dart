@@ -150,6 +150,25 @@ class ScoreSheetDef {
       keySignature,
     ].join(' · ');
   }
+
+  /// 展示名替换(导入独奏谱的命名合并策略,工单 43):展示名一律以
+  /// 入库名为准——名字相同则原样返回(StrumChart.withTitle 同款纪律)。
+  ScoreSheetDef withTitle(String title) => title == this.title
+      ? this
+      : ScoreSheetDef(
+          id: id,
+          title: title,
+          artist: artist,
+          tabChartId: tabChartId,
+          melodyChartId: melodyChartId,
+          melodyAlignBeats: melodyAlignBeats,
+          keySignature: keySignature,
+          chords: chords,
+          strums: strums,
+          rests: rests,
+          tremolos: tremolos,
+          slides: slides,
+        );
 }
 
 // ── 印张手读指形(frets ④③②① 序,即印张数字串 G 弦起读法;工单 37

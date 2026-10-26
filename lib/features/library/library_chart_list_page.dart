@@ -67,10 +67,15 @@ class LibraryChartListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final libraryAsync = ref.watch(libraryProvider);
-    // 独奏谱解析一次(卡片与空态共用,不重复扫曲库)。
+    // 独奏谱解析一次(卡片与空态共用,不重复扫曲库);导入谱与内置
+    // 组合并列同列(工单 43,内置在前导入尾随)。
     final soloEntries = libraryAsync.maybeWhen(
       data: (library) => _soloEntries(library.tab),
       orElse: () => const <SoloChartEntry>[],
+    );
+    final importedSolos = libraryAsync.maybeWhen(
+      data: (library) => library.importedSolos,
+      orElse: () => const <ImportedSoloEntry>[],
     );
     return Scaffold(
       appBar: AppBar(title: Text(category.title)),
@@ -159,11 +164,55 @@ class LibraryChartListPage extends ConsumerWidget {
                           .hideTab(solo.def.tabChartId),
                     ),
                   ),
+                // 导入独奏谱(工单 43):识谱源读出物化后与内置组合同等
+                // 跟练(spec 故事 61/62);坏源降级为损坏条目(spec 故事
+                // 65)——可见、不可跟练、源保留可重试。删除 = 隐藏,
+                // 恢复口同在设置页。
+                for (final entry in importedSolos)
+                  switch (entry) {
+                    ReadyImportedSolo() => _ChartCard(
+                      cardKey: 'imported-solo-${entry.id}',
+                      title: entry.title,
+                      subtitle: '导入 · '
+                          '${entry.def.subtitleLine(entry.accompaniment)}',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ScoreSheetPage(
+                            def: entry.def,
+                            tabChart: entry.accompaniment,
+                            melodyChart: entry.melody,
+                          ),
+                        ),
+                      ),
+                      actions: [
+                        IconButton(
+                          key: Key('imported-solo-tab-entry-${entry.id}'),
+                          tooltip: '四线谱跟练',
+                          icon: const Icon(Icons.grid_on),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => TabChartPage(
+                                chart: entry.accompaniment,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onDelete: () => _hideImportedSolo(context, ref, entry),
+                    ),
+                    BrokenImportedSolo() => _ChartCard(
+                      cardKey: 'imported-solo-${entry.id}',
+                      title: entry.title,
+                      subtitle: '导入 · 已损坏,暂不可跟练',
+                      enabled: false,
+                      onDelete: () => _hideImportedSolo(context, ref, entry),
+                    ),
+                  },
 
-                if (soloEntries.isEmpty)
+                if (soloEntries.isEmpty && importedSolos.isEmpty)
                   const CenteredHint(
                     message: '暂无独奏谱',
-                    detail: '隐藏的内置谱可在设置页恢复。',
+                    detail: '隐藏的谱可在设置页恢复。',
                   ),
               ],
               if (category == LibraryCategory.tab) ...[
@@ -366,6 +415,32 @@ class LibraryChartListPage extends ConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('没删成——请再试一次')));
+    }
+  }
+
+  /// 导入独奏谱删除 = 隐藏出曲库(工单 43:校对成果不轻弃,源永久
+  /// 保留在库,恢复口在设置页;损坏条目同口——隐藏不销毁,修源重导
+  /// 入或管线演进后恢复即重试)。失败给可读 SnackBar,不静默。
+  Future<void> _hideImportedSolo(
+    BuildContext context,
+    WidgetRef ref,
+    ImportedSoloEntry entry,
+  ) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: '把「${entry.title}」移出曲库?',
+      dialogText: '导入谱只是从曲库隐藏,不删内容;可随时在设置页恢复。',
+      confirmLabel: '隐藏',
+    );
+    if (!confirmed) return;
+    try {
+      await ref.read(importedSoloVisibilityProvider).hide(entry.id);
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 导入独奏谱隐藏失败 $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没移成——请再试一次')));
     }
   }
 

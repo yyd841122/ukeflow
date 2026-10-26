@@ -21,6 +21,9 @@ abstract final class SettingsKeys {
   /// 隐藏的内置图片谱 id 集(工单 32)。
   static const hiddenBuiltinImages = 'hidden_builtin_image_ids';
 
+  /// 隐藏的导入独奏谱 id 集(工单 43):数据库行 id 十进制串,逗号并。
+  static const hiddenImportedSoloIds = 'hidden_imported_solo_ids';
+
   /// 跟练评分的链路延迟(毫秒,可负;工单 33,GLOSSARY「延迟校准」)。
   static const scoringLatencyMs = 'scoring_latency_ms';
 }

@@ -1,14 +1,18 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ukeflow/core/import/score_ir.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
 import 'package:ukeflow/data/settings_dao.dart';
 
 import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
+import 'helpers/score_ir_fixtures.dart';
 import 'package:ukeflow/features/settings/settings_page.dart';
 
 /// 设置页(工单 20):两行设置(A4 参考音/默认 BPM)的渲染与写透。
@@ -171,5 +175,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('hidden-charts-card')), findsNothing,
         reason: '集全空,管理区退场');
+  });
+
+  // ── 工单 43:导入独奏谱隐藏集同入管理区(恢复口)──
+
+  testWidgets('导入独奏谱隐藏行呈现曲名,恢复后行消失、集清空', (tester) async {
+    await pumpPageWithFixture(tester);
+    await db.importedSoloChartsDao.add(
+      title: '入库名',
+      sourceJson: jsonEncode(validTinyIr().toJson()),
+      schemaVersion: scoreIrSchemaVersion,
+    );
+    await db.settingsDao.setString(SettingsKeys.hiddenImportedSoloIds, '1');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('hidden-charts-card')), findsOneWidget);
+    expect(find.text('导入独奏谱 · 入库名'), findsOneWidget,
+        reason: '曲名按行 id 解析(非裸 id)');
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('restore-imported-solo-1')),
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const Key('restore-imported-solo-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('restore-imported-solo-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('导入独奏谱 · 入库名'), findsNothing, reason: '恢复后行退场');
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenImportedSoloIds),
+      '',
+    );
+    expect(find.byKey(const Key('hidden-charts-card')), findsNothing,
+        reason: '其余集全空,管理区退场');
+  });
+
+  testWidgets('导入独奏谱隐藏行遇陈年 id(行已不在):以原样 id 呈现可恢复', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    await db.settingsDao.setString(SettingsKeys.hiddenImportedSoloIds, '99');
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入独奏谱 · 99'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('restore-imported-solo-99')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('restore-imported-solo-99')));
+    await tester.pumpAndSettle();
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenImportedSoloIds),
+      '',
+    );
   });
 }

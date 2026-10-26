@@ -41,7 +41,8 @@ lib/
 │   ├── ui/           # 共享基础组件(ArrowStrip 扫弦箭头条、judgment_colors 判定四色单源等)
 │   └── theme.dart    # 统一主题（琥珀木色 Material 3）
 ├── data/             # drift 表：checkins、custom_charts(自建谱)、image_charts(用户图片谱,工单 18)、
-│                     # settings(键值设置,工单 20);backup_service(工单 21:导出快照/导入即覆盖的事务落库口);
+│                     # imported_solo_charts(导入独奏谱源 JSON,工单 43)、settings(键值设置,工单 20);
+│                     # backup_service(工单 21:导出快照/导入即覆盖的事务落库口);
 │                     # assets/：内置谱、chords-db、采样
 ├── features/
 │   ├── tuner/        # 调音器（spike A 代码升级迁入）

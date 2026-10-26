@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
+import 'package:ukeflow/core/import/score_ir.dart';
 import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
@@ -15,10 +18,12 @@ import 'package:ukeflow/features/library/image_chart_viewer_page.dart';
 import 'package:ukeflow/features/library/image_pick_flow.dart';
 import 'package:ukeflow/features/library/library_page.dart';
 import 'package:ukeflow/features/play/chart_meta.dart';
+import 'package:ukeflow/features/play/score_sheet_page.dart';
 
 import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
 import 'helpers/image_fixtures.dart';
+import 'helpers/score_ir_fixtures.dart';
 
 /// 曲库目录与各类型列表:内置谱注入 fixture,自建谱走真内存库
 /// (closeStreamsSynchronously 收口 drift 流计时器,见 path_page_test);
@@ -36,6 +41,7 @@ void main() {
     WidgetTester tester, {
     ImagePickFlow? imagePickFlow,
     String? category = '弹唱谱',
+    Future<void> Function(AppDatabase db)? seed,
   }) async {
     db = AppDatabase(
       DatabaseConnection(
@@ -44,6 +50,7 @@ void main() {
       ),
     );
     addTearDown(db.close);
+    if (seed != null) await seed(db);
     engine = FakeAudioEngine();
     await tester.pumpWidget(
       ProviderScope(
@@ -291,6 +298,95 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('独奏谱'), findsOneWidget);
+  });
+
+  // ── 工单 43:导入独奏谱与内置组合并列同列,坏源降级,删除 = 隐藏 ──
+
+  /// 合法源入库(工单 42 夹具的最小可物化源)。
+  Future<void> seedValid(AppDatabase db, {String title = '入库名'}) =>
+      db.importedSoloChartsDao.add(
+        title: title,
+        sourceJson: jsonEncode(validTinyIr().toJson()),
+        schemaVersion: scoreIrSchemaVersion,
+      );
+
+  testWidgets('导入独奏谱与内置并列入列,点卡进谱面视图,次入口进四线谱', (
+    tester,
+  ) async {
+    await pumpLibrary(
+      tester,
+      category: '独奏谱',
+      seed: (db) => seedValid(db),
+    );
+
+    expect(find.text('爱你不是两三天'), findsOneWidget, reason: '内置组合在前');
+    expect(find.text('入库名'), findsOneWidget, reason: '导入谱尾随');
+    expect(find.text('导入 · 测试者 · 78 BPM · 1=E'), findsOneWidget);
+    expect(find.byKey(const Key('imported-solo-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('imported-solo-1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('谱面视图 · 测试者 · 78 BPM · 1=E'),
+      findsOneWidget,
+      reason: '导入谱与内置组合同等:默认进谱面视图',
+    );
+    expect(find.byKey(const Key('score-strip')), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('imported-solo-tab-entry-1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tab-chart-canvas')), findsOneWidget);
+  });
+
+  testWidgets('坏源降级损坏条目:可见、标记、不可跟练,好谱不受牵连', (tester) async {
+    await pumpLibrary(
+      tester,
+      category: '独奏谱',
+      seed: (db) async {
+        await seedValid(db);
+        await db.importedSoloChartsDao.add(
+          title: '坏谱',
+          sourceJson: '{bad',
+          schemaVersion: scoreIrSchemaVersion,
+        );
+      },
+    );
+
+    expect(find.text('入库名'), findsOneWidget);
+    expect(find.text('坏谱'), findsOneWidget);
+    expect(find.text('导入 · 已损坏,暂不可跟练'), findsOneWidget);
+    expect(find.byKey(const Key('imported-solo-2')), findsOneWidget);
+
+    // 损坏卡不可点(ListTile 无 onTap),点了原地不动(按页型断言,
+    // 文本前缀匹配会放过真导航)。
+    await tester.tap(find.byKey(const Key('imported-solo-2')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ScoreSheetPage), findsNothing);
+  });
+
+  testWidgets('导入独奏谱删除 = 隐藏出曲库(确认后卡片退场)', (tester) async {
+    await pumpLibrary(
+      tester,
+      category: '独奏谱',
+      seed: (db) => seedValid(db),
+    );
+
+    await tester.tap(find.byKey(const Key('delete-imported-solo-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('把「入库名」移出曲库?'), findsOneWidget);
+    expect(find.text('导入谱只是从曲库隐藏,不删内容;可随时在设置页恢复。'),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('入库名'), findsNothing);
+    expect(
+      await db.settingsDao.getString(SettingsKeys.hiddenImportedSoloIds),
+      '1',
+      reason: '隐藏写设置集合,源保留在库可恢复',
+    );
   });
 
   // ── 工单 32:删除(自建谱/用户图片谱真删,内置谱隐藏)──

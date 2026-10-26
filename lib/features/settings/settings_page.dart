@@ -213,9 +213,10 @@ class SettingsPage extends ConsumerWidget {
 }
 
 
-/// 隐藏的内置谱管理区(工单 32):曲库页删除内置谱 = 隐藏,恢复口在
-/// 此。三类隐藏集非空才出卡;每条给曲名(目录解析,目录里已删的陈年
-/// id 以原样 id 呈现,恢复即清)与「恢复」钮,写回即曲库页回流。
+/// 隐藏谱管理区(工单 32 内置三类 + 工单 43 导入独奏谱):曲库页删除
+/// = 隐藏,恢复口在此。各隐藏集非空才出卡;每条给曲名(目录解析,
+/// 目录里已删的陈年 id 以原样 id 呈现,恢复即清)与「恢复」钮,写回
+/// 即曲库页回流。
 class _HiddenChartsCard extends ConsumerWidget {
   const _HiddenChartsCard();
 
@@ -229,7 +230,12 @@ class _HiddenChartsCard extends ConsumerWidget {
         ref.watch(hiddenBuiltinTabsProvider).value ?? const <String>{};
     final hiddenImages =
         ref.watch(hiddenBuiltinImagesProvider).value ?? const <String>{};
-    if (hiddenStrums.isEmpty && hiddenTabs.isEmpty && hiddenImages.isEmpty) {
+    final hiddenImported =
+        ref.watch(hiddenImportedSolosProvider).value ?? const <String>{};
+    if (hiddenStrums.isEmpty &&
+        hiddenTabs.isEmpty &&
+        hiddenImages.isEmpty &&
+        hiddenImported.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -244,7 +250,15 @@ class _HiddenChartsCard extends ConsumerWidget {
     final imageTitles = {
       for (final c in builtinImageChartCatalog) c.id: c.title,
     };
+    // 导入独奏谱曲名按行 id 解析(隐藏集存 id 十进制串;行已不存在的
+    // 陈年 id 以原样 id 呈现)。
+    final importedTitles = {
+      for (final e in ref.watch(importedSoloChartsProvider).value
+          ?? const <ImportedSoloEntry>[])
+        e.id: e.title,
+    };
     final visibility = ref.read(builtinChartVisibilityProvider);
+    final importedVisibility = ref.read(importedSoloVisibilityProvider);
 
     final rows = <Widget>[
       for (final id in hiddenStrums)
@@ -271,6 +285,14 @@ class _HiddenChartsCard extends ConsumerWidget {
           kind: '图片谱',
           onRestore: () => visibility.restoreImage(id),
         ),
+      for (final id in hiddenImported)
+        _HiddenRow(
+          key: Key('hidden-imported-solo-$id'),
+          restoreKey: Key('restore-imported-solo-$id'),
+          title: importedTitles[int.tryParse(id)] ?? id,
+          kind: '导入独奏谱',
+          onRestore: () => importedVisibility.restore(int.parse(id)),
+        ),
     ];
 
     return Card(
@@ -280,10 +302,10 @@ class _HiddenChartsCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('隐藏的内置谱', style: Theme.of(context).textTheme.titleSmall),
+            Text('隐藏的谱', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
-              '在曲库页点删除移出的内置谱都在这里,点「恢复」回到曲库',
+              '在曲库页点删除移出的谱都在这里,点「恢复」回到曲库',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.outline,
               ),

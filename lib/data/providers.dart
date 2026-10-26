@@ -6,6 +6,7 @@ import 'database.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
 import 'image_charts_dao.dart';
+import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
 
 /// 全局唯一数据库实例：首次读取时创建，容器销毁时关闭。
@@ -28,6 +29,11 @@ final customChartsDaoProvider = Provider<CustomChartsDao>(
 /// 图片谱数据访问(相册图片谱数据源,工单 18)。
 final imageChartsDaoProvider = Provider<ImageChartsDao>(
   (ref) => ref.watch(appDatabaseProvider).imageChartsDao,
+);
+
+/// 导入独奏谱数据访问(曲库独奏谱类目数据源,工单 43)。
+final importedSoloChartsDaoProvider = Provider<ImportedSoloChartsDao>(
+  (ref) => ref.watch(appDatabaseProvider).importedSoloChartsDao,
 );
 
 /// 设置数据访问(工单 20:键值读写,加载/写透纪律见 settings_providers)。

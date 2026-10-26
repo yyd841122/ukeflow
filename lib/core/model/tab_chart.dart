@@ -69,6 +69,12 @@ class TabChart {
   /// 逐音事件,按谱面录入顺序(消费方经 [sortedTabNotes] 取时序视图,
   /// 模型不约束)。
   final List<TabNote> notes;
+
+  /// 展示名替换(导入独奏谱的命名合并策略,工单 43):展示名一律以
+  /// 入库名为准——名字相同则原样返回(StrumChart.withTitle 同款纪律)。
+  TabChart withTitle(String title) => title == this.title
+      ? this
+      : TabChart(title: title, artist: artist, tempo: tempo, notes: notes);
 }
 
 /// 指弹谱逐音的**时序视图**:按拍位升序,同拍保持录入序。单一来源,
