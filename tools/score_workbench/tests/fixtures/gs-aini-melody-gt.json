@@ -1,0 +1,1155 @@
+{
+ "_comment": "由 `dart run tools/dump_melody_truth.dart > 本文件` 导出(builtin_tab_charts.dart 工单25 权威转录),勿手改;常量变更后重导出",
+ "id": "ai-ni-bu-shi-liang-san-tian-solo",
+ "melodyAlignBeats": 20.0,
+ "tempo": 78,
+ "notes": [
+  {
+   "beat": 0.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "你"
+  },
+  {
+   "beat": 0.75,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "的"
+  },
+  {
+   "beat": 1.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 1.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "信"
+  },
+  {
+   "beat": 2.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "只"
+  },
+  {
+   "beat": 2.75,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "留"
+  },
+  {
+   "beat": 3.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69
+  },
+  {
+   "beat": 3.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "下"
+  },
+  {
+   "beat": 4.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "最"
+  },
+  {
+   "beat": 4.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "后"
+  },
+  {
+   "beat": 5.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "一"
+  },
+  {
+   "beat": 5.5,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "封"
+  },
+  {
+   "beat": 6.0,
+   "string": 2,
+   "fret": 0,
+   "midi": 64
+  },
+  {
+   "beat": 7.5,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "淡"
+  },
+  {
+   "beat": 7.75,
+   "string": 3,
+   "fret": 2,
+   "midi": 62,
+   "lyric": "淡"
+  },
+  {
+   "beat": 8.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "笔"
+  },
+  {
+   "beat": 8.75,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "迹"
+  },
+  {
+   "beat": 9.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69
+  },
+  {
+   "beat": 9.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "你"
+  },
+  {
+   "beat": 10.0,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "熟"
+  },
+  {
+   "beat": 10.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "悉"
+  },
+  {
+   "beat": 10.75,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "的"
+  },
+  {
+   "beat": 11.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 11.25,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "温"
+  },
+  {
+   "beat": 11.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "柔"
+  },
+  {
+   "beat": 12.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 12.25,
+   "string": 2,
+   "fret": 0,
+   "midi": 64
+  },
+  {
+   "beat": 15.5,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "请"
+  },
+  {
+   "beat": 15.75,
+   "string": 2,
+   "fret": 1,
+   "midi": 65,
+   "lyric": "别"
+  },
+  {
+   "beat": 16.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "介"
+  },
+  {
+   "beat": 16.75,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "意"
+  },
+  {
+   "beat": 17.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 17.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "我"
+  },
+  {
+   "beat": 18.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "会"
+  },
+  {
+   "beat": 18.75,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "将"
+  },
+  {
+   "beat": 19.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "信"
+  },
+  {
+   "beat": 19.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "纸"
+  },
+  {
+   "beat": 20.0,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "好"
+  },
+  {
+   "beat": 20.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "好"
+  },
+  {
+   "beat": 21.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "收"
+  },
+  {
+   "beat": 21.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "着"
+  },
+  {
+   "beat": 22.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 23.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "当"
+  },
+  {
+   "beat": 23.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "我"
+  },
+  {
+   "beat": 24.0,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "需"
+  },
+  {
+   "beat": 24.5,
+   "string": 2,
+   "fret": 1,
+   "midi": 65,
+   "lyric": "要"
+  },
+  {
+   "beat": 25.0,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "你"
+  },
+  {
+   "beat": 25.5,
+   "string": 2,
+   "fret": 1,
+   "midi": 65,
+   "lyric": "关"
+  },
+  {
+   "beat": 26.0,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "怀"
+  },
+  {
+   "beat": 26.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "的"
+  },
+  {
+   "beat": 27.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "时"
+  },
+  {
+   "beat": 27.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "候"
+  },
+  {
+   "beat": 28.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74
+  },
+  {
+   "beat": 30.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "走"
+  },
+  {
+   "beat": 30.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "过"
+  },
+  {
+   "beat": 31.0,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "夏"
+  },
+  {
+   "beat": 31.5,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "日"
+  },
+  {
+   "beat": 32.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "街"
+  },
+  {
+   "beat": 32.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "头"
+  },
+  {
+   "beat": 33.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "还"
+  },
+  {
+   "beat": 33.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "是"
+  },
+  {
+   "beat": 34.0,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "想"
+  },
+  {
+   "beat": 34.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 35.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "牵"
+  },
+  {
+   "beat": 36.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "你"
+  },
+  {
+   "beat": 36.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "的"
+  },
+  {
+   "beat": 37.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76
+  },
+  {
+   "beat": 37.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "手"
+  },
+  {
+   "beat": 38.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 39.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "好"
+  },
+  {
+   "beat": 39.75,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "想"
+  },
+  {
+   "beat": 40.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "听"
+  },
+  {
+   "beat": 40.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "到"
+  },
+  {
+   "beat": 41.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "一"
+  },
+  {
+   "beat": 41.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "句"
+  },
+  {
+   "beat": 42.0,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "温"
+  },
+  {
+   "beat": 42.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 43.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "暖"
+  },
+  {
+   "beat": 43.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "的"
+  },
+  {
+   "beat": 44.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "问"
+  },
+  {
+   "beat": 45.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77
+  },
+  {
+   "beat": 45.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76
+  },
+  {
+   "beat": 46.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "候"
+  },
+  {
+   "beat": 47.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "虽"
+  },
+  {
+   "beat": 47.75,
+   "string": 1,
+   "fret": 2,
+   "midi": 71,
+   "lyric": "然"
+  },
+  {
+   "beat": 48.0,
+   "string": 1,
+   "fret": 0,
+   "midi": 69,
+   "lyric": "我"
+  },
+  {
+   "beat": 48.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "们"
+  },
+  {
+   "beat": 49.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "说"
+  },
+  {
+   "beat": 49.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "好"
+  },
+  {
+   "beat": 50.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "了"
+  },
+  {
+   "beat": 50.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "还"
+  },
+  {
+   "beat": 51.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 51.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 52.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "是"
+  },
+  {
+   "beat": 53.5,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "朋"
+  },
+  {
+   "beat": 54.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "友"
+  },
+  {
+   "beat": 55.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "但"
+  },
+  {
+   "beat": 55.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "为"
+  },
+  {
+   "beat": 56.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "什"
+  },
+  {
+   "beat": 56.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "么"
+  },
+  {
+   "beat": 57.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "却"
+  },
+  {
+   "beat": 57.5,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "没"
+  },
+  {
+   "beat": 58.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "有"
+  },
+  {
+   "beat": 58.5,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "再"
+  },
+  {
+   "beat": 59.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "联"
+  },
+  {
+   "beat": 59.25,
+   "string": 2,
+   "fret": 3,
+   "midi": 67
+  },
+  {
+   "beat": 59.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "络"
+  },
+  {
+   "beat": 60.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74
+  },
+  {
+   "beat": 62.0,
+   "string": 2,
+   "fret": 0,
+   "midi": 64,
+   "lyric": "爱"
+  },
+  {
+   "beat": 62.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "你"
+  },
+  {
+   "beat": 62.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 63.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "不"
+  },
+  {
+   "beat": 63.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "是"
+  },
+  {
+   "beat": 64.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "两"
+  },
+  {
+   "beat": 64.5,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "三"
+  },
+  {
+   "beat": 65.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "天"
+  },
+  {
+   "beat": 65.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "每"
+  },
+  {
+   "beat": 66.0,
+   "string": 1,
+   "fret": 10,
+   "midi": 79,
+   "lyric": "天"
+  },
+  {
+   "beat": 66.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "却"
+  },
+  {
+   "beat": 67.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "想"
+  },
+  {
+   "beat": 67.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "你"
+  },
+  {
+   "beat": 67.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 68.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "很"
+  },
+  {
+   "beat": 68.5,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "多"
+  },
+  {
+   "beat": 68.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "遍"
+  },
+  {
+   "beat": 69.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76
+  },
+  {
+   "beat": 69.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "还"
+  },
+  {
+   "beat": 70.0,
+   "string": 1,
+   "fret": 10,
+   "midi": 79,
+   "lyric": "不"
+  },
+  {
+   "beat": 70.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "习"
+  },
+  {
+   "beat": 71.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "惯"
+  },
+  {
+   "beat": 71.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "孤"
+  },
+  {
+   "beat": 72.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "独"
+  },
+  {
+   "beat": 72.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "街"
+  },
+  {
+   "beat": 72.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "道"
+  },
+  {
+   "beat": 73.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 73.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "拥"
+  },
+  {
+   "beat": 74.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "挤"
+  },
+  {
+   "beat": 74.25,
+   "string": 1,
+   "fret": 7,
+   "midi": 76
+  },
+  {
+   "beat": 74.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74
+  },
+  {
+   "beat": 74.75,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "人"
+  },
+  {
+   "beat": 75.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "潮"
+  },
+  {
+   "beat": 75.25,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 75.75,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "没"
+  },
+  {
+   "beat": 76.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "你"
+  },
+  {
+   "beat": 76.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "拥"
+  },
+  {
+   "beat": 77.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "抱"
+  },
+  {
+   "beat": 78.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "爱"
+  },
+  {
+   "beat": 78.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "你"
+  },
+  {
+   "beat": 78.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 79.0,
+   "string": 1,
+   "fret": 3,
+   "midi": 72,
+   "lyric": "不"
+  },
+  {
+   "beat": 79.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "是"
+  },
+  {
+   "beat": 80.0,
+   "string": 2,
+   "fret": 3,
+   "midi": 67,
+   "lyric": "两"
+  },
+  {
+   "beat": 80.5,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "三"
+  },
+  {
+   "beat": 81.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "天"
+  },
+  {
+   "beat": 81.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "一"
+  },
+  {
+   "beat": 82.0,
+   "string": 1,
+   "fret": 10,
+   "midi": 79,
+   "lyric": "眨"
+  },
+  {
+   "beat": 82.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "眼"
+  },
+  {
+   "beat": 83.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "心"
+  },
+  {
+   "beat": 83.5,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "跳"
+  },
+  {
+   "beat": 83.75,
+   "string": 1,
+   "fret": 3,
+   "midi": 72
+  },
+  {
+   "beat": 84.0,
+   "string": 1,
+   "fret": 5,
+   "midi": 74,
+   "lyric": "能"
+  },
+  {
+   "beat": 84.5,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "沉"
+  },
+  {
+   "beat": 85.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "淀"
+  },
+  {
+   "beat": 85.75,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "你"
+  },
+  {
+   "beat": 86.0,
+   "string": 1,
+   "fret": 10,
+   "midi": 79,
+   "lyric": "是"
+  },
+  {
+   "beat": 86.5,
+   "string": 1,
+   "fret": 8,
+   "midi": 77,
+   "lyric": "否"
+  },
+  {
+   "beat": 87.0,
+   "string": 1,
+   "fret": 7,
+   "midi": 76,
+   "lyric": "想"
+  },
+  {
+   "beat": 87.5,
+   "string": 1,
+   "fret": 12,
+   "midi": 81,
+   "lyric": "念"
+  }
+ ]
+}

@@ -1,8 +1,9 @@
-# score_workbench — 识谱工作台(工单47/48,dev-only)
+# score_workbench — 识谱工作台(工单47/48/49,dev-only)
 
 谱面体检(矢量/位图)+ 谱型判别(solo/strum/image/vector)+ 分流报告 JSON +
-**版面切分**(工单48:逐系统逐层裁图 + 小节/拍位骨架)。
-符号识别是工单 49-50,校对台是 51;矢量谱遇到只报告不处理。
+版面切分(工单48:逐系统逐层裁图 + 小节/拍位骨架)+ **旋律层识别**(工单49:
+PaddleOCR 数字 + 几何规则 → 简谱旋律声部草稿,证据齐全)。
+TAB 层识别是工单 50,校对台是 51;矢量谱遇到只报告不处理。
 
 ## 搭建
 
@@ -11,6 +12,21 @@ python3 -m venv /tmp/swwenv           # venv 路径随意,/tmp 惯例同 pdf_cen
 /tmp/swwenv/bin/pip install -r requirements.txt
 cd tools/score_workbench              # 以下命令均在此目录跑
 ```
+
+## PP-OCR 模型(工单49 起识别需要;体检/判别/切分不需要)
+
+rec=PP-OCRv6_small(21MB)+ ppocrv6_dict.txt,Apache-2.0,不入库。两件齐放
+一个目录即可,寻找顺序:`$SWW_MODELS` → `tools/score_workbench/models/` →
+`/tmp/dolce/public/redist/ocr`(PoC 机残留)。获取:从 dolce 仓
+(github.com/lodebar2026/dolce)`public/redist/ocr/` 拷贝,或:
+
+```sh
+mkdir -p tools/score_workbench/models
+cp /tmp/dolce/public/redist/ocr/{ch_PP-OCRv6_small_rec_infer.onnx,ppocrv6_dict.txt} \
+   tools/score_workbench/models/
+```
+
+(det 模型一期未接:数字定位走连通域组件,行 rec 只服务页眉。)
 
 ## 用法
 
@@ -22,6 +38,9 @@ $PY -m score_workbench.cli triage  x.pdf --out report.json                # 报�
 $PY -m score_workbench.cli triage  x.pdf --type strum --out report.json   # 人工改判(ADR-0009)
 $PY -m score_workbench.cli split   x.pdf --out-dir out/layout             # 版面切分(48)
 $PY -m score_workbench.cli split   x.pdf --out-dir out/layout --dpi 350   # 300-400dpi
+$PY -m score_workbench.cli recognize x.pdf --out-dir out/layout           # 旋律识别(49)
+$PY -m score_workbench.cli diff-melody out/layout/melody.json gt.json     # ×真值逐位 diff
+cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导真值(工单49)
 /tmp/swwenv/bin/python -m pytest tests/ -q                                # 全部测试
 ```
 
@@ -31,6 +50,17 @@ $PY -m score_workbench.cli split   x.pdf --out-dir out/layout --dpi 350   # 300-
   (位图版面信号,矢量谱为 null)+ `classification`(`score_type`/`disposition`/
   `reasons[]`,人工改判时 `auto_type`/`overridden`)。分流去向:`solo→process`
   (完整识谱管线)、`strum|image→archive`(归档图片谱待识别)、`vector→report_only`。
+- `recognize`:`ukeflow.workbench.melody/1` — 页眉(key/meter/tempo,读不出
+  落警告按 4/4 假定)+ 逐系统(digit band/歧证/记号证据)+ 逐小节
+  (start_beat/read_beats/闭合对账)+ 逐音(度数/八度点/拍位/时值/置信度/
+  bbox,页渲染 px)+ 休止 + 未映射音位。拍位=小节内按时值累加(工单41
+  教训:不做 px→拍标定);未知数字保槽位落警告,禁止静默丢(ADR-0009)。
+  已考记号:数字 0-7/八度点(竖排连件按高折合)/时值线(共享梁逐音按覆盖
+  计数)/附点/延音杠/延音弧(证据)/反复记号(证据);印张↔人工真值的微观
+  节奏出入(工单41「细分差半拍」)diff 照报,归校对台裁决。
+- `diff-melody`:`ukeflow.workbench.melody_diff/1` — 真值按 4 拍连拍格切块,
+  草稿小节按 read_beats 贪心凑块(2/4 变拍两小节并块),逐位比度数+八度点
+  (印张点数=应用+1)/块内拍位/时值(休止感知);真值窗口外草稿尾部只计不比。
 - `split`:`ukeflow.workbench.layout/1` — `source`(sha256/dpi)+ `deskew`(逐页角)
   + `score_pages[]`(谱全了每 PDF 页 2×2 位图=上下两个整谱页)→ 每系统 `staff`/
   `block`/`layers{}`(bbox+crop 路径,六层:tab/chord_diagram/chord_name/jianpu/
@@ -45,6 +75,10 @@ $PY -m score_workbench.cli split   x.pdf --out-dir out/layout --dpi 350   # 300-
 - `layout.py` — 版面信号:scale3 渲染→四线谱系统/文本带/简谱证据(几何档案 census 直移)
 - `split.py` — 版面切分(工单48):纠偏→系统检测→内容感知分块→组件级分层→
   小节线/候选拍网格→裁图+骨架 JSON
+- `paddle_ocr.py` — PP-OCRv6 rec 封装(工单49):数字格批量 rec + 整行 rec +
+  CTC 解码(预处理照 dolce PoC 口径)
+- `melody.py` — 旋律层识别(工单49):字形几何(数字行选举/角色分类/点梁归属)
+  → OCR → 小节装配 → 页眉读谱;`melodic_diff.py` — 真值逐位 diff
 - `report.py` — 编排+报告;`cli.py` — argparse 入口
 
 ## 几何基线(像素考古档案,工单39/41/48 实测)

@@ -32,3 +32,6 @@ __pycache__/
 .venv/
 *.pyc
 .pytest_cache/
+
+# 识谱工作台 PP-OCR 模型(Apache-2.0,~26MB,不入库;README 有获取步骤)
+tools/score_workbench/models/

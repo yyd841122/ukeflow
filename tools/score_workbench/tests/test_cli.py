@@ -54,3 +54,58 @@ def test_missing_file_errors(capsys, tmp_path):
     rc = main(["triage", str(tmp_path / "nope.pdf")])
     assert rc == 2
     assert "打不开" in capsys.readouterr().err
+
+
+# ── recognize / diff-melody(工单49;OCR 用桩,几何装配走真代码)────────
+
+from tests.test_melody_pipeline import _write_pdf, FakeOcr  # noqa: E402
+from score_workbench.melody import recognize_melody_pdf  # noqa: E402
+
+
+def test_recognize_cli_synthetic(capsys, tmp_path):
+    pdf = _write_pdf(tmp_path)
+    out = tmp_path / "out"
+    rc = main(["recognize", pdf, "--out-dir", str(out),
+               "--models", str(tmp_path)])  # 无模型 → 报错消息可操作(exit 2)
+    assert rc == 2
+    assert "PP-OCR" in capsys.readouterr().err
+
+
+def test_recognize_cli_uses_injected_ocr(tmp_path):
+    """CLI 路径的 ocr 注入缝:models_dir 未配时 resolve 报错消息可操作。"""
+    from score_workbench.paddle_ocr import resolve_models_dir
+    with pytest.raises(FileNotFoundError) as ei:
+        resolve_models_dir([str(tmp_path / "none")])
+    assert "SWW_MODELS" in str(ei.value)
+
+
+def test_diff_melody_cli(capsys, tmp_path):
+    out = tmp_path / "out"
+    recognize_melody_pdf(_write_pdf(tmp_path), str(out), ocr=FakeOcr(
+        ["5", "6", "7", "1", "3", "3", "0", "2"]))
+    truth = tmp_path / "gt.json"
+    truth.write_text(json.dumps({"notes": [
+        {"beat": 0.0, "midi": 67}, {"beat": 1.0, "midi": 69},
+        {"beat": 2.0, "midi": 71}, {"beat": 3.0, "midi": 72},
+        {"beat": 4.0, "midi": 64}, {"beat": 4.5, "midi": 65},
+        {"beat": 5.0, "midi": 64}, {"beat": 5.5, "midi": 65},
+        {"beat": 6.0, "midi": 64}, {"beat": 6.5, "midi": 67},
+    ]}), encoding="utf-8")
+    diff_out = tmp_path / "diff.json"
+    rc = main(["diff-melody", str(out / "melody.json"), str(truth),
+               "--start-measure", "0", "--out", str(diff_out)])
+    assert rc == 0
+    captured = capsys.readouterr().out
+    assert "度数" in captured and "热点" in captured
+    rep = json.loads(diff_out.read_text())
+    assert rep["schema"] == "ukeflow.workbench.melody_diff/1"
+    assert rep["summary"]["degree_ok"] + rep["summary"]["degree_bad"] > 0
+
+
+def test_diff_melody_cli_missing_truth(capsys, tmp_path, monkeypatch):
+    """无 pdf 位的子命令报错时不被 args.pdf AttributeError 遮掩。"""
+    draft = tmp_path / "m.json"
+    draft.write_text(json.dumps({"measures": []}), encoding="utf-8")
+    rc = main(["diff-melody", str(draft), str(tmp_path / "nope.json")])
+    assert rc == 2
+    assert "nope.json" in capsys.readouterr().err
