@@ -30,7 +30,7 @@ def triage_pdf(path: str, override: str | None = None) -> dict:
         "schema": SCHEMA,
         "tool_version": __version__,
         "file": str(Path(path).resolve()),
-        "sha256": _sha256(path),
+        "sha256": sha256_file(path),
         "checked_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "checkup": dataclasses.asdict(checkup),
         "layout": dataclasses.asdict(layout) if layout is not None else None,
@@ -56,7 +56,7 @@ def _layout_of(path: str) -> LayoutSignals:
     return total if total is not None else LayoutSignals(0, 0, 0, 0, 0, 0)
 
 
-def _sha256(path: str) -> str:
+def sha256_file(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):

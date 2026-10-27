@@ -5,6 +5,8 @@
       --type 人工改判(ADR-0009:误判可手改),自动判定保留在 auto_type。
   checkup <pdf> [--json]
       只体检:文本层/位图覆盖率/矢量指令,矢量谱到此为止。
+  split <pdf> --out-dir DIR [--dpi N]
+      版面切分(工单48):逐系统逐层裁图 + 小节/拍位骨架 JSON(layout.json)。
 """
 
 import argparse
@@ -16,6 +18,7 @@ from . import __version__
 from .checkup import checkup_pdf
 from .classify import SCORE_TYPES, checkup_kind
 from .report import report_json, triage_pdf
+from .split import split_pdf
 
 
 def main(argv=None) -> int:
@@ -29,6 +32,12 @@ def main(argv=None) -> int:
                        help="报告落盘路径(缺省打到 stdout;给出时 stdout 出人话摘要)")
     p_tri.add_argument("--type", choices=SCORE_TYPES, default=None,
                        help="人工改判谱型(自动判定保留在 auto_type)")
+    p_split = sub.add_parser("split", help="版面切分:逐系统逐层裁图+骨架 JSON")
+    p_split.add_argument("pdf", help="曲谱 PDF 路径(位图)")
+    p_split.add_argument("--out-dir", required=True, metavar="DIR",
+                         help="产物目录:layout.json + crops/")
+    p_split.add_argument("--dpi", type=int, default=300, metavar="N",
+                         help="渲染 dpi(300-400,越界报错;默认 300)")
     p_chk = sub.add_parser("checkup", help="只体检(矢量/位图信号)")
     p_chk.add_argument("pdf", help="曲谱 PDF 路径")
     p_chk.add_argument("--json", action="store_true", help="输出体检信号 JSON")
@@ -37,10 +46,29 @@ def main(argv=None) -> int:
     try:
         if args.command == "checkup":
             return _checkup(args)
+        if args.command == "split":
+            return _split(args)
         return _triage(args)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"打不开或读不了 {args.pdf}:{exc}", file=sys.stderr)
         return 2
+
+
+def _split(args) -> int:
+    report = split_pdf(args.pdf, args.out_dir, dpi=args.dpi)
+    systems = sum(len(pg["systems"]) for pg in report["score_pages"])
+    measures = sum(len(s["measures"])
+                   for pg in report["score_pages"] for s in pg["systems"])
+    print(f"{report['source']['file']}: {report['source']['dpi']}dpi,检出 {systems} 系统 / "
+          f"{measures} 小节")
+    for pg in report["score_pages"]:
+        if pg["systems"]:
+            print(f"  谱页{pg['index']}(pdf{pg['pdf_page']} {'上' if pg['half']==0 else '下'}半):"
+                  f" {len(pg['systems'])} 系统")
+    for w in report["warnings"]:
+        print(f"  警告: {w}")
+    print(f"  产物: {args.out_dir}/layout.json + crops/")
+    return 0
 
 
 def _triage(args) -> int:

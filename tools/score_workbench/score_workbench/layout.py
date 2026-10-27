@@ -15,8 +15,9 @@ from .classify import LayoutSignals
 
 LINE_GRAY_MAX = 235       # 谱线/小节线灰度阈(census T_LINE)
 INK_GRAY_MAX = 195        # 字形墨阈(census T_INK)
-LINE_ROW_SUM_FRAC = 0.75  # 行墨量(census T_LINE 阈)≥ 页宽此比例 → 谱线行
-                          # (census 同判据;连续 run 判据被字形白晕打断,实测漏检)
+LINE_ROW_SUM_FRAC = 0.30  # 行墨量 ≥ 页宽此比例 → 谱线行候选,真闸是等距四线验证
+                          # (工单48 纠正:旧 0.75 全宽判据漏「无右半配对的半幅
+                          # 末系统」(实测覆盖 0.43),aini/bbw 因此少计 1 组)
 GAP_MIN, GAP_MAX = 10, 18     # 四线谱弦距范围 @scale3(标称 14)
 NOTATION_GAP_MIN, NOTATION_GAP_MAX = 18, 40  # 五线谱线距范围
 STAFF_MAX_GAP = 56        # 相邻线距 ≤ 4×弦距 → 同组
@@ -58,13 +59,16 @@ def extract_layout_gray(gray: np.ndarray) -> LayoutSignals:
     tab = notation = other = 0
     spans = []
     for g in groups:
-        if _is_tab(g):
-            tab += 1
-        elif _is_notation(g):
+        quad = _uniform_quad(g)
+        if quad is not None and _has_fifth(g, quad):
             notation += 1
+            spans.append((quad[0].y - STAFF_MARGIN, quad[-1].y + STAFF_MARGIN))
+        elif quad is not None:
+            tab += 1
+            spans.append((quad[0].y - STAFF_MARGIN, quad[-1].y + STAFF_MARGIN))
         else:
             other += 1
-        spans.append((g[0].y - STAFF_MARGIN, g[-1].y + STAFF_MARGIN))
+            spans.append((g[0].y - STAFF_MARGIN, g[-1].y + STAFF_MARGIN))
     bands = _find_bands(gray, width, spans)
     text_bands = digit_bands = underline_bands = 0
     for band_mask in bands:
@@ -109,6 +113,30 @@ def _group_lines(lines: list) -> list:
 
 def _uniform(gaps, lo, hi, slack):
     return all(lo <= g <= hi for g in gaps) and max(gaps) - min(gaps) <= slack
+
+
+def _uniform_quad(group) -> list | None:
+    """组内首个等距四线窗(线距 GAP_MIN..NOTATION_GAP_MAX,tab 与五线谱同扫;
+    tab/notation 由第 5 线是否延续等距定)。无则 None。
+    (行墨量 0.30 会放进杂行,整组==4 不再成立,须扫窗;工单48。)"""
+    for i in range(len(group) - 3):
+        quad = group[i:i + 4]
+        gaps = [b.y - a.y for a, b in zip(quad, quad[1:])]
+        if _uniform(gaps, GAP_MIN, NOTATION_GAP_MAX, GAP_UNIFORM_MAX):
+            return quad
+    return None
+
+
+def _has_fifth(group, quad) -> bool:
+    """四线之后是否续一根等距线(五线谱谱表):第 5 线距须延续同等等距,
+    杂行(距 20-40px 的随机行)不算。"""
+    idx = group.index(quad[-1])
+    if idx + 1 >= len(group):
+        return False
+    mean = (quad[-1].y - quad[0].y) / 3
+    g4 = group[idx + 1].y - quad[-1].y
+    return (GAP_MIN <= g4 <= NOTATION_GAP_MAX
+            and abs(g4 - mean) <= GAP_UNIFORM_MAX)
 
 
 def _is_tab(group) -> bool:
