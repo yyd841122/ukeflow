@@ -4,7 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/import/score_ir.dart';
 import '../../core/import/score_ir_editor.dart';
 import '../../core/import/score_ir_validator.dart';
+import '../../core/model/uke_string.dart';
 import 'score_ir_edit_session.dart';
+
+/// 旋律层走简谱,谱面只认自然音级(score_sheet_layout 度数推导的白名单
+/// 契约,黑键当场拒渲染):旋律音的弦/品候选落黑键即禁步进/拒存——
+/// 不给「轻改把谱面改到画不出」的路。伴奏层无此约束(TAB 直书品数)。
+bool _melodyNaturalPitch(int string, int fret) {
+  const naturals = {0, 2, 4, 5, 7, 9, 11};
+  return naturals.contains((UkeString.byNumber(string).midi + fret) % 12);
+}
+
+/// 弦/品候选是否可落:旋律层须自然音级(简谱画不出黑键),伴奏层不限。
+bool _fretOk(bool isMelody, int string, int fret) =>
+    !isMelody || _melodyNaturalPitch(string, fret);
 
 /// 点选音 → 微调面板(工单 45;谱面视图/四线谱跟练两页同一入口)。
 /// 返回 true = 源已存回,提示后由导入谱流推新源刷新页面。
@@ -132,6 +145,16 @@ class _NoteTunePanelState extends ConsumerState<NoteTunePanel> {
       }
     }
     final refretChanged = _string != _string0 || _fret != _fret0;
+    if (outcome is! ScoreIrEditBlocked &&
+        refretChanged &&
+        widget.noteRef.voice == ScoreIrVoiceKind.melody &&
+        !_melodyNaturalPitch(_string, _fret)) {
+      setState(() {
+        _busy = false;
+        _errors = const ['旋律层是简谱,黑键品画不出——换个弦或品'];
+      });
+      return;
+    }
     if (outcome is! ScoreIrEditBlocked && refretChanged) {
       outcome = await widget.session.apply(
         ScoreIrReFret(ref: ref, string: _string, fret: _fret),
@@ -237,6 +260,8 @@ class _NoteTunePanelState extends ConsumerState<NoteTunePanel> {
             );
           }
           final limits = _limits(ir);
+          final isMelody =
+              widget.noteRef.voice == ScoreIrVoiceKind.melody;
           return SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -247,22 +272,30 @@ class _NoteTunePanelState extends ConsumerState<NoteTunePanel> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
+                // 旋律层:候选(弦,品)落黑键即禁(简谱画不出,见
+                // _melodyNaturalPitch);伴奏层只受范围收。
                 _stepperRow(
                   label: '弦',
                   value: _stringLabel,
                   valueKey: 'tune-string-value',
-                  onMinus: _string > 1 ? () => setState(() => _string--) : null,
+                  onMinus: _string > 1 && _fretOk(isMelody, _string - 1, _fret)
+                      ? () => setState(() => _string--)
+                      : null,
                   minusKey: 'tune-string-minus',
-                  onPlus: _string < 4 ? () => setState(() => _string++) : null,
+                  onPlus: _string < 4 && _fretOk(isMelody, _string + 1, _fret)
+                      ? () => setState(() => _string++)
+                      : null,
                   plusKey: 'tune-string-plus',
                 ),
                 _stepperRow(
                   label: '品',
                   value: '$_fret',
                   valueKey: 'tune-fret-value',
-                  onMinus: _fret > 0 ? () => setState(() => _fret--) : null,
+                  onMinus: _fret > 0 && _fretOk(isMelody, _string, _fret - 1)
+                      ? () => setState(() => _fret--)
+                      : null,
                   minusKey: 'tune-fret-minus',
-                  onPlus: _fret < scoreIrMaxFret
+                  onPlus: _fret < scoreIrMaxFret && _fretOk(isMelody, _string, _fret + 1)
                       ? () => setState(() => _fret++)
                       : null,
                   plusKey: 'tune-fret-plus',

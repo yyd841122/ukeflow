@@ -99,9 +99,10 @@ void main() {
   });
 
   testWidgets('改品存回:落库新源,reviewedAt 自动盖章', (tester) async {
+    // ②0 = E4,品+ = ②1 = F(自然,步进可落;②3 邻品皆黑,不能用作此测)。
     await pumpInSheet(
       tester,
-      const ScoreIrNoteRef(voice: ScoreIrVoiceKind.melody, string: 2, beat: 0),
+      const ScoreIrNoteRef(voice: ScoreIrVoiceKind.melody, string: 2, beat: 1),
     );
     await tester.tap(find.byKey(const Key('tune-fret-plus')));
     await tester.pump();
@@ -113,9 +114,9 @@ void main() {
     final stored = ScoreIr.fromJson(
       jsonDecode(row.sourceJson) as Map<String, dynamic>,
     );
-    final note = stored.melody.notes.singleWhere((n) => n.beat == 0);
-    expect(note.fret, 4);
-    expect(note.midi, 68, reason: 'midi 随品现算(②弦空弦 64 + 4)');
+    final note = stored.melody.notes.singleWhere((n) => n.beat == 1);
+    expect(note.fret, 1);
+    expect(note.midi, 65, reason: 'midi 随品现算(②弦空弦 64 + 1)');
     expect(
       row.reviewedAt,
       isNot('2026-10-26T10:00:00.000'),
@@ -300,6 +301,57 @@ void main() {
       reason: '堆内 ②0 同移落定(第一步的微移)',
     );
     expect(validateScoreIr(stored), isEmpty);
+  });
+
+  testWidgets('旋律层黑键禁步进:②3(G)四邻三黑一自然,伴奏层不受收', (tester) async {
+    // 夹具旋律 @0 = ②3 = G4(自然):邻品 ②2=F# / ②4=G# 皆黑(品±禁),
+    // 邻弦留品 3:①3=C5 自然(弦-可)、③3=D# 黑(弦+禁)——步进永不落黑键。
+    await pumpInSheet(
+      tester,
+      const ScoreIrNoteRef(
+        voice: ScoreIrVoiceKind.melody,
+        string: 2,
+        beat: 0,
+      ),
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('tune-fret-plus'))).onPressed,
+      isNull,
+      reason: '②4 = G# 黑键,品+禁',
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('tune-fret-minus'))).onPressed,
+      isNull,
+      reason: '②2 = F# 黑键,品-禁',
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('tune-string-plus'))).onPressed,
+      isNull,
+      reason: '③3 = D# 黑键,弦+禁',
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('tune-string-minus'))).onPressed,
+      isNotNull,
+      reason: '①3 = C5 自然,弦-可',
+    );
+  });
+
+  testWidgets('伴奏层无简谱约束:④4 品+落 C 可步进', (tester) async {
+    // 夹具伴奏 @4 = ④4 = B(自然),品+ = ④5 = C 自然——TAB 直书品数,
+    // 黑键照画,钮不受旋律层的白名单收。
+    await pumpInSheet(
+      tester,
+      const ScoreIrNoteRef(
+        voice: ScoreIrVoiceKind.accompaniment,
+        string: 4,
+        beat: 4,
+      ),
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('tune-fret-plus'))).onPressed,
+      isNotNull,
+      reason: '伴奏层无自然音级约束',
+    );
   });
 
   testWidgets('被拦编辑:错误逐条亮在面板,行不动可重试', (tester) async {
