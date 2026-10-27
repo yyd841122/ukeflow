@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # UkeFlow 检查入口。
 #   tool/check.sh quick  → fakeAsync 假绿检查 + flutter analyze（pre-commit 用，~5s）
-#   tool/check.sh full   → quick + 全量测试（工单收尾用）
+#   tool/check.sh full   → quick + 全量测试 + score_workbench pytest（工单收尾用）
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 # fakeAsync 体必须同步：async 闭包在首个 await 停摆、后续断言不执行，
@@ -12,5 +12,12 @@ if grep -rInE 'fakeAsync\(\s*\([^)]*\)\s*async\b' test/; then
   exit 1
 fi
 flutter analyze
-[ "${1:-full}" = quick ] && exit 0
+if [ "${1:-full}" = quick ]; then exit 0; fi
 flutter test
+# Python 工具侧（工单 48 retro：整票交付全在 tools/，commit 时零 guardrail）。
+# venv 在 /tmp 易失，不在则跳过并提示重建（README 两行）；语料测试自身 skipif。
+if [ -x /tmp/swwenv/bin/python ]; then
+  (cd tools/score_workbench && /tmp/swwenv/bin/python -m pytest tests/ -q)
+else
+  echo '— score_workbench venv 不在(/tmp/swwenv),跳过 pytest;要跑按其 README 重建'
+fi

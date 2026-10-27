@@ -5,6 +5,10 @@ UkeFlow — 纯自用尤克里里弹唱学习 App(Flutter,Android 先行)。
 
 ## Agent skills
 
+### Dev-only Python 工具
+
+识谱/像素考古相关工作先看 `tools/`(score_workbench 体检/判别/版面切分、pdf_census):各自 README 有 venv 搭建与用法,pytest 在各自目录跑。
+
 ### Issue tracker
 
 工单以本地 markdown 文件存放在 `.scratch/<feature>/` 下。See `docs/agents/issue-tracker.md`.

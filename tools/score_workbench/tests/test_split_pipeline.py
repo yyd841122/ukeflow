@@ -122,3 +122,17 @@ def test_real_gs_bbw_sixteen_systems(tmp_path):
     report = split_pdf(str(BBW), str(out))
     counts = [len(pg["systems"]) for pg in report["score_pages"]]
     assert counts == [3, 3, 3, 3, 4, 0]            # 末谱页无系统
+
+
+@pytest.mark.skipif(not AINI.exists(), reason="无 gs-aini 语料")
+def test_triage_and_split_system_counts_agree(tmp_path):
+    """双实现对账闸(工单48 retro):triage 版面信号(layout.py)与切分
+    (split.py)各自检测系统,曾各漏半幅末系统同错 17/15;两数必须相等,
+    防任一侧判据再漂移。"""
+    from score_workbench.report import triage_pdf
+
+    for pdf in (AINI, BBW):
+        tri = triage_pdf(str(pdf))
+        rep = split_pdf(str(pdf), str(tmp_path / ("chk_" + pdf.stem)))
+        n = sum(len(pg["systems"]) for pg in rep["score_pages"])
+        assert tri["layout"]["tab_systems"] == n, f"{pdf.name}: triage vs split"
