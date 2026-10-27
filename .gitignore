@@ -26,3 +26,9 @@ error.log
 
 # 工单23 spike 归档:tracked 已删,盘上残留待用户 rm -rf,忽略防误入
 spikes/
+
+# Python 工具(tools/score_workbench 等,工单47 起)
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
