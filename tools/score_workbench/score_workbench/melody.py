@@ -347,8 +347,9 @@ def _components(gray):
 def recognize_system(crop_gray, system, ocr) -> dict:
     """单系统:裁图 → 组件 → 数字行选举 → 角色 → 归属 → OCR → 音位。
 
-    返回 {notes(页坐标 x), marks, warnings, digit_band, ambiguous}。
-    crop_x → 页 x 偏移 = int(layer.x0) − CROP_PAD(split._save_crop 口径)。
+    返回 {notes(页坐标), marks, warnings, digit_band, ambiguous}。
+    crop → 页偏移 = layer.bbox.xy − CROP_PAD(split._save_crop 口径),bbox
+    证据全程页坐标(51 校对台叠图用;此前 y 漏偏移落裁图相对,现修)。
     """
     gap = system["staff"]["gap"]
     warnings = []
@@ -363,7 +364,9 @@ def recognize_system(crop_gray, system, ocr) -> dict:
     glyphs = classify_glyphs(comps, gap, band)
     att = attach_marks(glyphs, gap)
     labels = ocr.digit_labels(crop_gray, [n.glyph for n in att.notes])
-    x_off = float(system["layers"]["jianpu"]["bbox"][0]) - CROP_PAD
+    jp = system["layers"]["jianpu"]["bbox"]
+    x_off = float(jp[0]) - CROP_PAD
+    y_off = float(jp[1]) - CROP_PAD
     notes = []
     for n, (label, conf) in zip(att.notes, labels):
         g = n.glyph
@@ -376,16 +379,16 @@ def recognize_system(crop_gray, system, ocr) -> dict:
             "underlines": n.n_underlines,
             "dashes": n.n_dashes,
             "confidence": conf,
-            "bbox": [g.x + x_off, g.y, g.w, g.h],
+            "bbox": [g.x + x_off, g.y + y_off, g.w, g.h],
         })
     if att.leftovers:
         warnings.append(f"{len(att.leftovers)} 个未归类小组件,证据落 leftovers")
     return {"notes": notes,
             "marks": [{"kind": m.kind,
-                       "bbox": [m.glyph.x + x_off, m.glyph.y,
+                       "bbox": [m.glyph.x + x_off, m.glyph.y + y_off,
                                 m.glyph.w, m.glyph.h]}
                       for m in att.marks],
-            "leftovers": [{"bbox": [g.x + x_off, g.y, g.w, g.h]}
+            "leftovers": [{"bbox": [g.x + x_off, g.y + y_off, g.w, g.h]}
                           for g in att.leftovers],
             "warnings": warnings, "digit_band": list(band),
             "ambiguous": ambiguous}

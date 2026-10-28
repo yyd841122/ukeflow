@@ -22,12 +22,18 @@
   probe <png> [--x0 N --x1 N --y0 N --y1 N] [--gray-steps 100,180,208]
       [--widths] [--ascii-step N]   # 灰度分层/行宽剖面(工单50 retro)
       像素考古探针(retro):组件表 + ASCII 图,目验裁图用。
+  serve <out-dir> [--port N]
+      校对台 web(工单51,localhost 单页):左系统条带(bbox 高亮)/右
+      小节 IR 表,点击互跳、逐小节确认、全曲确认导出 ScoreIR JSON;
+      载 builtin 真值 JSON 跑对照(diff 报告即验收面板)。
+      只绑 127.0.0.1。状态存 <out-dir>/proof.json,导出落 <out-dir>/ir.json。
 """
 
 import argparse
 import dataclasses
 import json
 import sys
+from pathlib import Path
 
 from . import __version__
 from .checkup import checkup_pdf
@@ -103,6 +109,11 @@ def main(argv=None) -> int:
     p_prb.add_argument("--gray-steps", default=None,
                        help="灰度分层阈(逗号分隔,如 100,180,208)")
     p_prb.add_argument("--widths", action="store_true", help="行宽剖面")
+    p_srv = sub.add_parser("serve", help="校对台 web(工单51,localhost)")
+    p_srv.add_argument("out_dir", metavar="OUT-DIR",
+                       help="识别产物目录(须含 layout/melody/tab.json)")
+    p_srv.add_argument("--port", type=int, default=8765, metavar="N",
+                       help="监听端口(默认 8765;恒绑 127.0.0.1)")
     args = parser.parse_args(argv)
 
     try:
@@ -118,6 +129,8 @@ def main(argv=None) -> int:
             return _recognize_tab(args)
         if args.command == "diff-tab":
             return _diff_tab(args)
+        if args.command == "serve":
+            return _serve(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
                               args.y1, args.ink_max, args.ascii_step,
@@ -249,6 +262,22 @@ def _diff_tab(args) -> int:
               f"(弦{h.get('string', '?')}) 草{h.get('draft')}/真{h.get('truth')}")
     if args.out:
         print(f"  报告: {args.out}")
+    return 0
+
+
+def _serve(args) -> int:
+    out = Path(args.out_dir)
+    missing = [f for f in ("layout.json", "melody.json", "tab.json")
+               if not (out / f).is_file()]
+    if missing:
+        print(f"{out}: 缺 {'、'.join(missing)}——先跑 split/recognize/"
+              "recognize-tab 生成识别产物", file=sys.stderr)
+        return 2
+    from .webapp import create_app
+    app = create_app(str(out))
+    print(f"校对台:http://127.0.0.1:{args.port}/ ({out};Ctrl-C 退出,"
+          "状态即改即存 proof.json)")
+    app.run(host="127.0.0.1", port=args.port, debug=False)
     return 0
 
 

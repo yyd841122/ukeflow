@@ -76,9 +76,11 @@ def test_pipeline_synthetic_end_to_end(tmp_path):
     assert m1["rests"] and abs(m1["rests"][0]["beat"] - 5.0) < 1e-9
     assert m1["closure_ok"] and m1["read_beats"] == 4.0
     assert not ms[2]["closure_ok"]                    # 空行闭合警告可见
-    # 证据链:逐音 bbox 携带(渲染 px,页坐标)
+    # 证据链:逐音 bbox 携带(渲染 px,页坐标——y 是页 y 非裁图相对,51 叠图靠它)
     n0 = m0["notes"][0]
     assert n0["evidence"]["bbox"] and n0["evidence"]["confidence"] == pytest.approx(1.0)
+    assert n0["evidence"]["bbox"][1] > 1000      # 数字画在原生 y≈970,渲染页 y≈1211
+    # 红验证:对未修实现(缺 y_off)跑同断言,E: assert 19.0 > 1000(裁图相对)
     assert (out / "melody.json").is_file()
 
 

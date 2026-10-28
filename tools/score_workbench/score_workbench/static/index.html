@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UkeFlow 校对台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">校对台<small id="src-name"></small></div>
+  <div id="meta-fields">
+    <label>id <input id="m-id"></label>
+    <label>曲名 <input id="m-title"></label>
+    <label>演唱者 <input id="m-artist" placeholder="无"></label>
+    <label>调号 <input id="m-key" class="narrow"></label>
+    <label>拍号 <input id="m-meter" class="narrow"></label>
+    <label>速度 <input id="m-tempo" class="narrow" placeholder="bpm"></label>
+    <label>旋律偏移 <input id="m-align" class="narrow" title="melodyAlignBeats"></label>
+  </div>
+  <div id="progress"></div>
+  <div class="actions">
+    <button id="btn-anchor-melody" title="旋律层小节起点重锚到小节网格(欠拍小节漂移的正名动作)">重锚旋律</button>
+    <button id="btn-anchor-tab">重锚TAB</button>
+    <button id="btn-validate">校验</button>
+    <button id="btn-diff">对照模式</button>
+    <button id="btn-export" class="primary">导出 IR</button>
+  </div>
+</header>
+
+<div id="issues" class="hidden"></div>
+
+<div id="diff-panel" class="hidden">
+  <div class="diff-row">
+    <b>旋律对照</b>
+    <input id="diff-melody-truth" class="path" placeholder="真值 JSON 路径(相对路径按启动目录/仓库根解析)">
+    <label>起小节 <input id="diff-melody-start" class="narrow" value="5"></label>
+    <label>块长 <input id="diff-melody-chunk" class="narrow" value="4"></label>
+    <button onclick="runDiff('melody')">跑对照</button>
+    <span class="hint">默认真值:dump_melody_truth.dart 导出</span>
+  </div>
+  <div class="diff-row">
+    <b>TAB 对照</b>
+    <input id="diff-tab-truth" class="path" placeholder="真值 JSON 路径">
+    <label>起小节 <input id="diff-tab-start" class="narrow" value="0"></label>
+    <button onclick="runDiff('tab')">跑对照</button>
+    <span class="hint">四维:数字正确率/时值/休止 P-R/技巧 F1</span>
+  </div>
+  <div id="diff-result"></div>
+</div>
+
+<main>
+  <section id="left"><div id="systems"></div></section>
+  <section id="right"><div id="panel">载入中…</div></section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

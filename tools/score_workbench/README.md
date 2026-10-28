@@ -1,10 +1,12 @@
-# score_workbench — 识谱工作台(工单47/48/49/50,dev-only)
+# score_workbench — 识谱工作台(工单47/48/49/50/51,dev-only)
 
 谱面体检(矢量/位图)+ 谱型判别(solo/strum/image/vector)+ 分流报告 JSON +
 版面切分(工单48:逐系统逐层裁图 + 小节/拍位骨架)+ **旋律层识别**(工单49:
 PaddleOCR 数字 + 几何规则 → 简谱旋律声部草稿,证据齐全)+ **TAB 层识别**
 (工单50:品位数字 OCR + 四线定位 + 节奏/记号解释 → 伴奏声部草稿,× 落
-证据不落音)。校对台是 51;矢量谱遇到只报告不处理。
+证据不落音)+ **校对台**(工单51:本机 web,左系统条带 bbox 高亮/右小节
+IR 数据表,点击互跳,逐小节确认,全曲确认导出 ScoreIR JSON,builtin
+真值对照即识别质量验收面板)。矢量谱遇到只报告不处理。
 
 ## 搭建
 
@@ -43,6 +45,7 @@ $PY -m score_workbench.cli recognize x.pdf --out-dir out/layout           # 旋�
 $PY -m score_workbench.cli diff-melody out/layout/melody.json gt.json     # ×真值逐位 diff
 $PY -m score_workbench.cli recognize-tab x.pdf --out-dir out/layout       # TAB 层识别(50)
 $PY -m score_workbench.cli diff-tab out/layout/tab.json tab-gt.json       # ×TAB 真值 diff
+$PY -m score_workbench.cli serve out/layout                               # 校对台(51,127.0.0.1:8765)
 $PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像素考古探针(retro)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
 cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
@@ -69,6 +72,28 @@ cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 
   warnings(无节奏记号/闭合不齐/弦号未知)。拍位 = 小节网格锚定
   (bar×拍号)+ 小节内时值累加;x 只定音序不做 px→拍标定(工单41 教训)。
   ×(和弦堆拨痕)照读谱法不落音——其品位须查和弦指形,归校对台(51)。
+- `serve`(51):localhost 单页(`static/`,vanilla JS)。左栏逐系统条带
+  (源 PDF 按切分 dpi 重渲染按块裁行,页坐标系与 bbox 零换算;SVG 叠图:
+  小节矩形点击跳小节、当前小节逐音 bbox 点击跳行)+ 右栏该小节 IR 表
+  (旋律音/旋律休止/TAB 音/TAB 休止/× 拨痕/技巧/和弦锚,行内编辑,置信
+  度与证据来源随行)。逐小节「确认」,全曲确认后「导出 IR」→ `ir.json`
+  (工单 42 schema,schemaVersion 1;导出闸 = 全曲逐小节确认 + preflight
+  全绿,未过 409 逐条列错误,force 可担责强行)。顶栏:曲头元数据(调号/拍号/速度/旋律偏移)、旋律/TAB
+  「重锚」(小节起点重锚到小节网格——旋律层 start_beat 是 read_beats
+  累加,欠拍小节整体漂,重锚是正名动作)、批量技巧写入(同拍位打全曲)、
+  × 还原为音(查和弦指形,GLOSSARY 约定归校对台)。状态即改即存
+  `<out-dir>/proof.json`(重开不丢);对照模式载 builtin 真值 JSON
+  (相对路径按启动目录→仓库根解析)→ diff 报告即验收面板(校对进度
+  实时反映到数字)。
+- `proof.json`:`ukeflow.workbench.proof/1` — 校对会话整包(编辑后的
+  melody/tab 草稿 + meta + 确认表 + 和弦锚)。导出映射:旋律度数+印张
+  八度点 → midi(可动唱名,点数=应用+1 两侧各自折回)→ 弦品(①→④
+  取首个 0..15 品合法位,与金标准 G4→②3/C5→①3 同规);伴奏声部休止 =
+  音槽空洞自动补记(与内置导出器同规),印张 TAB 休止 → 顶层显示休止,
+  印张简谱 0 → 旋律声部休止;技巧 roll/strumUp/strumDown → strums、
+  tremolo → tremolos、slide → slides(止拍须人工补),shaft/ellipse 留
+  草稿证据不导出。`preflight` 镜像 Dart 校验器关键规则(逐小节拍长闭合
+  按小节自己的窗核对/弦品界/同弦同刻/滑音端点/骨架界),权威仍在 App 端。
 - `diff-tab`:`ukeflow.workbench.tab_diff/1` — 四维:数字正确率(拍位
   ±0.35 拍 + 同弦优先配对)/ 时值(同弦连续对的印张时值对真值拍距)/
   休止 P-R(全小节休止不在真值事件模型,单列)/ 技巧 F1(roll/strumUp/
@@ -99,6 +124,9 @@ cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 
   箭头定向 / 卷弦)→ attack 聚簇 → 时值(杆/尾/杠/附点/括线四分攻)→ 装配
   (小节网格锚定);`tab_diff.py` — 四维真值 diff(数字正确率/时值/休止
   P-R/技巧 F1)
+- `proof.py` — 校对台状态层(工单51):会话装/存(proof.json)、行级
+  编辑、× 还原、重锚定、ScoreIR 装配 + preflight;`webapp.py` — Flask
+  工厂(路由/条带渲染),`static/` — 单页前端
 - `report.py` — 编排+报告;`cli.py` — argparse 入口
 
 ## 几何基线(像素考古档案,工单39/41/48 实测;300dpi 单表见

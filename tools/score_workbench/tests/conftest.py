@@ -250,3 +250,75 @@ def blank_pdf(tmp_path):
     doc.save(path)
     doc.close()
     return str(path)
+
+
+# ── 校对台会话工厂(工单51:test_proof/test_webapp 复用)────────────────
+# 旋律走真管线(jianpu 工厂 + OCR 桩 → layout/crops/melody.json 齐);
+# TAB 草稿手写(同 layout 的小节界;真 TAB 识别管线 test_tab_pipeline 已盖)。
+
+TAB_NOTE_LABELS = ["5", "6", "7", "1", "3", "3", "2", "2", "5", "6", "7", "1"]
+
+
+def build_proof_out_dir(tmp_path, name="proof.pdf"):
+    """识别产物齐备的 out-dir:layout.json + crops/ + melody.json + tab.json。"""
+    import json
+    from score_workbench.melody import recognize_melody_pdf
+    melody_pdf = write_jianpu_pdf(tmp_path, name)
+    out = tmp_path / "out"
+    recognize_melody_pdf(melody_pdf, str(out), ocr=FakeOcr(TAB_NOTE_LABELS))
+    melody = json.loads((out / "melody.json").read_text())
+    tab = {
+        "schema": "ukeflow.workbench.tab/1", "tool_version": "0.1.0",
+        "created_at": "2026-10-28T12:00:00+08:00",
+        "source": dict(melody["source"]),
+        "header": {"key": None, "meter": None, "tempo_bpm": None,
+                   "meter_assumed": True, "evidence": None, "warnings": []},
+        "systems": [],
+        "measures": [],
+        "unmapped_attacks": [],
+    }
+
+    def note(string, fret, beat, duration, conf=0.97):
+        return {"string": string, "fret": fret, "beat": beat,
+                "duration": duration, "confidence": conf, "x": 800.0,
+                "evidence": {"role": "digit", "bbox": [800.0, 1100.0, 13.0,
+                                                      14.0],
+                             "confidence": conf}}
+
+    # TAB 拍位 = 小节网格锚定(tab.py 纪律);旋律草稿 start_beat 是
+    # read_beats 累加(欠拍小节会让后续小节漂)——两者照实不同源。
+    m_spans = [(m["index"], m["system"], m["x0"], m["x1"], mi * 4.0)
+               for mi, m in enumerate(melody["measures"])]
+    bodies = [
+        {"notes": [note(2, 4, 0.0, 1.0), note(3, 4, 1.0, 1.0),
+                   note(1, 2, 2.0, 1.0), note(1, 2, 3.0, 1.0)],
+         "rests": [], "x_marks": [],
+         "techniques": [{"kind": "strumDown", "beat": 0.0, "x": 700.0,
+                         "evidence": {"role": "strumDown",
+                                      "bbox": [700.0, 1030.0, 4.0, 60.0]}}],
+         "warnings": []},
+        {"notes": [note(2, 4, 4.0, 2.0), note(3, 4, 6.0, 2.0)],
+         "rests": [], "x_marks": [],
+         "techniques": [{"kind": "slide", "beat": 4.0, "to_beat": 6.0,
+                         "x": 900.0, "evidence": None}],
+         "warnings": []},
+        {"notes": [], "rests": [], "x_marks": [],
+         "techniques": [{"kind": "tremolo", "beat": 8.0, "x": 950.0,
+                         "evidence": None}], "warnings": []},
+        {"notes": [note(4, 4, 12.0, 1.0)],
+         "rests": [{"beat": 14.0, "beats": 1.0, "kind": "rest8", "x": 1200.0,
+                    "evidence": None}],
+         "x_marks": [{"kind": "x", "strings": [3], "beat": 13.0, "x": 1300.0,
+                      "evidence": {"role": "x", "bbox": [1300.0, 1100.0, 14.0,
+                                                         19.0]}}],
+         "techniques": [], "warnings": []},
+    ]
+    for (mi, system, x0, x1, start), body in zip(m_spans, bodies):
+        tab["measures"].append({
+            "index": mi, "system": system, "x0": x0, "x1": x1,
+            "start_beat": start, "read_beats": 4.0, "closure_ok": True,
+            **body,
+        })
+    (out / "tab.json").write_text(
+        json.dumps(tab, ensure_ascii=False, indent=1), encoding="utf-8")
+    return out
