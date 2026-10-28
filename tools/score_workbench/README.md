@@ -101,7 +101,8 @@ cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 
   P-R/技巧 F1)
 - `report.py` — 编排+报告;`cli.py` — argparse 入口
 
-## 几何基线(像素考古档案,工单39/41/48 实测)
+## 几何基线(像素考古档案,工单39/41/48 实测;300dpi 单表见
+## docs/research/2026-10-28-gs-aini-300dpi-geometry.md,两套单位先换算)
 
 谱全了曲源 = 每 PDF 页 2×2 排 4 条 993×1404 位图(上下两个整谱页,系统通栏);
 scale3 渲染弦距 14px(原生位图 15.5px)。谱线检测用「行墨量 ≥30% 页宽 @灰235 +

@@ -42,6 +42,14 @@ if gt != fx:
     print('  > tools/score_workbench/tests/fixtures/gs-aini-melody-gt.json(补 _comment 键)')
     raise SystemExit(1)
 PYEOF
+# 工单50 retro:配对守卫——tests/fixtures/*-gt.json 每个真值 fixture 必须
+# 被本文件引用(接了漂移闸);「新增真值源忘接闸」直接红在这里。
+for fx in tools/score_workbench/tests/fixtures/*-gt.json; do
+  grep -q "$(basename "$fx")" "$0" || {
+    echo "✗ 真值 fixture 未接漂移闸:$fx(check.sh 无引用;新真值源同 commit 接闸)"
+    exit 1
+  }
+done
 # 工单50 retro:同款漂移闸接 TAB 真值(工单49 闸只护旋律,tab fixture 陈了
 # 会让 test_canary_real_vs_truth_mechanism 以莫名 diff 报错)。
 dart run tools/dump_tab_truth.dart > /tmp/ukeflow-tab-gt-check.json

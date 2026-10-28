@@ -19,7 +19,8 @@
   diff-tab <draft.json> <truth.json> [--start-measure N] [--out FILE]
       TAB 草稿×人工真值 diff(数字正确率/时值/休止 P-R/技巧 F1)。
       truth 由 dart run tools/dump_tab_truth.dart 导出。
-  probe <png> [--x0 N --x1 N --y0 N --y1 N] [--ascii-step N]
+  probe <png> [--x0 N --x1 N --y0 N --y1 N] [--gray-steps 100,180,208]
+      [--widths] [--ascii-step N]   # 灰度分层/行宽剖面(工单50 retro)
       像素考古探针(retro):组件表 + ASCII 图,目验裁图用。
 """
 
@@ -99,6 +100,9 @@ def main(argv=None) -> int:
     p_prb.add_argument("--y1", type=int, default=None)
     p_prb.add_argument("--ink-max", type=int, default=195)
     p_prb.add_argument("--ascii-step", type=int, default=2)
+    p_prb.add_argument("--gray-steps", default=None,
+                       help="灰度分层阈(逗号分隔,如 100,180,208)")
+    p_prb.add_argument("--widths", action="store_true", help="行宽剖面")
     args = parser.parse_args(argv)
 
     try:
@@ -116,7 +120,8 @@ def main(argv=None) -> int:
             return _diff_tab(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
-                              args.y1, args.ink_max, args.ascii_step))
+                              args.y1, args.ink_max, args.ascii_step,
+                              args.gray_steps, args.widths))
             return 0
         return _triage(args)
     except (OSError, RuntimeError, ValueError) as exc:
