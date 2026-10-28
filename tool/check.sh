@@ -11,6 +11,14 @@ if grep -rInE 'fakeAsync\(\s*\([^)]*\)\s*async\b' test/; then
   echo '  同步体；准备工作（如 warmup）放 fake zone 之外的真实 zone。'
   exit 1
 fi
+# 工单49 retro:大二进制不入库(26MB onnx 曾因 .gitignore 写错被误暂存)。
+bad=$(git diff --cached --name-only -z 2>/dev/null | xargs -0 -r stat -c '%s' 2>/dev/null \
+  | awk '$1 > 5242880 {c++} END {print c+0}')
+if [ "$bad" -gt 0 ]; then
+  echo "✗ 暂存含 $bad 个 >5MB 文件(二进制不入库,进 .gitignore):"
+  git diff --cached --name-only | head -5
+  exit 1
+fi
 flutter analyze
 if [ "${1:-full}" = quick ]; then exit 0; fi
 flutter test
@@ -21,3 +29,16 @@ if [ -x /tmp/swwenv/bin/python ]; then
 else
   echo '— score_workbench venv 不在(/tmp/swwenv),跳过 pytest;要跑按其 README 重建'
 fi
+# 工单49 retro:真值 fixture 漂移闸(Dart 常量 ↔ pytest fixture 单源,
+# 陈了会让对账闸以「莫名 diff」报错而非「fixture 过期」)。
+dart run tools/dump_melody_truth.dart > /tmp/ukeflow-gt-check.json
+python3 - <<'PYEOF'
+import json
+gt = json.load(open('/tmp/ukeflow-gt-check.json'))
+fx = json.load(open('tools/score_workbench/tests/fixtures/gs-aini-melody-gt.json'))
+fx.pop('_comment', None)
+if gt != fx:
+    print('✗ 真值 fixture 与 Dart 常量漂移:重跑 dart run tools/dump_melody_truth.dart')
+    print('  > tools/score_workbench/tests/fixtures/gs-aini-melody-gt.json(补 _comment 键)')
+    raise SystemExit(1)
+PYEOF

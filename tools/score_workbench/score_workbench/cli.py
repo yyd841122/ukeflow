@@ -13,6 +13,8 @@
   diff-melody <draft.json> <truth.json> [--start-measure N] [--out FILE]
       草稿×人工真值逐位 diff(度数/拍位/时值/八度点 + 热点清单)。
       truth 由 dart run tools/dump_melody_truth.dart 导出。
+  probe <png> [--x0 N --x1 N --y0 N --y1 N] [--ascii-step N]
+      像素考古探针(retro):组件表 + ASCII 图,目验裁图用。
 """
 
 import argparse
@@ -25,6 +27,7 @@ from .checkup import checkup_pdf
 from .classify import SCORE_TYPES, checkup_kind
 from .melodic_diff import diff_melody
 from .melody import recognize_melody_pdf
+from .probe import probe_image
 from .paddle_ocr import DEFAULT_MODEL_DIRS
 from .report import report_json, triage_pdf
 from .split import split_pdf
@@ -66,6 +69,14 @@ def main(argv=None) -> int:
     p_dif.add_argument("--chunk-beats", type=float, default=4.0, metavar="N",
                        help="真值块长(拍,默认 4=4/4 连拍格)")
     p_dif.add_argument("--out", metavar="FILE", help="diff 报告落盘(缺省 stdout 摘要)")
+    p_prb = sub.add_parser("probe", help="像素考古探针:组件表+ASCII")
+    p_prb.add_argument("image", help="裁图/渲染页 PNG")
+    p_prb.add_argument("--x0", type=int, default=0)
+    p_prb.add_argument("--x1", type=int, default=None)
+    p_prb.add_argument("--y0", type=int, default=0)
+    p_prb.add_argument("--y1", type=int, default=None)
+    p_prb.add_argument("--ink-max", type=int, default=195)
+    p_prb.add_argument("--ascii-step", type=int, default=2)
     args = parser.parse_args(argv)
 
     try:
@@ -77,6 +88,10 @@ def main(argv=None) -> int:
             return _recognize(args)
         if args.command == "diff-melody":
             return _diff_melody(args)
+        if args.command == "probe":
+            print(probe_image(args.image, args.x0, args.x1, args.y0,
+                              args.y1, args.ink_max, args.ascii_step))
+            return 0
         return _triage(args)
     except (OSError, RuntimeError, ValueError) as exc:
         # diff-melody 无 pdf 位(吃 draft/truth 两 JSON),取实际输入位防遮掩

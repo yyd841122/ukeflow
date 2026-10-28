@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import INK, sb_block as block, sb_canvas as canvas, sb_staff as staff
-from score_workbench.melody import FakeOcr, recognize_melody_pdf
+from .conftest import (FakeOcr, sb_block as block, sb_canvas as canvas,
+                       sb_staff as staff, write_jianpu_pdf)
+from score_workbench.melody import recognize_melody_pdf
 
 PAGE_W, PAGE_H = 595.28, 841.89
 
@@ -134,3 +135,19 @@ def test_canary_real_vs_truth(tmp_path):
     print(f"canary: degree {s['degree_ok']}/{pairs}, "
           f"beat {s['beat_ok']}/{s['beat_ok'] + s['beat_bad']}, "
           f"duration {s['duration_ok']}/{s['duration_compared']}")
+
+
+def test_pipeline_two_systems_keep_their_own_measures(tmp_path):
+    """retro 回归钉(工单49):各系统 x 域同形,拼全局 spans 曾把全谱音符灌进
+    首系统小节。双系统、每小节数字数不同(4/2 与 2/4),错位即红。"""
+    pdf = write_jianpu_pdf(tmp_path)
+    out = tmp_path / "out"
+    report = recognize_melody_pdf(pdf, str(out), ocr=FakeOcr(
+        ["5", "6", "7", "1", "3", "3"]))
+    ms = report["measures"]
+    assert [m["system"] for m in ms] == [0, 0, 1, 1]
+    assert [len(m["notes"]) for m in ms] == [4, 2, 2, 4]   # 错位即混
+    assert [m["start_beat"] for m in ms] == [0.0, 4.0, 6.0, 8.0]
+    # 各音落在自己系统的小节里(x 同域,只有 system 归属能区分)
+    assert all(n["x"] < 1300 for n in ms[0]["notes"] + ms[1]["notes"])
+    assert all(n["x"] < 1300 for n in ms[2]["notes"] + ms[3]["notes"])

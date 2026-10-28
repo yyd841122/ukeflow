@@ -101,6 +101,50 @@ def bitmap_pdf(tmp_path):
     return str(path)
 
 
+def jianpu_bitmap():
+    """两系统简谱合成谱(工单49 retro):每系统 2 小节、每小节数字数不同
+    (4/2 与 2/4),专钉「跨系统 spans 拼接错位」一类 bug——各系统 x 域同形,
+    单系统 fixture 结构上测不出。"""
+    img = sb_canvas()
+    for top in (826, 1165):
+        sb_staff(img, top)
+        for x in (138, 583, 981):                      # 每系统 2 小节界
+            img[top:top + 47, x:x + 2] = LINE_GRAY
+    for x in (220, 290, 360, 430):                     # 系统0 小节A:4 数字
+        sb_block(img, 970, x, 20, 14)
+    for x in (640, 710):                               # 系统0 小节B:2 数字
+        sb_block(img, 970, x, 20, 14)
+    for x in (220, 290):                               # 系统1 小节A:2 数字
+        sb_block(img, 1309, x, 20, 14)
+    for x in (640, 710, 780, 850):                     # 系统1 小节B:4 数字
+        sb_block(img, 1309, x, 20, 14)
+    return img
+
+
+def write_jianpu_pdf(tmp_path, name="two-system.pdf"):
+    """jianpu_bitmap → 上半 PDF 页(谱全了位图摆法)。"""
+    img = jianpu_bitmap()
+    pix = pymupdf.Pixmap(pymupdf.csGRAY, img.shape[1], img.shape[0],
+                         img.tobytes(), 0)
+    path = tmp_path / name
+    doc = pymupdf.open()
+    page = doc.new_page(width=595.28, height=841.89)
+    page.insert_image(pymupdf.Rect(0, 0, 595.28, 841.89 / 2), pixmap=pix)
+    doc.save(path)
+    doc.close()
+    return str(path)
+
+
+class FakeOcr:
+    """OCR 测试桩:按数字 x 序查表给标签(几何/装配全走真代码)。"""
+
+    def __init__(self, labels):
+        self._labels = labels
+
+    def digit_labels(self, img, digits):
+        return [(self._labels[i], 1.0) for i in range(len(digits))]
+
+
 @pytest.fixture
 def blank_pdf(tmp_path):
     path = tmp_path / "blank.pdf"

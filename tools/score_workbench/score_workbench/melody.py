@@ -335,16 +335,6 @@ SCHEMA = "ukeflow.workbench.melody/1"
 DEFAULT_METER = 4.0        # 页眉读不出时的假定拍号(报告里 meter_assumed=True)
 
 
-class FakeOcr:
-    """测试桩:按数字 x 序查表给标签(几何/装配全走真代码)。"""
-
-    def __init__(self, labels):
-        self._labels = labels
-
-    def digit_labels(self, img, digits):
-        return [(self._labels[i], 1.0) for i in range(len(digits))]
-
-
 def _components(gray):
     import cv2
     import numpy as np

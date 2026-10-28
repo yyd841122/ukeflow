@@ -58,8 +58,9 @@ def test_missing_file_errors(capsys, tmp_path):
 
 # ── recognize / diff-melody(工单49;OCR 用桩,几何装配走真代码)────────
 
-from tests.test_melody_pipeline import _write_pdf, FakeOcr  # noqa: E402
 from score_workbench.melody import recognize_melody_pdf  # noqa: E402
+
+from .conftest import FakeOcr, write_jianpu_pdf as _write_pdf  # noqa: E402
 
 
 def test_recognize_cli_synthetic(capsys, tmp_path):

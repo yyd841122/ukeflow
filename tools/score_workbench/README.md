@@ -40,6 +40,7 @@ $PY -m score_workbench.cli split   x.pdf --out-dir out/layout             # 版�
 $PY -m score_workbench.cli split   x.pdf --out-dir out/layout --dpi 350   # 300-400dpi
 $PY -m score_workbench.cli recognize x.pdf --out-dir out/layout           # 旋律识别(49)
 $PY -m score_workbench.cli diff-melody out/layout/melody.json gt.json     # ×真值逐位 diff
+$PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像素考古探针(retro)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导真值(工单49)
 /tmp/swwenv/bin/python -m pytest tests/ -q                                # 全部测试
 ```
