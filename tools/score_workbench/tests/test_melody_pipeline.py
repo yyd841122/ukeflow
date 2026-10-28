@@ -82,6 +82,20 @@ def test_pipeline_synthetic_end_to_end(tmp_path):
     assert n0["evidence"]["bbox"][1] > 1000      # 数字画在原生 y≈970,渲染页 y≈1211
     # 红验证:对未修实现(缺 y_off)跑同断言,E: assert 19.0 > 1000(裁图相对)
     assert (out / "melody.json").is_file()
+    # bbox 页坐标结构闸(工单51 retro):证据 bbox 须落所属系统 block 带内。
+    # 49 曾把 y 落成裁图相对(~19),潜伏两票到 51 叠图才炸——带判据当场红。
+    layout = json.loads((out / "layout.json").read_text())
+    for page in layout["score_pages"]:
+        for sysj in page["systems"]:
+            lo, hi = sysj["block"][0] - 6, sysj["block"][1] + 6
+            for m in report["measures"]:
+                if m["system"] != sysj["index"]:
+                    continue
+                for n in m["notes"] + m["rests"]:
+                    bb = (n.get("evidence") or {}).get("bbox")
+                    if bb:
+                        assert lo <= bb[1] and bb[1] + bb[3] <= hi, \
+                            f"bbox y 出系统带:y={bb[1]} h={bb[3]} 带[{lo},{hi}]"
 
 
 REAL_PDF = os.path.expanduser("~/ukeflow-sources/gs-aini.pdf")

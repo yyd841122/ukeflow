@@ -67,3 +67,17 @@
   缝 + 导出闸前置;UI 不放按钮,避免架空逐小节确认);melody.py bbox y
   修系跨票顺带修正,票面已声明。复跑:pytest 152 绿(+3:漂移闸/小节视图错误/
   导出确认闸)+ flutter 951 绿 + analyzer 净 + check.sh 全闸绿。
+- 2026-10-28 (retro 环境改进,四项全做): ①跨语言总闸——「Python 工作台导出
+  ↔ Dart 解析」契约此前只有肉眼核对;现由校对台全流程(preflight 全绿)导出
+  确定性样张 fixture(test/fixtures/score_ir/workbench_export_sample.json,
+  覆盖双声部/推导声部休止/显示休止/滑音/震音/扫弦/和弦锚),Dart 侧
+  workbench_export_gate_test.dart 真解析+校验空+物化,Python 侧
+  test_export_fixture_matches_dart_gate 漂移闸防样张陈旧(双真值闸同款);
+  ②双层证据 bbox 页坐标结构闸——旋律/Tab 管线测试各加「evidence bbox 落
+  所属系统 block 带」全量断言,49 的裁图相对 y 形态当场红(红验证复跑:
+  未修实现 E: assert 19.0 > 1000);③真数据 webapp smoke 入 pytest 跳过档
+  (test_webapp_real.py:69 小节/18 系统、条带 PNG、对照面板复现 49/50
+  量级、force 导出 382 音装配;无语料/无模型即跳,阈值松只防机制回归),
+  本次手跑的真机验证自此有回归物;④CODING_STANDARDS 新增「跨端镜像与
+  交换契约」两条(镜像校验逐规则对照权威端/跨语言契约要双端闸)。
+  check.sh full 全绿:flutter 953(+2) + pytest 156(+4)。

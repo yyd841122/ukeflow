@@ -16,6 +16,11 @@
 - **单行查询声明重复策略**:按业务键(非主键)查单行,先问「用户能不能造出重复键」——能(如自建谱曲名,「两个都保留」就是造重复的入口)就必须 limit+定序声明取哪一行,且测试覆盖「≥2 行同名」形态。`getSingleOrNull` 这类语义为「恰好一行」的 API 在可重复键上是潜伏异常(工单 16:同名三导必抛静默停摆,双轴评审抓出;实现者自己的 DAO 测试 0/1 行形态没探到——评审员看到单行查询先查重复策略)。
 - **控制器接库面依赖,测试容器必须显式隔离**:控制器/provider 新接任何经 drift 库的数据依赖(如工单 20 设置)时,凡构建它的测试容器(ProviderContainer/ProviderScope)都要 override 派生 provider 或 appDatabaseProvider——drift `LazyDatabase` **构造即开联且不等人**:真库路径在单测环境抛错是未处理异步错误,直接爆测试,业务侧 `_load` 的 try/catch 拦不住;plain `test()` 连 binding 都没有,错得更早。跨文件可达性 grep 判不了,评审看到「新库依赖 + 旧测试容器原样」即 flag(工单 20 一天同型炸三处:tuner/metronome/play 控制器测试)。
 
+## 跨端镜像与交换契约
+
+- **镜像校验逐规则对照权威端**:实现权威校验器的「预演/镜像」(如工作台 preflight ↔ 物化端 validateScoreIr)时,评审逐规则对照权威端并枚举分歧形态——能构造出「镜像绿、权威红」的输入即缺口,补闸或对齐(工单51:逐小节窗闭合各自全绿,均匀网格核对必炸,补「起点偏离网格」闸)。镜像不是独立发明规则,是权威端的忠实预演;语义分歧时以权威端为准,或票面写明分歧并立闸。
+- **跨语言交换契约要双端闸**:两端各自实现的交换格式(Python 导出 ↔ Dart 解析),单端自测不算数——用一份端到端产物 fixture 让对端真解析+真校验(工单51 retro 总闸:test/core/import/workbench_export_gate_test.dart),导出端另接漂移闸防 fixture 陈旧(test_proof.py::test_export_fixture_matches_dart_gate)。否则键名漂移要到用户导入时才以运行时异常现形。
+
 ## 界面与外部输入
 
 - **异步回调写状态前查 mounted/释放**:框架回调(onUrlChange/onProgress 等)与 await 之后的 setState/状态写入,先查 `mounted`(Controller 查 ref 释放)再落状态——审计 2026-10-16 #28/#43/#48 同型三处(cifraclub 回调、metronome/rhythm warmup)。

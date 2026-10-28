@@ -74,6 +74,20 @@ def test_pipeline_synthetic_end_to_end(tmp_path):
     marks = [x for m in report["measures"] for x in m["x_marks"]]
     assert marks and marks[0]["strings"]           # × 证据携弦号
     assert (out / "tab.json").is_file()
+    # bbox 页坐标结构闸(工单51 retro,旋律层同款):TAB 证据 bbox 须落
+    # 所属系统 block 带内——页/裁图坐标口径漂移当场红。
+    layout = json.loads((out / "layout.json").read_text())
+    blocks = {sy["index"]: sy["block"]
+              for pg in layout["score_pages"] for sy in pg["systems"]}
+    for m in report["measures"]:
+        lo, hi = blocks[m["system"]]
+        lo, hi = lo - 6, hi + 6
+        rows = m["notes"] + m["rests"] + m["x_marks"] + m["techniques"]
+        for r in rows:
+            bb = (r.get("evidence") or {}).get("bbox")
+            if bb:
+                assert lo <= bb[1] and bb[1] + bb[3] <= hi, \
+                    f"bbox y 出系统带:y={bb[1]} h={bb[3]} 带[{lo},{hi}]"
 
 
 def test_pipeline_two_systems_keep_own_measures(tmp_path):

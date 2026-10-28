@@ -5,6 +5,7 @@ TAB 草稿手写同构;映射约定按金标准核对(G4→②3 等,见 proof.py
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +13,8 @@ from score_workbench.melodic_diff import diff_melody
 from score_workbench.proof import (OPEN_MIDI, add_chord, add_note, add_rest,
                                    anchor_layer_to_grid, batch_technique,
                                    build_ir, chords_in_measure,
-                                   current_melody_draft, degree_to_midi,
+                                   confirm_all, current_melody_draft,
+                                   degree_to_midi,
                                    delete_note, delete_x_mark, edit_note,
                                    edit_rest, edit_technique, expand_x_mark,
                                    load_session, measure_count, measure_view,
@@ -20,6 +22,32 @@ from score_workbench.proof import (OPEN_MIDI, add_chord, add_note, add_rest,
                                    set_confirm, set_meta)
 
 from .conftest import build_proof_out_dir
+
+# 跨语言总闸的漂移侧:fixture 在 App 端(Dart)吃,本文件保证它与
+# 现导出逐位相等——陈了报「fixture 过期」而非 Dart 端莫名红
+# (check.sh 真值漂移闸同款纪律;工单51 retro)。
+GATE_FIXTURE = (Path(__file__).resolve().parents[3] / "test" / "fixtures"
+                / "score_ir" / "workbench_export_sample.json")
+
+
+def build_gate_ir(out_dir) -> dict:
+    """把合成谱经校对台全流程校到 preflight 全绿,导出确定性 IR(无
+    reviewedAt——时间戳会毁掉漂移闸)。覆盖:双声部音/推导声部休止/显示
+    休止/滑音/震音/扫弦/和弦锚。"""
+    session = load_session(str(out_dir))
+    set_meta(session, {"tempo": 78, "id": "workbench-sample",
+                       "title": "工作台导出样张"})
+    anchor_layer_to_grid(session, "melody")
+    edit_note(session, "melody", 1, 0, {"duration": 1.0})
+    edit_note(session, "melody", 1, 1, {"duration": 3.0})
+    edit_note(session, "melody", 2, 0, {"duration": 1.0})
+    edit_note(session, "melody", 2, 1, {"duration": 3.0})
+    add_chord(session, 0, {"beat": 0.0, "label": "C", "frets": [-1, 3, 2, 1]})
+    confirm_all(session)
+    assert preflight(session) == []
+    ir, skipped = build_ir(session)
+    assert skipped == []
+    return ir
 
 
 @pytest.fixture
@@ -346,6 +374,15 @@ def test_current_draft_views_sorted_for_diff(session):
     report = diff_melody(draft, truth, start_measure=0, chunk_beats=4.0)
     assert report["schema"] == "ukeflow.workbench.melody_diff/1"
     assert "summary" in report
+
+
+def test_export_fixture_matches_dart_gate(tmp_path):
+    """漂移闸:fixture ← 现导出。Dart 侧闸在 test/core/import/
+    workbench_export_gate_test.dart 吃同一份文件。"""
+    ir = build_gate_ir(build_proof_out_dir(tmp_path, "gate.pdf"))
+    assert GATE_FIXTURE.is_file(), "fixture 丢了,重跑生成本文件的 gen 脚本"
+    fx = json.loads(GATE_FIXTURE.read_text())
+    assert ir == fx, "工作台导出形状漂移:重生成 test/fixtures/score_ir/workbench_export_sample.json 并看 Dart 侧闸是否仍绿"
 
 
 def test_open_midi_matches_uke_string_table():
