@@ -13,6 +13,12 @@
   diff-melody <draft.json> <truth.json> [--start-measure N] [--out FILE]
       草稿×人工真值逐位 diff(度数/拍位/时值/八度点 + 热点清单)。
       truth 由 dart run tools/dump_melody_truth.dart 导出。
+  recognize-tab <pdf> --out-dir DIR [--dpi N] [--models DIR]
+      TAB 伴奏层识别(工单50):品位数字 OCR + 四线定位 + 节奏/记号解释
+      → 伴奏声部草稿(tab.json;× 不落音落证据,ADR-0009)。
+  diff-tab <draft.json> <truth.json> [--start-measure N] [--out FILE]
+      TAB 草稿×人工真值 diff(数字正确率/时值/休止 P-R/技巧 F1)。
+      truth 由 dart run tools/dump_tab_truth.dart 导出。
   probe <png> [--x0 N --x1 N --y0 N --y1 N] [--ascii-step N]
       像素考古探针(retro):组件表 + ASCII 图,目验裁图用。
 """
@@ -31,6 +37,8 @@ from .probe import probe_image
 from .paddle_ocr import DEFAULT_MODEL_DIRS
 from .report import report_json, triage_pdf
 from .split import split_pdf
+from .tab import recognize_tab_pdf
+from .tab_diff import diff_tab
 
 
 def main(argv=None) -> int:
@@ -69,6 +77,20 @@ def main(argv=None) -> int:
     p_dif.add_argument("--chunk-beats", type=float, default=4.0, metavar="N",
                        help="真值块长(拍,默认 4=4/4 连拍格)")
     p_dif.add_argument("--out", metavar="FILE", help="diff 报告落盘(缺省 stdout 摘要)")
+    p_tab = sub.add_parser("recognize-tab", help="TAB 伴奏层识别(工单50)")
+    p_tab.add_argument("pdf", help="曲谱 PDF 路径(位图)")
+    p_tab.add_argument("--out-dir", required=True, metavar="DIR",
+                       help="产物目录:tab.json(复用/重跑 split)")
+    p_tab.add_argument("--dpi", type=int, default=300, metavar="N",
+                       help="渲染 dpi(300-400;默认 300)")
+    p_tab.add_argument("--models", default=None, metavar="DIR",
+                       help=f"PP-OCR 模型目录(缺省按 {' → '.join(DEFAULT_MODEL_DIRS)} 找)")
+    p_dtab = sub.add_parser("diff-tab", help="TAB 草稿×真值 diff(工单50)")
+    p_dtab.add_argument("draft", help="recognize-tab 产物 tab.json")
+    p_dtab.add_argument("truth", help="dump_tab_truth.dart 导出的真值 JSON")
+    p_dtab.add_argument("--start-measure", type=int, default=0, metavar="N",
+                       help="草稿窗口起点小节(默认 0,全曲)")
+    p_dtab.add_argument("--out", metavar="FILE", help="diff 报告落盘(缺省 stdout 摘要)")
     p_prb = sub.add_parser("probe", help="像素考古探针:组件表+ASCII")
     p_prb.add_argument("image", help="裁图/渲染页 PNG")
     p_prb.add_argument("--x0", type=int, default=0)
@@ -88,6 +110,10 @@ def main(argv=None) -> int:
             return _recognize(args)
         if args.command == "diff-melody":
             return _diff_melody(args)
+        if args.command == "recognize-tab":
+            return _recognize_tab(args)
+        if args.command == "diff-tab":
+            return _diff_tab(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
                               args.y1, args.ink_max, args.ascii_step))
@@ -123,7 +149,6 @@ def _recognize(args) -> int:
     notes = sum(len(m["notes"]) for m in draft["measures"])
     rests = sum(len(m["rests"]) for m in draft["measures"])
     warn = sum(len(m["warnings"]) for m in draft["measures"]) \
-        + sum(len(s["warnings"]) for s in draft["systems"]) \
         + len(draft["header"]["warnings"])
     head = draft["header"]
     print(f"{draft['source']['file']}: {notes} 音 / {rests} 休止 / "
@@ -160,6 +185,63 @@ def _diff_melody(args) -> int:
               + "; ".join(f"{m['field']}@{m.get('beat', '?')}"
                           f" 草{m.get('draft')}/真{m.get('truth')}"
                           for m in mms[:4]))
+    if args.out:
+        print(f"  报告: {args.out}")
+    return 0
+
+
+def _recognize_tab(args) -> int:
+    draft = recognize_tab_pdf(args.pdf, args.out_dir, dpi=args.dpi,
+                              models_dir=args.models)
+    notes = sum(len(m["notes"]) for m in draft["measures"])
+    rests = sum(len(m["rests"]) for m in draft["measures"])
+    marks = sum(len(m["x_marks"]) for m in draft["measures"])
+    techs = sum(len(m["techniques"]) for m in draft["measures"])
+    warn = sum(len(m["warnings"]) for m in draft["measures"]) \
+        + len(draft["header"]["warnings"])
+    head = draft["header"]
+    print(f"{draft['source']['file']}: {notes} 音 / {rests} 休止 / "
+          f"{marks} × 证据 / {techs} 记号 / {len(draft['measures'])} 小节")
+    print(f"  页眉: key={head['key']} meter={head['meter']}"
+          f"(assumed={head['meter_assumed']}) tempo={head['tempo_bpm']}")
+    print(f"  警告 {warn} 条(无节奏记号/闭合不齐/弦号未知,见 tab.json)")
+    print(f"  产物: {args.out_dir}/tab.json")
+    return 0
+
+
+def _diff_tab(args) -> int:
+    with open(args.draft, encoding="utf-8") as fh:
+        draft = json.load(fh)
+    with open(args.truth, encoding="utf-8") as fh:
+        truth = json.load(fh)
+    report = diff_tab(draft, truth, start_measure=args.start_measure)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(report, ensure_ascii=False, indent=1) + "\n")
+    s = report["summary"]
+    acc = s["digit_accuracy"]
+    d = report["duration"]
+    rs = report["rests"]
+    t = report["techniques"]
+    fmt = lambda v: f"{v:.3f}" if isinstance(v, float) else str(v)  # noqa: E731
+    print(f"窗口自小节 {args.start_measure}:配对 {s['digit_matched']} 对"
+          f"(草稿 {s['draft_notes']} 音,同弦错位 {s['string_mismatch']})")
+    print(f"  数字正确率 {s['digit_ok']}/{s['digit_matched']} = {fmt(acc)}"
+          f"  时值 {d['ok']}/{d['compared']}")
+    print(f"  休止 P={fmt(rs['precision'])} R={fmt(rs['recall'])}"
+          f"(tp {rs['tp']} / fp {rs['fp']} / fn {rs['fn']};"
+          f"全小节休止 {rs['whole_bar_not_in_truth']} 不在真值模型,单列)")
+    print(f"  技巧 F1={fmt(t['f1'])}(P={fmt(t['precision'])} "
+          f"R={fmt(t['recall'])};tp {t['tp']} / fp {t['fp']} / fn {t['fn']})")
+    for k, v in sorted(t["by_kind"].items()):
+        if v["tp"] or v["fp"] or v["fn"]:
+            print(f"    {k}: tp {v['tp']} fp {v['fp']} fn {v['fn']}"
+                  f" F1={fmt(v['f1'])}")
+    hot = report["hotspots"]
+    print(f"  热点 {len(hot)} 条:")
+    for h in hot[:8]:
+        print(f"    {h['field']}@b{h.get('beat', '?')}"
+              f"(弦{h.get('string', '?')}) 草{h.get('draft')}/真{h.get('truth')}")
     if args.out:
         print(f"  报告: {args.out}")
     return 0

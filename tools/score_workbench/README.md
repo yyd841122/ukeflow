@@ -1,9 +1,10 @@
-# score_workbench — 识谱工作台(工单47/48/49,dev-only)
+# score_workbench — 识谱工作台(工单47/48/49/50,dev-only)
 
 谱面体检(矢量/位图)+ 谱型判别(solo/strum/image/vector)+ 分流报告 JSON +
 版面切分(工单48:逐系统逐层裁图 + 小节/拍位骨架)+ **旋律层识别**(工单49:
-PaddleOCR 数字 + 几何规则 → 简谱旋律声部草稿,证据齐全)。
-TAB 层识别是工单 50,校对台是 51;矢量谱遇到只报告不处理。
+PaddleOCR 数字 + 几何规则 → 简谱旋律声部草稿,证据齐全)+ **TAB 层识别**
+(工单50:品位数字 OCR + 四线定位 + 节奏/记号解释 → 伴奏声部草稿,× 落
+证据不落音)。校对台是 51;矢量谱遇到只报告不处理。
 
 ## 搭建
 
@@ -40,8 +41,11 @@ $PY -m score_workbench.cli split   x.pdf --out-dir out/layout             # 版�
 $PY -m score_workbench.cli split   x.pdf --out-dir out/layout --dpi 350   # 300-400dpi
 $PY -m score_workbench.cli recognize x.pdf --out-dir out/layout           # 旋律识别(49)
 $PY -m score_workbench.cli diff-melody out/layout/melody.json gt.json     # ×真值逐位 diff
+$PY -m score_workbench.cli recognize-tab x.pdf --out-dir out/layout       # TAB 层识别(50)
+$PY -m score_workbench.cli diff-tab out/layout/tab.json tab-gt.json       # ×TAB 真值 diff
 $PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像素考古探针(retro)
-cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导真值(工单49)
+cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
+cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
 /tmp/swwenv/bin/python -m pytest tests/ -q                                # 全部测试
 ```
 
@@ -59,6 +63,16 @@ cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导�
   已考记号:数字 0-7/八度点(竖排连件按高折合)/时值线(共享梁逐音按覆盖
   计数)/附点/延音杠/延音弧(证据)/反复记号(证据);印张↔人工真值的微观
   节奏出入(工单41「细分差半拍」)diff 照报,归校对台裁决。
+- `recognize-tab`:`ukeflow.workbench.tab/1` — 逐小节 notes(弦/品/拍位/
+  时值/置信度/bbox)+ rests(rest8/rest_whole)+ x_marks(×/×堆,弦号证据,
+  不落音)+ techniques(roll/strumUp/strumDown/箭头杆/slide/tremolo)+
+  warnings(无节奏记号/闭合不齐/弦号未知)。拍位 = 小节网格锚定
+  (bar×拍号)+ 小节内时值累加;x 只定音序不做 px→拍标定(工单41 教训)。
+  ×(和弦堆拨痕)照读谱法不落音——其品位须查和弦指形,归校对台(51)。
+- `diff-tab`:`ukeflow.workbench.tab_diff/1` — 四维:数字正确率(拍位
+  ±0.35 拍 + 同弦优先配对)/ 时值(同弦连续对的印张时值对真值拍距)/
+  休止 P-R(全小节休止不在真值事件模型,单列)/ 技巧 F1(roll/strumUp/
+  strumDown/tremolo/slide 分类 P-R-F1)。
 - `diff-melody`:`ukeflow.workbench.melody_diff/1` — 真值按 4 拍连拍格切块,
   草稿小节按 read_beats 贪心凑块(2/4 变拍两小节并块),逐位比度数+八度点
   (印张点数=应用+1)/块内拍位/时值(休止感知);真值窗口外草稿尾部只计不比。
@@ -80,6 +94,11 @@ cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导�
   CTC 解码(预处理照 dolce PoC 口径)
 - `melody.py` — 旋律层识别(工单49):字形几何(数字行选举/角色分类/点梁归属)
   → OCR → 小节装配 → 页眉读谱;`melodic_diff.py` — 真值逐位 diff
+- `tab.py` — TAB 层识别(工单50):谱带组件(线行删除+闭运算桥接)→ 字形
+  分类(压线数字/×/×堆/卷弦/箭头/休止/滑音/括线)→ 竖柱三分(数字柱分解 /
+  箭头定向 / 卷弦)→ attack 聚簇 → 时值(杆/尾/杠/附点/括线四分攻)→ 装配
+  (小节网格锚定);`tab_diff.py` — 四维真值 diff(数字正确率/时值/休止
+  P-R/技巧 F1)
 - `report.py` — 编排+报告;`cli.py` — argparse 入口
 
 ## 几何基线(像素考古档案,工单39/41/48 实测)

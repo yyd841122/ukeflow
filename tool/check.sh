@@ -42,3 +42,15 @@ if gt != fx:
     print('  > tools/score_workbench/tests/fixtures/gs-aini-melody-gt.json(补 _comment 键)')
     raise SystemExit(1)
 PYEOF
+# 工单50 retro:同款漂移闸接 TAB 真值(工单49 闸只护旋律,tab fixture 陈了
+# 会让 test_canary_real_vs_truth_mechanism 以莫名 diff 报错)。
+dart run tools/dump_tab_truth.dart > /tmp/ukeflow-tab-gt-check.json
+python3 - <<'PYEOF'
+import json
+gt = json.load(open('/tmp/ukeflow-tab-gt-check.json'))
+fx = json.load(open('tools/score_workbench/tests/fixtures/gs-aini-tab-gt.json'))
+if gt != fx:
+    print('✗ TAB 真值 fixture 与 Dart 常量漂移:重跑 dart run tools/dump_tab_truth.dart')
+    print('  > tools/score_workbench/tests/fixtures/gs-aini-tab-gt.json')
+    raise SystemExit(1)
+PYEOF
