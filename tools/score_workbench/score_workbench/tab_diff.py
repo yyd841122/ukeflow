@@ -17,10 +17,13 @@ TECH_KINDS = ("roll", "strumUp", "strumDown", "tremolo", "slide")
 
 
 def _prf(tp: int, fp: int, fn: int) -> dict:
-    """P/R/F1 三元组(休止与技巧共用一个公式,别处不再手搓)。"""
+    """P/R/F1 三元组(休止与技巧共用一个公式,别处不再手搓)。
+    F1 = 2tp/(2tp+fp+fn):有 fp+fn 而无 tp 时 F1=0 而非 None(评审51:
+    None 会让验收面板把「全错」显示成「无数据」);两侧全空 = 1.0。"""
     p = tp / (tp + fp) if tp + fp else None
     r = tp / (tp + fn) if tp + fn else None
-    f1 = 2 * p * r / (p + r) if p and r else None
+    den = 2 * tp + fp + fn
+    f1 = (2 * tp / den) if den else 1.0
     return {"tp": tp, "fp": fp, "fn": fn, "precision": p, "recall": r,
             "f1": f1}
 
@@ -51,13 +54,14 @@ def diff_tab(draft: dict, truth: dict, start_measure: int = 0) -> dict:
     used = [False] * len(tnotes)
 
     def _nearest(n):
-        same = [(abs(n["beat"] - t["beat"]), i) for i, t in enumerate(tnotes)
-                if not used[i] and t["string"] == n["string"]]
-        if same:
-            return min(same)[1]
-        anys = [(abs(n["beat"] - t["beat"]), i) for i, t in enumerate(tnotes)
-                if not used[i]]
-        return min(anys)[1] if anys else None
+        # 容差过滤先于同弦偏好(评审51):远处同弦不该挡住近处异弦——
+        # 先把 ±TOL 内的候选收齐,同弦优先才在同域里挑。
+        near = [(abs(n["beat"] - t["beat"]), i) for i, t in enumerate(tnotes)
+                if not used[i] and abs(n["beat"] - t["beat"]) <= TOL]
+        if not near:
+            return None
+        same = [(d, i) for d, i in near if tnotes[i]["string"] == n["string"]]
+        return min(same or near)[1]
 
     for n in sorted(d_notes, key=lambda n: n["beat"]):
         i = _nearest(n)
@@ -69,7 +73,7 @@ def diff_tab(draft: dict, truth: dict, start_measure: int = 0) -> dict:
             string_bad += 1
             continue
         ok = n["fret"] == t["fret"]
-        matched.append((n, t, ok))
+        matched.append((n, t, ok, i))
         fret_ok += ok
         if not ok:
             report["hotspots"].append(
@@ -83,16 +87,22 @@ def diff_tab(draft: dict, truth: dict, start_measure: int = 0) -> dict:
     report["summary"]["draft_notes"] = len(d_notes)
     report["summary"]["string_mismatch"] = string_bad
     for st in (1, 2, 3, 4):
-        ms = [(n, t, ok) for n, t, ok in matched if n["string"] == st]
+        ms = [(n, t, ok) for n, t, ok, _ in matched if n["string"] == st]
         if ms:
             report["by_string"][st] = {
                 "ok": sum(ok for _, _, ok in ms), "n": len(ms)}
-    # ── 时值:同弦连续配对对(草稿序)的真值拍距 ──
+    # ── 时值:同弦「相邻」配对对的真值拍距(评审51):两配对之间若还有
+    # 未配对同弦真值音,拍距桥接会把正确时值比成跨缺口的长距——只比
+    # 真值序紧邻的对。──
     dur_ok = dur_bad = dur_n = 0
     for st in (1, 2, 3, 4):
-        run = [(n, t) for n, t, ok in matched if n["string"] == st
-               and n["duration"] is not None]
-        for (n1, t1), (n2, t2) in zip(run, run[1:]):
+        run = [(ti, n, t) for n, t, ok, ti in matched
+               if n["string"] == st and n["duration"] is not None]
+        used_t = {ti for _, _, _, ti in matched}
+        for (i1, n1, t1), (i2, n2, t2) in zip(run, run[1:]):
+            if any(st == tnotes[k]["string"]
+                   for k in range(i1 + 1, i2) if k not in used_t):
+                continue                 # 中间有未配对的同弦真值音,不桥接
             gap = t2["beat"] - t1["beat"]
             dur_n += 1
             if abs(n1["duration"] - gap) <= 1e-6:

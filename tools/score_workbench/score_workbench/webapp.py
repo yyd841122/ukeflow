@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import threading
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -29,6 +30,9 @@ def create_app(out_dir: str) -> Flask:
     app.config["SWW_SESSION"] = proof.load_session(str(out_dir))
     app.config["SWW_PAGES"] = {}          # pdf_page → 渲染灰度 ndarray(缓存)
     app.config["SWW_STRIPS"] = {}         # system index → PNG bytes
+    # 会话锁(评审51 #100):Flask 默认多线程,变更+持久化+快照串行化,
+    # 否则并发保存互踩 proof.json。
+    lock = threading.Lock()
 
     def sess() -> dict:
         return app.config["SWW_SESSION"]
@@ -87,21 +91,28 @@ def create_app(out_dir: str) -> Flask:
 
     @app.post("/api/meta")
     def api_meta():
-        proof.set_meta(sess(), request.get_json(force=True))
-        persist()
+        fields = request.get_json(force=True)
+        with lock:
+            proof.set_meta(sess(), fields)
+            if set(fields) & {"key", "meter", "melodyAlignBeats"}:
+                s = sess()
+                s["confirmed"] = [False] * proof.measure_count(s)
+            persist()
         return jsonify(payload())
 
     @app.post("/api/confirm")
     def api_confirm():
         body = request.get_json(force=True)
-        proof.set_confirm(sess(), int(body["measure"]), bool(body["value"]))
-        persist()
+        with lock:
+            proof.set_confirm(sess(), int(body["measure"]), bool(body["value"]))
+            persist()
         return jsonify(payload(measure=int(body["measure"])))
 
     @app.post("/api/confirm-all")
     def api_confirm_all():
-        proof.confirm_all(sess())
-        persist()
+        with lock:
+            proof.confirm_all(sess())
+            persist()
         return jsonify(payload())
 
     @app.post("/api/anchor")
@@ -109,8 +120,12 @@ def create_app(out_dir: str) -> Flask:
         layer = request.get_json(force=True).get("layer")
         if layer not in ("melody", "tab"):
             return jsonify({"error": "layer 须 melody|tab"}), 400
-        moved = proof.anchor_layer_to_grid(sess(), layer)
-        persist()
+        try:
+            with lock:
+                moved = proof.anchor_layer_to_grid(sess(), layer)
+                persist()
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         return jsonify({**payload(), "moved": moved})
 
     OPS = {
@@ -155,16 +170,42 @@ def create_app(out_dir: str) -> Flask:
                                                                  "tab"):
             return jsonify({"error": "layer 须 melody|tab"}), 400
         try:
-            result = OPS[(kind, op)](sess(), body)
+            with lock:
+                result = OPS[(kind, op)](sess(), body)
+                _clear_stale_confirms(sess(), kind, op, body)
+                persist()
         except (KeyError, TypeError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
-        persist()
         out = payload(body.get("measure"))
         if isinstance(result, int):              # batch 写入条数
             out["written"] = result
         elif isinstance(result, dict):           # × 还原建音数
             out["created"] = result
         return jsonify(out)
+
+    def _clear_stale_confirms(s, kind, op, body):
+        """编辑即弃确认(评审51 #196):改过的小节以陈旧复核身份导出比
+        重点一次确认更糟。行级变更清本小节;批量技巧清区间;和弦锚按
+        所在小节。"""
+        if kind in ("note", "rest", "x") and body.get("measure") is not None:
+            proof.set_confirm(s, int(body["measure"]), False)
+        elif kind == "technique":
+            if op == "batch":
+                d = body.get("data") or {}
+                lo = int(d.get("from_measure", 0))
+                hi = int(d.get("to_measure", proof.measure_count(s) - 1))
+                for mi in range(lo, hi + 1):
+                    if 0 <= mi < proof.measure_count(s):
+                        proof.set_confirm(s, mi, False)
+            elif body.get("measure") is not None:
+                proof.set_confirm(s, int(body["measure"]), False)
+        elif kind == "chord":
+            if op == "add" and body.get("measure") is not None:
+                proof.set_confirm(s, int(body["measure"]), False)
+            elif op in ("edit", "delete") and body.get("row") is not None:
+                idx = int(body["row"])
+                if 0 <= idx < len(s["chords"]):
+                    proof.set_confirm(s, s["chords"][idx]["measure"], False)
 
     @app.post("/api/validate")
     def api_validate():
@@ -180,36 +221,41 @@ def create_app(out_dir: str) -> Flask:
         except json.JSONDecodeError as exc:
             return jsonify({"error": f"真值不是 JSON:{exc}"}), 400
         s = sess()
+        start = body.get("start_measure")
+        chunk = body.get("chunk_beats")
         if body.get("kind") == "tab":
             report = diff_tab(proof.current_tab_draft(s), truth,
-                              start_measure=int(body.get("start_measure") or 0))
+                              start_measure=0 if start is None else int(start))
         else:
             report = diff_melody(proof.current_melody_draft(s), truth,
-                                 start_measure=int(body.get("start_measure")
-                                                   or 5),
-                                 chunk_beats=float(body.get("chunk_beats")
-                                                   or 4.0))
+                                 start_measure=5 if start is None else int(start),
+                                 chunk_beats=4.0 if chunk is None
+                                 else float(chunk))
         return jsonify(report)
 
     @app.post("/api/export")
     def api_export():
         force = bool((request.get_json(silent=True) or {}).get("force"))
-        s = sess()
-        confirmed = bool(s["confirmed"]) and all(s["confirmed"])
-        errors = proof.preflight(s)
-        if not confirmed and not force:
-            return jsonify({"error": "全曲未逐小节确认,导出被拒(票面:"
-                            "全曲确认 → 导出;force 可担责旁路)",
-                            "validation": errors}), 409
-        if errors and not force:
-            return jsonify({"error": "preflight 未过,逐条消解后再导出",
-                            "validation": errors}), 409
-        reviewed_at = datetime.datetime.now().astimezone().isoformat(
-            timespec="seconds")
-        ir, skipped = proof.build_ir(s, reviewed_at=reviewed_at)
-        path = os.path.join(app.config["SWW_OUT"], "ir.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(ir, ensure_ascii=False, indent=1) + "\n")
+        with lock:
+            s = sess()
+            confirmed = bool(s["confirmed"]) and all(s["confirmed"])
+            errors = proof.preflight(s)
+            if not confirmed and not force:
+                return jsonify({"error": "全曲未逐小节确认,导出被拒(票面:"
+                                "全曲确认 → 导出;force 可担责旁路)",
+                                "validation": errors}), 409
+            if errors and not force:
+                return jsonify({"error": "preflight 未过,逐条消解后再导出",
+                                "validation": errors}), 409
+            reviewed_at = datetime.datetime.now().astimezone().isoformat(
+                timespec="seconds")
+            try:
+                ir, skipped = proof.build_ir(s, reviewed_at=reviewed_at)
+            except ValueError as exc:            # 坏 meta(如 n/8 拍号)人话拒
+                return jsonify({"error": str(exc)}), 400
+            path = os.path.join(app.config["SWW_OUT"], "ir.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(ir, ensure_ascii=False, indent=1) + "\n")
         return jsonify({"ok": True, "path": path, "ir": ir, "skipped": skipped})
 
     return app
@@ -277,6 +323,12 @@ def render_strip(session: dict, sys_index: int, page_cache: dict,
                 pix.height, pix.width).copy()
         finally:
             doc.close()
+        # layout 几何来自纠偏后图像(评审51 #274):条带图须施加同一变换,
+        # 否则纠偏页的 bbox 叠图错位。deskew 自带小角跳过,与切分口径一致。
+        from .split import deskew
+        angle = next((d["angle_deg"] for d in session["layout"]["deskew"]
+                      if d["pdf_page"] == pdf_page), 0.0)
+        page_arr = deskew(page_arr, angle)
         page_cache[pdf_page] = page_arr
     pad = 6
     y0 = max(0, int(system["block"][0]) - pad)

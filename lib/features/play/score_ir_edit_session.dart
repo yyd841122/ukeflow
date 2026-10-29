@@ -6,24 +6,7 @@ import '../../core/import/imported_solo_charts.dart';
 import '../../core/import/score_ir.dart';
 import '../../core/import/score_ir_editor.dart';
 import '../../core/import/score_ir_validator.dart';
-import '../../core/model/tab_chart.dart';
 import '../../data/imported_solo_charts_dao.dart';
-
-/// 逐音内容等值((弦,品,拍) 三元组逐位比,record 结构相等):轻改刷新
-/// 判「源实变」用——物化逐次新建实例不能比身份,无关行的写库也会推
-/// 流,内容同就不折腾会话。逐字段展开,不搭 toString 的便车(与测试
-/// 深比较器同一理由:对不上时指得出坏位)。
-bool tabNotesContentEqual(List<TabNote> a, List<TabNote> b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i].string != b[i].string ||
-        a[i].fret != b[i].fret ||
-        a[i].beat != b[i].beat) {
-      return false;
-    }
-  }
-  return true;
-}
 
 /// 轻改会话(工单 45,spec 故事 64):一条导入独奏谱的单音微调编排——
 /// 改 IR(纯函数编辑器)→ 校验全检 → 改源 JSON 存回 → 重物化刷新。
@@ -60,9 +43,16 @@ class ScoreIrEditSession {
   /// 应用一次编辑:合法即存回并自动记 reviewedAt,返回保存后的 IR;
   /// 非法(校验阻塞/编辑违约)原行不动,阻塞错误逐条人话返回。
   Future<ScoreIrEditOutcome> apply(ScoreIrNoteEdit edit) async {
+    final ScoreIr loaded;
+    try {
+      loaded = await load();
+    } on StateError catch (error) {
+      return ScoreIrEditBlocked([error.message]);
+    }
+    final String loadedJson = (await _dao.getById(rowId))!.sourceJson;
     final ScoreIr edited;
     try {
-      edited = applyScoreIrNoteEdit(await load(), edit);
+      edited = applyScoreIrNoteEdit(loaded, edit);
     } on ArgumentError catch (error) {
       return ScoreIrEditBlocked([error.message ?? '$error']);
     }
@@ -71,34 +61,20 @@ class ScoreIrEditSession {
       return ScoreIrEditBlocked(errors);
     }
     final reviewedAt = DateTime.now().toIso8601String();
-    final stamped = ScoreIr(
-      schemaVersion: edited.schemaVersion,
-      id: edited.id,
-      title: edited.title,
-      artist: edited.artist,
-      meter: edited.meter,
-      tempoMap: edited.tempoMap,
-      keyMap: edited.keyMap,
-      measures: edited.measures,
-      melodyAlignBeats: edited.melodyAlignBeats,
-      tabChartId: edited.tabChartId,
-      melodyChartId: edited.melodyChartId,
-      melody: edited.melody,
-      accompaniment: edited.accompaniment,
-      rests: edited.rests,
-      slides: edited.slides,
-      tremolos: edited.tremolos,
-      strums: edited.strums,
-      chordAnchors: edited.chordAnchors,
-      unsupportedSymbols: edited.unsupportedSymbols,
-      review: ScoreIrReview(reviewedAt: reviewedAt),
-    );
+    final stamped = edited.copyWith(review: ScoreIrReview(reviewedAt: reviewedAt));
     final sourceJson = jsonEncode(stamped.toJson());
-    await _dao.updateSource(
+    // 乐观并发(评审51 #97):按载入时的源内容条件写,0 行 = 打开面板后
+    // 源已被别处改写/删除——不覆盖别人,报给面板刷新重来。
+    final affected = await _dao.updateSource(
       id: rowId,
       sourceJson: sourceJson,
       reviewedAt: reviewedAt,
+      expectedSourceJson: loadedJson,
     );
+    if (affected != 1) {
+      return ScoreIrEditBlocked(
+          ['源已在别处更新,面板刷新后重试(本次编辑未落库)']);
+    }
     debugPrint('UkeFlow: 导入谱 #$rowId 轻改落库 $edit');
     return ScoreIrEditSaved(stamped);
   }

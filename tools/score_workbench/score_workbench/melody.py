@@ -224,14 +224,26 @@ def attach_marks(glyphs: list, gap: float) -> AttachResult:
                                 notes[ni].n_underlines, notes[ni].n_dashes)
         else:
             marks.append(Mark("stray_dot", g))
+    attached_ul, attached_dash = set(), set()
     for i, n in enumerate(notes):
         d = n.glyph
-        ul = sum(1 for u in underlines if u.x <= d.cx <= u.x + u.w)
-        ds = sum(1 for dash in dash_cands
-                 if 0 <= dash.x - (d.x + d.w) <= DASH_REACH * gap
-                 and (i + 1 == len(notes)
-                      or dash.x < notes[i + 1].glyph.x))
+        ul = 0
+        for u in underlines:
+            if u.x <= d.cx <= u.x + u.w:
+                ul += 1
+                attached_ul.add(id(u))
+        ds = 0
+        for dash in dash_cands:
+            if (0 <= dash.x - (d.x + d.w) <= DASH_REACH * gap
+                    and (i + 1 == len(notes)
+                         or dash.x < notes[i + 1].glyph.x)):
+                ds += 1
+                attached_dash.add(id(dash))
         notes[i] = RawNote(d, n.above_dots, n.below_dots, n.aug, ul, ds)
+    # 没挂上任何数字的时值线/延音杠不消失(评审51 #242):进 leftovers
+    # 留证据,禁止静默丢。
+    leftovers += [u for u in underlines if id(u) not in attached_ul]
+    leftovers += [d for d in dash_cands if id(d) not in attached_dash]
     for g in glyphs:
         if g.role == "arc":
             marks.append(Mark("arc", g))
@@ -245,6 +257,19 @@ def attach_marks(glyphs: list, gap: float) -> AttachResult:
 # ── 装配层:时值符号 → 拍位累加 + 小节归属 + 闭合对账 ─────────────────
 
 MAX_UNDERLINES = 3          # 三十二分以上不考(落警告)
+
+
+def meter_to_quarter_beats(meter: str) -> float:
+    """页眉拍号 'n/d' → 每小节四分拍数 = n×4/d(拍位全库以四分拍为单位)。
+    分子非正/分母非正整数读不出 → ValueError(调用方落警告按 4/4 假定)。"""
+    import re as _re
+    m = _re.match(r"^(\d+)\s*/\s*(\d+)$", str(meter or "").strip())
+    if not m:
+        raise ValueError(f"拍号 {meter!r} 读不出")
+    num, den = int(m.group(1)), int(m.group(2))
+    if num < 1 or den < 1:
+        raise ValueError(f"拍号 {num}/{den} 非法")
+    return num * 4.0 / den
 
 
 def note_duration(underlines: int, aug: bool, dashes: int) -> float:
@@ -263,7 +288,7 @@ def assemble_measures(notes: list, spans: list, meter_beats: float,
     音序=小节内 x 升序;beat=小节内累加;read_beats=全小节读出长度,≠拍号
     即闭合警告(start_beat 仍按读出累加,漂移可见不遮掩——错漏在小节边界处
     显形)。未知数字保槽位落警告(ADR-0009:禁止静默丢)。"""
-    out_measures, warnings = [], []
+    out_measures = []
     beat0 = start_beat
     for span in spans:
         inside = sorted((n for n in notes
@@ -299,7 +324,7 @@ def assemble_measures(notes: list, spans: list, meter_beats: float,
                                 "evidence": {"bbox": n["bbox"],
                                              "confidence": n["confidence"]}
                                 if n.get("bbox") is not None else None})
-            elif label is not None and label in "1234567":
+            elif label is not None and len(label) == 1 and label in "1234567":
                 entry["degree"] = int(label)
                 m_notes.append(entry)
             else:
@@ -311,6 +336,8 @@ def assemble_measures(notes: list, spans: list, meter_beats: float,
         if inside and not closure_ok:
             m_warn.append(f"小节拍长闭合 {cum:g} ≠ 拍号 {meter_beats:g},"
                           "逐符号人工核对")
+        if not m_notes and not m_rests:
+            m_warn.append("小节无任何音/休止——整小节识别丢失?逐符号人工核对")
         out_measures.append({
             "index": span["index"], "x0": span["x0"], "x1": span["x1"],
             "start_beat": start, "read_beats": cum, "closure_ok": closure_ok,
@@ -365,8 +392,8 @@ def recognize_system(crop_gray, system, ocr) -> dict:
     att = attach_marks(glyphs, gap)
     labels = ocr.digit_labels(crop_gray, [n.glyph for n in att.notes])
     jp = system["layers"]["jianpu"]["bbox"]
-    x_off = float(jp[0]) - CROP_PAD
-    y_off = float(jp[1]) - CROP_PAD
+    x_off = max(0, int(jp[0])) - CROP_PAD     # 与 _save_crop 同口径
+    y_off = max(0, int(jp[1])) - CROP_PAD     # (int 截断+页缘 0 截断)
     notes = []
     for n, (label, conf) in zip(att.notes, labels):
         g = n.glyph
@@ -448,7 +475,10 @@ def recognize_melody_pdf(pdf: str, out_dir: str, dpi: int = 300,
     if header_reader is not None:
         header = header_reader()
         if header.get("meter"):
-            meter_beats = float(header["meter"].split("/")[0])
+            try:
+                meter_beats = meter_to_quarter_beats(header["meter"])
+            except ValueError as exc:
+                header["warnings"].append(f"拍号按 4/4 假定:{exc}")
     # 逐系统装配(各系统 x 域同形,不可跨系统拼 spans),再全局串接
     measures, unmapped = [], []
     for s, notes in zip(systems, all_notes):
@@ -462,7 +492,7 @@ def recognize_melody_pdf(pdf: str, out_dir: str, dpi: int = 300,
             span_index = m["index"]          # 装配层保留的 split 小节序
             m["index"] = len(measures)
             m["system"] = s["index"]
-            m["grid_fit"] = _grid_fit(m, grids.get(span_index))
+            m["grid_fit"] = _grid_fit(m, grids.get(span_index), meter_beats)
             measures.append(m)
         unmapped.extend(asm.unmapped)
     draft = {
@@ -561,8 +591,6 @@ def read_header(pdf: str, dpi: float, first_staff_top: float, ocr) -> dict:
 
 def _stacked_fraction(arr, y0, y1, x0, x1, ocr):
     """调号行带内找竖排分数(两只小数字 x 重叠上下叠)→ 'n/d';无则 None。"""
-    from .paddle_ocr import digit_cell
-
     band = arr[y0:y1 + 1, x0:x1 + 1]
     comps = _components(band)
     small = [c for c in comps
@@ -588,14 +616,24 @@ def _stacked_fraction(arr, y0, y1, x0, x1, ocr):
     return None
 
 
-def _grid_fit(measure: dict, grid: dict | None) -> dict | None:
+def _grid_fit(measure: dict, grid: dict | None, meter_beats: float = 0.0
+              ) -> dict | None:
     """候选拍网格互证(工单41 教训:只出证据不标定):本小节各音 x 到
     「按拍号取的候选拍位 x 网格」的最近距离。残差大=锚位漂移或读错,
     交校对台目验;拍位本身仍以时值累加为准,此字段不做决策。"""
-    if grid is None or not measure["notes"]:
+    if grid is None or not measure["notes"] or not meter_beats:
         return None
-    key = str(int(measure["read_beats"])) if measure["read_beats"] > 0 else "4"
-    xs = grid.get(key) or grid.get("4")
+    # 按「拍号拍数」选候选网格(read_beats 被毒化时会选错格,评审51);
+    # 选不到退 4,fallback 显形不冒充。
+    key = None
+    xs = None
+    fallback = False
+    for k in (str(int(meter_beats)), "4"):
+        xs = grid.get(k)
+        if xs:
+            key = k
+            fallback = k != str(int(meter_beats))
+            break
     if not xs:
         return None
     res = []
@@ -603,4 +641,5 @@ def _grid_fit(measure: dict, grid: dict | None) -> dict | None:
         d = min(abs(n["x"] - gx) for gx in xs)
         res.append(d)
     return {"grid": key, "mean_px": round(sum(res) / len(res), 1),
-            "max_px": round(max(res), 1), "n": len(res)}
+            "max_px": round(max(res), 1), "n": len(res),
+            "fallback": fallback}

@@ -75,11 +75,16 @@ def diff_melody(draft: dict, truth: dict, start_measure: int,
                 report["summary"]["degree_bad"] += 1
             else:
                 report["summary"]["degree_ok"] += 1
-            if d.get("octave_dots_above", 0) != t_dots:
+            # 八度点按应用净点数比(评审51):印张点数=应用+1,两侧各自
+            # 折回;只比 above 会漏低音区 below 点错读。
+            d_net = (max(0, d.get("octave_dots_above", 0) - 1)
+                     - max(0, d.get("octave_dots_below", 0) - 1))
+            if d_net != t_dots - 1:
                 entry["mismatches"].append(
                     {"i": i, "field": "octave",
-                     "draft": d.get("octave_dots_above", 0), "truth": t_dots,
-                     "beat": t["beat"]})
+                     "draft": {"above": d.get("octave_dots_above", 0),
+                               "below": d.get("octave_dots_below", 0)},
+                     "truth": t_dots, "beat": t["beat"]})
                 report["summary"]["octave_bad"] += 1
             else:
                 report["summary"]["octave_ok"] += 1
@@ -109,9 +114,28 @@ def diff_melody(draft: dict, truth: dict, start_measure: int,
                 else:
                     report["summary"]["duration_ok"] += 1
         report["chunks"].append(entry)
+    # 草稿尽的真值剩余块显形(评审51):截断草稿不许零 mismatch 假绿——
+    # 逐块记 draft_exhausted,真值音计数进 unmatched_truth。
+    covered = len(chunks) * chunk_beats
+    unmatched = 0
+    for k in range(len(chunks), 1000):
+        lo, hi = k * chunk_beats, (k + 1) * chunk_beats
+        t_group = [n for n in tnotes if lo - TOL <= n["beat"] < hi - TOL]
+        if not t_group:
+            break
+        unmatched += len(t_group)
+        report["chunks"].append({
+            "truth_measure": k, "draft_measures": [], "read_beats": 0.0,
+            "closure_ok": False, "n_truth": len(t_group), "n_draft": 0,
+            "mismatches": [{"field": "draft_exhausted", "draft": 0,
+                            "truth": len(t_group),
+                            "beat": t_group[0]["beat"]}],
+            "duration_compared": 0})
+        covered = hi
     report["summary"]["draft_notes"] = sum(
         len(m["notes"]) for m in window)
     report["summary"]["tail_notes_beyond_truth"] = tail
+    report["summary"]["unmatched_truth_beyond_draft"] = unmatched
     return report
 
 

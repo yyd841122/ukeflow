@@ -169,6 +169,46 @@ void main() {
       );
     });
 
+    group('评审51:melodyAlignBeats 非 4 整除(红验证:旧实现按层内网格切)', () {
+      final shiftedDef = ScoreSheetDef(
+        id: 'edge-align1',
+        title: '偏移一拍谱',
+        tabChartId: 'a',
+        melodyChartId: 'm',
+        melodyAlignBeats: 1,
+        keySignature: '1=C',
+        chords: [],
+      );
+      final shiftedIr = exportScoreIr(
+        def: shiftedDef,
+        tabChart: const TabChart(
+          title: 'x',
+          tempo: 90,
+          notes: [TabNote(string: 1, fret: 0, beat: 0)],
+        ),
+        melodyChart: const TabChart(
+          title: 'x',
+          tempo: 90,
+          // 层内拍 3.5 = 主轴 4.5:按主轴网格应落第 2 小节中段
+          notes: [TabNote(string: 2, fret: 0, beat: 3.5)],
+        ),
+      );
+
+      test('旋律事件切片对齐主轴小节线(层内拍 3.5 = 主轴 4.5)', () {
+        expect(validateScoreIr(shiftedIr), isEmpty);
+        // 切片对齐主轴窗:层内小节头 = 3(主轴 4 − 1),首音前静默簿记
+        // 落 3.0..3.5;前导主轴小节(层内 −1..3)无事件不造簿记。
+        final shifted = shiftedIr.melody;
+        expect(shifted.notes.single.beat, 3.5);
+        // 末音收到(层内)小节线:3.5 → 7,时值 3.5(导出器同规)。
+        expect(shifted.notes.single.durationBeats, 3.5);
+        expect(
+          [for (final r in shifted.rests) (r.beat, r.beats)],
+          [(3.0, 0.5)],
+        );
+      });
+    });
+
     test('导出产物过校验(导出/校验边界自洽)', () {
       expect(validateScoreIr(edgeIr), isEmpty);
     });

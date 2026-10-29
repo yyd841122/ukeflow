@@ -48,7 +48,9 @@ from .tab import recognize_tab_pdf
 from .tab_diff import diff_tab
 
 
-def main(argv=None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
+    """参数表构建(评审51 #cli):main 只留分发与异常上报,加命令不搅
+    dispatch。"""
     parser = argparse.ArgumentParser(
         prog="score_workbench",
         description=f"UkeFlow 识谱工作台 v{__version__}(工单47:体检+谱型判别 CLI)")
@@ -114,7 +116,11 @@ def main(argv=None) -> int:
                        help="识别产物目录(须含 layout/melody/tab.json)")
     p_srv.add_argument("--port", type=int, default=8765, metavar="N",
                        help="监听端口(默认 8765;恒绑 127.0.0.1)")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv=None) -> int:
+    args = _build_parser().parse_args(argv)
 
     try:
         if args.command == "checkup":
@@ -166,8 +172,10 @@ def _recognize(args) -> int:
                                  models_dir=args.models)
     notes = sum(len(m["notes"]) for m in draft["measures"])
     rests = sum(len(m["rests"]) for m in draft["measures"])
+    sys_warn = sum(len(s["warnings"]) for s in draft["systems"]
+                   if s.get("warnings"))
     warn = sum(len(m["warnings"]) for m in draft["measures"]) \
-        + len(draft["header"]["warnings"])
+        + len(draft["header"]["warnings"]) + sys_warn
     head = draft["header"]
     print(f"{draft['source']['file']}: {notes} 音 / {rests} 休止 / "
           f"{len(draft['measures'])} 小节")
@@ -215,8 +223,10 @@ def _recognize_tab(args) -> int:
     rests = sum(len(m["rests"]) for m in draft["measures"])
     marks = sum(len(m["x_marks"]) for m in draft["measures"])
     techs = sum(len(m["techniques"]) for m in draft["measures"])
+    sys_warn = sum(len(s["warnings"]) for s in draft["systems"]
+                   if s.get("warnings"))
     warn = sum(len(m["warnings"]) for m in draft["measures"]) \
-        + len(draft["header"]["warnings"])
+        + len(draft["header"]["warnings"]) + sys_warn
     head = draft["header"]
     print(f"{draft['source']['file']}: {notes} 音 / {rests} 休止 / "
           f"{marks} × 证据 / {techs} 记号 / {len(draft['measures'])} 小节")

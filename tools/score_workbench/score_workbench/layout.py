@@ -59,16 +59,22 @@ def extract_layout_gray(gray: np.ndarray) -> LayoutSignals:
     tab = notation = other = 0
     spans = []
     for g in groups:
-        quad = _uniform_quad(g)
-        if quad is not None and _has_fifth(g, quad):
-            notation += 1
-            spans.append((quad[0].y - STAFF_MARGIN, quad[-1].y + STAFF_MARGIN))
-        elif quad is not None:
-            tab += 1
-            spans.append((quad[0].y - STAFF_MARGIN, quad[-1].y + STAFF_MARGIN))
-        else:
+        quads = _uniform_quads(g)
+        consumed = []
+        for quad in quads:
+            if _has_fifth(g, quad):
+                notation += 1
+            else:
+                tab += 1
+            consumed += [quad[0].y - STAFF_MARGIN, quad[-1].y + STAFF_MARGIN]
+        if not quads:
             other += 1
             spans.append((g[0].y - STAFF_MARGIN, g[-1].y + STAFF_MARGIN))
+        # 同组多窗:两窗之间若被上一窗 span 盖住就并入;离散段各自成 span
+        elif spans and consumed[0] <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(spans[-1][1], consumed[-1]))
+        else:
+            spans.append((consumed[0], consumed[-1]))
     bands = _find_bands(gray, width, spans)
     text_bands = digit_bands = underline_bands = 0
     for band_mask in bands:
@@ -115,16 +121,22 @@ def _uniform(gaps, lo, hi, slack):
     return all(lo <= g <= hi for g in gaps) and max(gaps) - min(gaps) <= slack
 
 
-def _uniform_quad(group) -> list | None:
-    """组内首个等距四线窗(线距 GAP_MIN..NOTATION_GAP_MAX,tab 与五线谱同扫;
-    tab/notation 由第 5 线是否延续等距定)。无则 None。
+def _uniform_quads(group) -> list:
+    """组内全部不重叠等距四线窗(线距 GAP_MIN..NOTATION_GAP_MAX,tab 与
+    五线谱同扫;tab/notation 由第 5 线是否延续等距定)。分组阈值黏进一组
+    的两份谱表各回各窗,不丢(评审51:每组只取首个会数少一半)。
     (行墨量 0.30 会放进杂行,整组==4 不再成立,须扫窗;工单48。)"""
-    for i in range(len(group) - 3):
+    quads = []
+    i = 0
+    while i < len(group) - 3:
         quad = group[i:i + 4]
         gaps = [b.y - a.y for a, b in zip(quad, quad[1:])]
         if _uniform(gaps, GAP_MIN, NOTATION_GAP_MAX, GAP_UNIFORM_MAX):
-            return quad
-    return None
+            quads.append(quad)
+            i += 4                     # 不重叠:下一窗从本窗之后找
+        else:
+            i += 1
+    return quads
 
 
 def _has_fifth(group, quad) -> bool:
@@ -137,20 +149,6 @@ def _has_fifth(group, quad) -> bool:
     g4 = group[idx + 1].y - quad[-1].y
     return (GAP_MIN <= g4 <= NOTATION_GAP_MAX
             and abs(g4 - mean) <= GAP_UNIFORM_MAX)
-
-
-def _is_tab(group) -> bool:
-    if len(group) != 4:
-        return False
-    gaps = [b.y - a.y for a, b in zip(group, group[1:])]
-    return _uniform(gaps, GAP_MIN, GAP_MAX, GAP_UNIFORM_MAX)
-
-
-def _is_notation(group) -> bool:
-    if len(group) != 5:
-        return False
-    gaps = [b.y - a.y for a, b in zip(group, group[1:])]
-    return _uniform(gaps, NOTATION_GAP_MIN, NOTATION_GAP_MAX, GAP_UNIFORM_MAX + 2)
 
 
 def _find_bands(gray: np.ndarray, width: int, staff_spans: list) -> list:

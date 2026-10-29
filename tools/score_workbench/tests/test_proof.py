@@ -14,12 +14,12 @@ from score_workbench.proof import (OPEN_MIDI, add_chord, add_note, add_rest,
                                    anchor_layer_to_grid, batch_technique,
                                    build_ir, chords_in_measure,
                                    confirm_all, current_melody_draft,
-                                   degree_to_midi,
-                                   delete_note, delete_x_mark, edit_note,
-                                   edit_rest, edit_technique, expand_x_mark,
-                                   load_session, measure_count, measure_view,
-                                   midi_to_tab, preflight, save_session,
-                                   set_confirm, set_meta)
+                                   degree_to_midi, delete_note, delete_x_mark,
+                                   edit_chord, edit_note, edit_rest,
+                                   edit_technique, expand_x_mark, load_session,
+                                   measure_count, measure_view, midi_to_tab,
+                                   preflight, save_session, set_confirm,
+                                   set_meta)
 
 from .conftest import build_proof_out_dir
 
@@ -43,6 +43,9 @@ def build_gate_ir(out_dir) -> dict:
     edit_note(session, "melody", 2, 0, {"duration": 1.0})
     edit_note(session, "melody", 2, 1, {"duration": 3.0})
     add_chord(session, 0, {"beat": 0.0, "label": "C", "frets": [-1, 3, 2, 1]})
+    # × 消解走真路径(还原为音):rest@14 在界内,时长收到 1.0
+    out = expand_x_mark(session, 3, 0, {"label": "E", "frets": [-1, 4, 4, 2]})
+    assert out["created"] == 1
     confirm_all(session)
     assert preflight(session) == []
     ir, skipped = build_ir(session)
@@ -197,7 +200,8 @@ def test_expand_x_mark_creates_notes_anchor_and_drops_mark(session):
     m = session["tab"]["measures"][3]
     new = next(n for n in m["notes"] if n["beat"] == 13.0)
     assert (new["string"], new["fret"]) == (3, 4)
-    assert new["duration"] == 3.0                 # 无下一 attack → 收到小节线
+    assert new["duration"] == 1.0                 # 界含休止@14(评审#366):
+                                                  # 时长收在下一事件,不叠上休止
     assert new["manual"].startswith("×还原")
     anchor = chords_in_measure(session, 3)[0]
     assert (anchor["label"], anchor["beat"]) == ("E", 1.0)
@@ -295,7 +299,72 @@ def test_preflight_catches_slide_off_notes(session):
 def test_preflight_clean_after_proofing(session):
     set_meta(session, {"tempo": 78})
     _close_melody_holes(session)
+    delete_x_mark(session, 3, 0)                  # × 未消解是阻塞项(评审#470)
     assert preflight(session) == []
+
+
+def test_preflight_blocks_unresolved_x_marks(session):
+    set_meta(session, {"tempo": 78})
+    _close_melody_holes(session)
+    errs = [e for e in preflight(session) if e["field"] == "x_marks"]
+    assert errs and errs[0]["measure"] == 4 and "还原" in errs[0]["message"]
+
+
+def test_preflight_gates_chord_stack_same_beat(session):
+    """同拍堆(和弦)是一槽:多音同拍同长不算重叠(Dart addSlot 语义,
+    评审#847 实锤的误报)。红验证:修前同断言报「事件重叠」。"""
+    set_meta(session, {"tempo": 78})
+    _close_melody_holes(session)
+    delete_x_mark(session, 3, 0)
+    add_note(session, "tab", 0, {"string": 1, "fret": 0, "beat": 0.0,
+                                 "duration": 1.0})
+    add_note(session, "tab", 0, {"string": 3, "fret": 0, "beat": 0.0,
+                                 "duration": 1.0})
+    assert not [e for e in preflight(session)
+                if "重叠" in e["message"] and e["measure"] == 1]
+
+
+def test_preflight_blocks_beatless_technique_and_open_slide(session):
+    set_meta(session, {"tempo": 78})
+    _close_melody_holes(session)
+    delete_x_mark(session, 3, 0)
+    session["tab"]["measures"][2]["techniques"][0]["beat"] = None
+    session["tab"]["measures"][1]["techniques"][0]["to_beat"] = None
+    errs = preflight(session)
+    assert any("缺拍位" in e["message"] for e in errs)
+    assert any("滑音缺止拍" in e["message"] for e in errs)
+
+
+def test_edit_note_beat_cannot_be_null(session):
+    """拍位是事件主键,编辑置空当场拒(评审#752:置空后排序/格式化炸)。"""
+    with pytest.raises(ValueError, match="拍位不能为空"):
+        edit_note(session, "melody", 0, 0, {"beat": None})
+    # 半程失败不落半改(评审#202):degree 合法 + beat 非法 → 全不落
+    with pytest.raises(ValueError):
+        edit_note(session, "melody", 0, 0, {"degree": 3, "beat": ""})
+    assert session["melody"]["measures"][0]["notes"][0]["degree"] == 5
+
+
+def test_edit_chord_label_only_keeps_fingering(session):
+    add_chord(session, 0, {"beat": 0.0, "label": "C", "frets": [-1, 3, 2, 1],
+                           "fingers": [0, 3, 2, 1], "baseFret": 1})
+    chords = session["chords"]
+    edit_chord(session, 0, {"label": "C7"})     # label-only 编辑(评审#388)
+    fg = chords[0]["fingering"]
+    assert chords[0]["label"] == "C7"
+    assert fg["frets"] == [-1, 3, 2, 1] and fg["fingers"] == [0, 3, 2, 1]
+
+
+def test_load_session_discards_proof_from_other_source(session, out_dir):
+    """指纹闸(评审#77):proof.json 绑源 sha,同目录换谱不叠陈旧编辑。"""
+    import json as _json
+    set_meta(session, {"tempo": 99})
+    save_session(session)
+    payload = _json.loads((out_dir / "proof.json").read_text())
+    payload["source_sha256"] = "deadbeef"
+    (out_dir / "proof.json").write_text(_json.dumps(payload))
+    again = load_session(str(out_dir))
+    assert again["meta"]["tempo"] != 99          # 陈旧包被弃
 
 
 # ── ScoreIR 导出(工单 42 schema)───────────────────────────────────
@@ -303,6 +372,7 @@ def test_preflight_clean_after_proofing(session):
 def _proofed_session(session):
     set_meta(session, {"tempo": 78, "title": "爱你不是两三天"})
     _close_melody_holes(session)
+    delete_x_mark(session, 3, 0)
     return session
 
 
@@ -351,9 +421,14 @@ def test_build_ir_skips_unmappable_without_silent_loss(session):
     session["tab"]["measures"][1]["techniques"][0]["to_beat"] = None
     ir, skipped = build_ir(session)
     assert {s["what"] for s in skipped} == {"旋律音", "滑音"}
-    assert all("度数未知" in s["why"] or "缺止拍" in s["why"] for s in skipped)
-    assert len(ir["voices"]["melody"]["notes"]) == 11  # 12 − 1 未知度数
-    assert "slides" not in ir
+
+
+def test_build_ir_lists_unresolved_x_marks(session):
+    set_meta(session, {"tempo": 78, "title": "爱你不是两三天"})
+    _close_melody_holes(session)                # × 故意留着
+    ir, skipped = build_ir(session)
+    assert any(s["what"] == "×拨痕" and "未消解" in s["why"] for s in skipped)
+    assert any(e["field"] == "x_marks" for e in preflight(session))
 
 
 def test_build_ir_melody_lyric_carried(session):

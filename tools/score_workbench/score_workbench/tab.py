@@ -63,14 +63,12 @@ ELLIPSE_W = (0.9, 2.1)   # 下限避开 × 堆(0.7-0.85g 宽)
 HOLLOW_FILL = 0.55          # 空心判据:area/(w·h) 低于此
 BRACKET_W_MIN = 1.5         # 延音括线:④线下空心矩形(实测 53×59)
 BRACKET_H = (2.0, 4.2)
-BRACKET_TOP_ZONE = 0.35     # 括线顶距④线上方此比例内
 STEM_W_MAX = 0.26           # 符杆宽(2-4px)
 STEM_H_MIN = 0.9
 FLAG_W = (0.35, 1.3)        # 符尾楔 16×59(下限挡 2px 杆尾)
 FLAG_H = (1.3, 3.4)
 BEAM_H_MAX = 0.4            # 符杠厚(实测 2-4px)
 BEAM_W_MIN = 0.8
-BEAM_ZONE = (0.1, 3.6)      # 符杠带:④线下此比例域
 AUG_DOT = 0.4               # 附点尺寸上限
 AUG_GAP = (0.1, 0.95)       # 附点心距数字右缘(比例 g)
 AUG_CY = 0.45               # 附点与数字 cy 容差
@@ -627,7 +625,6 @@ class Attack:
     rhythm: list = field(default_factory=list)     # [Sym](杆/尾/杠/点)
     bracket: bool = False                          # 延音括线挂靠(四分攻读数)
     duration: float | None = None
-    subs: int = 0                                  # 符尾+符杠层数
     warnings: list = field(default_factory=list)
 
     @property
@@ -776,8 +773,11 @@ def assemble_measures(attacks, evidence, spans, meter_beats, line_ys, gap,
         m_notes, m_rests, m_marks, m_tech, m_warn = [], [], [], [], []
         cum = 0.0
         prev_beat = start
+        beat_of: dict = {}                 # attack → 拍位(evidence 挂靠用)
         for a in inside:
             beat = start + cum
+            beat_of[id(a)] = beat
+            m_warn.extend(a.warnings)      # 读时值层的警告(超域 clamp)显形
             if a.duration is None and not any(
                     s.role == "rest_whole" for s in a.events):
                 m_warn.append(f"attack x={a.cx:.0f} 无节奏记号,时值未知按 0 计")
@@ -827,7 +827,12 @@ def assemble_measures(attacks, evidence, spans, meter_beats, line_ys, gap,
             if not (span["x0"] <= s.cx < span["x1"]):
                 continue
             if s.role in ("slide", "tremolo", "ellipse"):
-                m_tech.append({"kind": s.role, "beat": prev_beat,
+                # 按横向位置挂最近 attack(评审51:一律挂小节末拍会把
+                # 小节中段的滑音/震音挪到错误拍位)
+                near = min(inside, key=lambda a: abs(a.cx - s.cx),
+                           default=None)
+                m_tech.append({"kind": s.role,
+                               "beat": beat_of.get(id(near), prev_beat),
                                "x": round(s.cx, 1), "evidence": _sym_json(s)})
             elif s.role == "barline":
                 m_marks.append({"kind": "barline", "beat": None,
@@ -858,8 +863,8 @@ def recognize_system(crop_gray, system, ocr, meter_beats=DEFAULT_METER) -> dict:
     偏移),小节 spans(页坐标)直接可比。"""
     staff = system["staff"]
     gap = staff["gap"]
-    y_off = int(system["layers"]["tab"]["bbox"][1]) - CROP_PAD
-    x_off = int(system["layers"]["tab"]["bbox"][0]) - CROP_PAD
+    y_off = max(0, int(system["layers"]["tab"]["bbox"][1])) - CROP_PAD
+    x_off = max(0, int(system["layers"]["tab"]["bbox"][0])) - CROP_PAD
     comps_int, comps_below = staff_components(
         crop_gray, [ly - y_off for ly in staff["line_ys"]],
         staff["top"] - y_off, staff["bottom"] - y_off, gap,
@@ -867,10 +872,12 @@ def recognize_system(crop_gray, system, ocr, meter_beats=DEFAULT_METER) -> dict:
     syms = classify_symbols(comps_int, comps_below, gap,
                             [ly - y_off for ly in staff["line_ys"]],
                             staff["x0"] - x_off, crop_gray, ocr)
+    # 界与符号同一坐标系再比(评审51 #tab:barline 界裁图系、符号页系,
+    # x_off 大时小节界排除整体失准)。裁图系排除完再平移。
     bounds = [b["x"] - x_off for m in system["measures"]
               for b in (m["left"], m["right"])]
-    syms = [s.moved(x=s.x + x_off, y=s.y + y_off) for s in syms]
     syms = drop_bound_barlines(syms, bounds, gap)
+    syms = [s.moved(x=s.x + x_off, y=s.y + y_off) for s in syms]
     syms = _direct_strums(syms, gap)
     attacks, evidence = cluster_attacks(syms, gap)
     for a in attacks:
@@ -906,7 +913,11 @@ def recognize_tab_pdf(pdf: str, out_dir: str, dpi: int = 300,
         header = header_reader()
     meter_beats = DEFAULT_METER
     if header.get("meter"):
-        meter_beats = float(header["meter"].split("/")[0])
+        from .melody import meter_to_quarter_beats
+        try:
+            meter_beats = meter_to_quarter_beats(header["meter"])
+        except ValueError as exc:
+            header["warnings"].append(f"拍号按 4/4 假定:{exc}")
     per_system, all_attacks, all_evidence = [], [], []
     for s in systems:
         crop = cv2.imread(str(Path(out_dir) / s["layers"]["tab"]["crop"]),

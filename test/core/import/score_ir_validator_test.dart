@@ -287,14 +287,109 @@ void main() {
       expect(errors.any((e) => e.contains('hammer-on') && e.contains('不支持')), isTrue);
     });
   });
+
+group('评审51 消化:镜像对齐 + 有限性 + v1 闸', () {
+    test('拍号非 4/4 当场拒(v1 物化恒四拍,非 4/4 被静默错译)', () {
+      expect(
+        validateScoreIr(
+            mutate(meter: const ScoreIrMeter(beatsPerMeasure: 6, beatUnit: 8))),
+        anyElement(contains('v1 仅支持 4/4')),
+      );
+    });
+
+    test('melodyAlignBeats NaN 阻塞(不进 shift 闭合算术)', () {
+      expect(
+        validateScoreIr(mutate(melodyAlignBeats: double.nan)),
+        anyElement(contains('melodyAlignBeats')),
+      );
+    });
+
+    test('震音拍 NaN 阻塞(NaN 穿过界检查)', () {
+      expect(
+        validateScoreIr(
+            mutate(tremolos: const [ScoreIrTremoloEvent(beat: double.nan)])),
+        anyElement(contains('须有限')),
+      );
+    });
+
+    test('坏行不进闭合算术:NaN 拍音只报行错,闭合约分不炸', () {
+      final base = validTinyIr();
+      final bad = ScoreIr(
+        schemaVersion: base.schemaVersion,
+        id: base.id,
+        title: base.title,
+        meter: base.meter,
+        tempoMap: base.tempoMap,
+        keyMap: base.keyMap,
+        measures: base.measures,
+        melodyAlignBeats: 0,
+        tabChartId: base.tabChartId,
+        melodyChartId: base.melodyChartId,
+        melody: ScoreIrVoice(notes: [
+          const ScoreIrNote(
+              beat: 0, durationBeats: 4, string: 2, fret: 0, midi: 64),
+          ScoreIrNote(
+              beat: double.nan,
+              durationBeats: 4,
+              string: 2,
+              fret: 2,
+              midi: 66),
+        ]),
+        accompaniment: base.accompaniment,
+      );
+      expect(
+        validateScoreIr(bad),
+        anyElement(contains('拍位须非负有限')),
+      ); // 不抛 UnsupportedError 即过
+    });
+
+    test('和弦 midi 列表须 4 项(midi:[] 会在示范音 RangeError)', () {
+      final ir = mutate(
+        chordAnchors: [
+          const ScoreIrChordAnchor(
+            beat: 0,
+            label: 'C',
+            fingering: ChordFingering(
+              frets: [-1, 3, 2, 1],
+              fingers: [0, 3, 2, 1],
+              baseFret: 1,
+              barres: [],
+              midi: [],
+            ),
+          ),
+        ],
+      );
+      expect(validateScoreIr(ir), anyElement(contains('同为 4 项')));
+    });
+
+    test('旋律声部变化音阻塞(简谱记法无黑键;伴奏 TAB 不受限)', () {
+      final ir = mutate(
+        melody: const ScoreIrVoice(notes: [
+          ScoreIrNote(beat: 0, durationBeats: 4, string: 2, fret: 4, midi: 68),
+        ]),
+      );
+      expect(validateScoreIr(ir), anyElement(contains('变化音')));
+      // 同一 midi 落伴奏层合法(品位音半音连续)。
+      final accomp = mutate(
+        accompaniment: const ScoreIrVoice(notes: [
+          ScoreIrNote(beat: 0, durationBeats: 4, string: 2, fret: 4, midi: 68),
+        ]),
+      );
+      expect(
+        validateScoreIr(accomp).where((e) => e.contains('变化音')),
+        isEmpty,
+      );
+    });
+  });
 }
 
 /// 单字段变异帮手:基线之上换掉一个部件。
-ScoreIr mutate({
+  ScoreIr mutate({
   ScoreIrMeter? meter,
   List<ScoreIrTempoChange>? tempoMap,
   List<ScoreIrKeyChange>? keyMap,
   List<ScoreIrMeasure>? measures,
+  double? melodyAlignBeats,
   ScoreIrVoice? melody,
   List<ScoreIrRest>? melodyRests,
   ScoreIrVoice? accompaniment,
@@ -314,7 +409,7 @@ ScoreIr mutate({
     tempoMap: tempoMap ?? base.tempoMap,
     keyMap: keyMap ?? base.keyMap,
     measures: measures ?? base.measures,
-    melodyAlignBeats: base.melodyAlignBeats,
+    melodyAlignBeats: melodyAlignBeats ?? base.melodyAlignBeats,
     tabChartId: base.tabChartId,
     melodyChartId: base.melodyChartId,
     melody: melody ?? (melodyRests == null ? base.melody

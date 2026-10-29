@@ -29,8 +29,11 @@ def probe_image(path: str, x0: int = 0, x1: int | None = None,
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise FileNotFoundError(f"读不了图:{path}")
-    x1 = img.shape[1] if x1 is None else min(x1, img.shape[1])
-    y1 = img.shape[0] if y1 is None else min(y1, img.shape[0])
+    # 负坐标按绝对域钳 0(numpy 负下标是尾相对切片,与组件表/打印的
+    # 绝对坐标语义相拧,评审51:两输出会说不同区域)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1 = img.shape[1] if x1 is None else max(x0, min(x1, img.shape[1]))
+    y1 = img.shape[0] if y1 is None else max(y0, min(y1, img.shape[0]))
     win = img[y0:y1, x0:x1]
     lines = [f"{path} {img.shape[1]}×{img.shape[0]} 窗口 x[{x0},{x1}) "
              f"y[{y0},{y1}) 墨阈<{ink_max}"]
@@ -81,23 +84,3 @@ def probe_image(path: str, x0: int = 0, x1: int | None = None,
                        else " " for c in range(0, sub.shape[1], ascii_step))
         lines.append(f"{y0 + r:4d} {line}")
     return "\n".join(lines)
-
-
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="probe", description="像素考古探针")
-    ap.add_argument("image", help="裁图/渲染页 PNG")
-    ap.add_argument("--x0", type=int, default=0)
-    ap.add_argument("--x1", type=int, default=None)
-    ap.add_argument("--y0", type=int, default=0)
-    ap.add_argument("--y1", type=int, default=None)
-    ap.add_argument("--ink-max", type=int, default=195, help="墨阈(默认 195)")
-    ap.add_argument("--ascii-step", type=int, default=2, help="ASCII 步进 px")
-    ap.add_argument("--gray-steps", default=None,
-                    help="灰度分层阈(逗号分隔,如 100,180,208);字符 #+o")
-    ap.add_argument("--widths", action="store_true",
-                    help="行宽剖面(逐墨行 [x0..x1] 跨度)")
-    args = ap.parse_args(argv)
-    print(probe_image(args.image, args.x0, args.x1, args.y0, args.y1,
-                      args.ink_max, args.ascii_step, args.gray_steps,
-                      args.widths))
-    return 0

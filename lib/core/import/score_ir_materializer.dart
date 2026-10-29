@@ -48,6 +48,27 @@ class ScoreIrMaterializationException implements Exception {
       '${errors.map((e) => '  - $e').join('\n')}';
 }
 
+/// 声部 → TabChart(评审51 #58:伴奏/旋律两份同构转换收敛一处)。
+TabChart _voiceChart(ScoreIr ir, ScoreIrVoice voice, String which, int tempo) {
+  return validateTabChart(
+    TabChart(
+      title: ir.title,
+      artist: ir.artist,
+      tempo: tempo,
+      notes: [
+        for (final n in voice.notes)
+          TabNote(
+            string: n.string,
+            fret: n.fret,
+            beat: n.beat,
+            lyric: n.lyric,
+          ),
+      ],
+    ),
+    context: '${ir.id}($which)',
+  );
+}
+
 /// 物化:校验 → 三源直落。[ir] 合法是前置条件,不合法当场抛。
 ScoreIrMaterialization materializeScoreIr(ScoreIr ir) {
   final errors = validateScoreIr(ir);
@@ -55,40 +76,8 @@ ScoreIrMaterialization materializeScoreIr(ScoreIr ir) {
     throw ScoreIrMaterializationException(errors);
   }
   final tempo = ir.tempoMap.first.bpm;
-  final accompaniment = validateTabChart(
-    TabChart(
-      title: ir.title,
-      artist: ir.artist,
-      tempo: tempo,
-      notes: [
-        for (final n in ir.accompaniment.notes)
-          TabNote(
-            string: n.string,
-            fret: n.fret,
-            beat: n.beat,
-            lyric: n.lyric,
-          ),
-      ],
-    ),
-    context: '${ir.id}(伴奏层)',
-  );
-  final melody = validateTabChart(
-    TabChart(
-      title: ir.title,
-      artist: ir.artist,
-      tempo: tempo,
-      notes: [
-        for (final n in ir.melody.notes)
-          TabNote(
-            string: n.string,
-            fret: n.fret,
-            beat: n.beat,
-            lyric: n.lyric,
-          ),
-      ],
-    ),
-    context: '${ir.id}(旋律层)',
-  );
+  final accompaniment = _voiceChart(ir, ir.accompaniment, '伴奏层', tempo);
+  final melody = _voiceChart(ir, ir.melody, '旋律层', tempo);
   final def = ScoreSheetDef(
     id: ir.id,
     title: ir.title,

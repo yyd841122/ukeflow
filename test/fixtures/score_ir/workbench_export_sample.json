@@ -265,7 +265,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -281,7 +282,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -297,7 +299,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -313,7 +316,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -329,7 +333,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -345,7 +350,8 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
      }
     },
     {
@@ -361,7 +367,25 @@
        13.0,
        14.0
       ],
-      "confidence": 0.97
+      "confidence": 0.97,
+      "page": 0
+     }
+    },
+    {
+     "beat": 13.0,
+     "durationBeats": 1.0,
+     "string": 3,
+     "fret": 4,
+     "midi": 64,
+     "evidence": {
+      "bbox": [
+       1300.0,
+       1100.0,
+       14.0,
+       19.0
+      ],
+      "page": 0,
+      "source": "×还原(E)"
      }
     }
    ],
@@ -371,8 +395,8 @@
      "beats": 4.0
     },
     {
-     "beat": 13.0,
-     "beats": 3.0
+     "beat": 14.0,
+     "beats": 2.0
     }
    ]
   }
@@ -422,6 +446,26 @@
      3,
      2,
      1
+    ],
+    "fingers": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "baseFret": 1,
+    "barres": []
+   }
+  },
+  {
+   "beat": 13.0,
+   "label": "E",
+   "fingering": {
+    "frets": [
+     -1,
+     4,
+     4,
+     2
     ],
     "fingers": [
      0,

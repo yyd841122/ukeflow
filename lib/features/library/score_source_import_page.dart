@@ -46,7 +46,7 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
     try {
       await ref
           .read(importedSoloChartsDaoProvider)
-          .add(
+          .addUnique(
             title: title,
             sourceJson: widget.ready.sourceJson,
             schemaVersion: widget.ready.ir.schemaVersion,

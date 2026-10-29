@@ -151,30 +151,13 @@ ScoreIrVoice _voiceOf(ScoreIr ir, ScoreIrVoiceKind kind) =>
 int _indexOf(ScoreIrVoice voice, ScoreIrNoteRef ref) =>
     voice.notes.indexWhere((n) => n.string == ref.string && n.beat == ref.beat);
 
-ScoreIr _copyWithVoice(ScoreIr ir, ScoreIrVoiceKind kind, ScoreIrVoice voice) =>
-    ScoreIr(
-      schemaVersion: ir.schemaVersion,
-      id: ir.id,
-      title: ir.title,
-      artist: ir.artist,
-      meter: ir.meter,
-      tempoMap: ir.tempoMap,
-      keyMap: ir.keyMap,
-      measures: ir.measures,
-      melodyAlignBeats: ir.melodyAlignBeats,
-      tabChartId: ir.tabChartId,
-      melodyChartId: ir.melodyChartId,
-      melody: kind == ScoreIrVoiceKind.melody ? voice : ir.melody,
-      accompaniment: kind == ScoreIrVoiceKind.melody ? ir.accompaniment : voice,
-      rests: ir.rests,
-      slides: ir.slides,
-      tremolos: ir.tremolos,
-      strums: ir.strums,
-      chordAnchors: ir.chordAnchors,
-      unsupportedSymbols: ir.unsupportedSymbols,
-      review: ir.review,
-    );
-
+ScoreIr _copyWithVoice(ScoreIr ir, ScoreIrVoiceKind kind, ScoreIrVoice voice) {
+  final melody = kind == ScoreIrVoiceKind.melody;
+  return ir.copyWith(
+    melody: melody ? voice : null,
+    accompaniment: melody ? null : voice,
+  );
+}
 ScoreIrVoice _reFret(ScoreIrVoice voice, int index, int string, int fret) {
   if (string < 1 || string > UkeString.values.length) {
     throw ArgumentError('弦号越界(1..${UkeString.values.length}):$string');
@@ -287,9 +270,10 @@ ScoreIrVoice _delete(
               ),
         });
       }
-    } else if (next != null) {
-      // 后槽(仅邻槽,更后者锚定不动)回拉到空档头
-      // (前槽在上一小节或不存在时)。
+    } else if (next != null &&
+        ((next.start + shift) ~/ bar) == ((note.beat + shift) ~/ bar)) {
+      // 后槽(限同小节,更后者锚定不动)回拉到空档头。跨小节的下一槽
+      // 不回拉——事件拖过小节线,校验必拦(评审51 #290)。
       final pull = next.start - note.beat;
       for (final i in next.noteIndexes) {
         patches[i] = (n) => _reNote(
@@ -309,6 +293,18 @@ ScoreIrVoice _delete(
               ),
         });
       }
+    } else if (next != null || prev != null) {
+      // 两侧邻槽都不同小节(整小节/小节头独槽删除,评审51 #290):空档
+      // 按本槽范围落声部休止——前槽延长会跨小节、后槽回拉会跨小节,
+      // 都过不了校验;休止簿记是闭合兼容的收口。
+      final rest = ScoreIrRest(
+        beat: slot.start,
+        beats: slot.end - slot.start,
+      );
+      final at = rests.indexWhere((r) => r.beat > slot.start);
+      rests = at < 0
+          ? [...rests, rest]
+          : [...rests.sublist(0, at), rest, ...rests.sublist(at)];
     } else {
       throw ArgumentError('声部末音不可删除(删则声部空):$note');
     }

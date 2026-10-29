@@ -7,6 +7,7 @@ det 模型一期不接:数字定位走连通域组件(几何规则的主场),整
 页眉调号/拍号/速度行。
 """
 
+import os
 from pathlib import Path
 
 import cv2
@@ -21,9 +22,13 @@ _DICT_FILE = "ppocrv6_dict.txt"
 
 
 def resolve_models_dir(candidates: list[str]) -> Path:
-    """按序找模型目录(两件套齐全才算);找不到给出可操作的安装指引。"""
+    """按序找模型目录(两件套齐全才算);找不到给出可操作的安装指引。
+    候选做环境变量/家目录展开($SWW_MODELS 文档承诺的查找首位才真生效)。"""
     for cand in candidates:
-        d = Path(cand)
+        expanded = os.path.expandvars(os.path.expanduser(str(cand)))
+        if not expanded or expanded == str(cand) and "$" in str(cand):
+            continue                      # 变量未设且无字面路径,跳过
+        d = Path(expanded)
         if (d / _MODELS_FILE).is_file() and (d / _DICT_FILE).is_file():
             return d
     raise FileNotFoundError(
@@ -85,8 +90,7 @@ class DigitOCR:
         import onnxruntime as ort
 
         cands = [models_dir] if models_dir else list(DEFAULT_MODEL_DIRS)
-        cands = [c for c in cands if c and not c.startswith("$")]
-        d = resolve_models_dir(cands)
+        d = resolve_models_dir([c for c in cands if c])
         self.models_dir = d
         self._sess = ort.InferenceSession(
             str(d / _MODELS_FILE), providers=["CPUExecutionProvider"])
@@ -119,8 +123,14 @@ class DigitOCR:
         labels = []
         for row in out:
             argmax = np.clip(row.argmax(axis=1), 0, len(self._chars) - 1)
-            conf = float(row.max(axis=1).mean())
             text = ctc_decode([int(i) for i in argmax], self._chars).strip()
+            if not text:
+                labels.append(("", 0.0))     # 全 blank:零置信,不给 0.99 假象
+                continue
+            # 置信度只平均「出字」步——blank 步参与平均会把空槽衬成高置信
+            emitted = [(i, float(row[k, i])) for k, i in enumerate(argmax)
+                       if i != 0]
+            conf = float(np.mean([p for _, p in emitted])) if emitted else 0.0
             labels.append((text[:1], conf))
         return labels
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from . import __version__
 from .classify import LayoutSignals, SCORE_TYPES, classify_score, is_bitmap
 from .checkup import checkup_pdf
-from .layout import extract_layout_gray, extract_layout_pixmap
+from .layout import extract_layout_pixmap
 
 SCHEMA = "ukeflow.workbench.triage/1"
 

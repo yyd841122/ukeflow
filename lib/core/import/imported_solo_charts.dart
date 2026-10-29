@@ -21,7 +21,7 @@ ScoreIrMaterialization materializeImportedSoloChart({
   required String sourceJson,
   required String title,
 }) {
-  final ir = ScoreIr.fromJson(_decode(sourceJson));
+  final ir = _parse(sourceJson);
   final m = materializeScoreIr(ir);
   return ScoreIrMaterialization(
     accompaniment: m.accompaniment.withTitle(title),
@@ -32,6 +32,18 @@ ScoreIrMaterialization materializeImportedSoloChart({
 
 /// 解码并验形:非 JSON 文本与根非对象都归入 [ScoreIrFormatException]
 /// (识谱源的数据故障域,不漏 TypeError 出去)。
+/// 解码 + 解析,残余类型错一并归入 [ScoreIrFormatException](评审51:
+/// 结构坏损以 TypeError 冒出会绕开 invalid-source 结果路径,示例如
+/// `"rests": {}`;此处兜住的是 fromJson 之后残余的非受检转型。
+ScoreIr _parse(String sourceJson) {
+  final json = _decode(sourceJson);
+  try {
+    return ScoreIr.fromJson(json);
+  } on TypeError catch (e) {
+    throw ScoreIrFormatException('源结构与 schema 不符:$e');
+  }
+}
+
 Map<String, dynamic> _decode(String sourceJson) {
   final Object? decoded;
   try {
@@ -64,7 +76,7 @@ class ScoreIrSourceCheck {
 ScoreIrSourceCheck checkScoreIrSource(String sourceJson) {
   final ScoreIr ir;
   try {
-    ir = ScoreIr.fromJson(_decode(sourceJson));
+    ir = _parse(sourceJson);
   } on ScoreIrFormatException catch (error) {
     return ScoreIrSourceCheck(ir: null, errors: [error.message]);
   }

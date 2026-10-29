@@ -114,9 +114,17 @@ class ScoreSourceImportFlow {
     final check = checkScoreIrSource(sourceJson);
     if (!check.isValid) return ScoreSourceInvalid(check.errors);
 
-    final existingTitle = await findDuplicateTitle(
-      ImportedSoloChartsDao.shaOf(sourceJson),
-    );
+    final String? existingTitle;
+    try {
+      existingTitle = await findDuplicateTitle(
+        ImportedSoloChartsDao.shaOf(sourceJson),
+      );
+    } on Object catch (error) {
+      // 查重出口(生产走 drift 读)挂了不崩导入页(评审51:逃出
+      // outcome 型错误处理会让调用方裸 await 处炸)。
+      debugPrint('UkeFlow: 识谱源查重失败 $error');
+      return const ScoreSourceFailed('查重失败——请重试,或把现象一并反馈');
+    }
     if (existingTitle != null) {
       return ScoreSourceDuplicate(existingTitle: existingTitle);
     }

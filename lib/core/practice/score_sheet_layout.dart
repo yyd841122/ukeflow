@@ -180,7 +180,15 @@ List<NumNote> deriveNumberedNotes(TabChart melodyChart,
     final degree = _degreeOfPitchClass(midi % 12);
     final octave = midi ~/ 12 - 5; // midi 60..71(=C4..B4)为 0
 
-    final nextBeat = i + 1 < notes.length ? notes[i + 1].beat : gridEnd;
+    // 时值 = 距下一「不同拍」的 gap(同拍堆同一时值槽;互相当后继会把
+    // 堆内前位成员算成零时值+错符杠,评审51 #183)。
+    var nextBeat = gridEnd.toDouble();
+    for (var j = i + 1; j < notes.length; j++) {
+      if (notes[j].beat > note.beat) {
+        nextBeat = notes[j].beat;
+        break;
+      }
+    }
     final rawDuration = nextBeat - note.beat;
     final isTie = note.lyric == null;
     final shown = isTie && rawDuration > 1.0 ? 1.0 : rawDuration;
@@ -232,8 +240,17 @@ class ScoreSheetLayout {
     if (tabNotes.isEmpty) {
       barCount = 0;
     } else {
-      final maxBeat = tabNotes.map((n) => n.beat).reduce(math.max);
-      barCount = (maxBeat.ceil() / beatsPerBar).ceil();
+      // 末音所在小节入画:恰落小节线的末音是**下一小节**的事件(floor+1,
+      // 评审51;ceil 法把 beat=8 算成 2 小节,含事件的第 3 小节被裁)。
+      // 旋律(对齐后)超出伴奏的尾部同样入画。
+      var maxBeat = tabNotes.map((n) => n.beat).reduce(math.max);
+      if (melodyNotes.isNotEmpty) {
+        maxBeat = math.max(
+            maxBeat,
+            melodyNotes.map((n) => n.beat).reduce(math.max) +
+                def.melodyAlignBeats);
+      }
+      barCount = (maxBeat ~/ beatsPerBar) + 1;
     }
 
     // 横带元素预计算(绝对 x,一次构造,播放期只读)。
@@ -255,29 +272,23 @@ class ScoreSheetLayout {
         ),
     ];
     // 组时值:同拍一组,距下一组的拍距 = 印张节奏杆(与简谱同推导)。
+    // 下一组拍距一次预计算(评审51:逐音 indexOf 是 O(n²) 布局构造)。
     final distinctBeats = _tabBeats.toSet().toList()..sort();
-    double groupDuration(double beat) {
-      final idx = distinctBeats.indexOf(beat);
-      final next = idx + 1 < distinctBeats.length
-          ? distinctBeats[idx + 1]
-          : (distinctBeats.isEmpty
-              ? 0
-              : (distinctBeats.last.ceil() / beatsPerBar).ceil() *
-                  beatsPerBar);
-      return next - beat;
+    final nextOfBeat = <double, double>{};
+    for (var k = 0; k < distinctBeats.length; k++) {
+      nextOfBeat[distinctBeats[k]] =
+          k + 1 < distinctBeats.length
+              ? distinctBeats[k + 1]
+              : (distinctBeats.isEmpty
+                  ? 0.0
+                  : ((distinctBeats.last.ceil() / beatsPerBar).ceil() *
+                          beatsPerBar)
+                      .toDouble());
     }
 
-    double groupEndX(double beat) {
-      final idx = distinctBeats.indexOf(beat);
-      final next = idx + 1 < distinctBeats.length
-          ? distinctBeats[idx + 1]
-          : (distinctBeats.isEmpty
-              ? 0.0
-              : ((distinctBeats.last.ceil() / beatsPerBar).ceil() *
-                  beatsPerBar)
-                  .toDouble());
-      return stripX(next);
-    }
+    double groupDuration(double beat) => nextOfBeat[beat]! - beat;
+
+    double groupEndX(double beat) => stripX(nextOfBeat[beat]!);
 
     tabPoints = [
       for (var i = 0; i < tabNotes.length; i++)

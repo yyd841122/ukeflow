@@ -98,28 +98,28 @@ class ScoreIr {
       ),
       rests: [
         if (json['rests'] != null)
-          for (final e in (json['rests']! as List)) ScoreIrRestEvent.fromJson(_cast(e)),
+          for (final e in (_lOrNull(json, 'rests') ?? const [])) ScoreIrRestEvent.fromJson(_cast(e)),
       ],
       slides: [
         if (json['slides'] != null)
-          for (final e in (json['slides']! as List)) ScoreIrSlideEvent.fromJson(_cast(e)),
+          for (final e in (_lOrNull(json, 'slides') ?? const [])) ScoreIrSlideEvent.fromJson(_cast(e)),
       ],
       tremolos: [
         if (json['tremolos'] != null)
-          for (final e in (json['tremolos']! as List)) ScoreIrTremoloEvent.fromJson(_cast(e)),
+          for (final e in (_lOrNull(json, 'tremolos') ?? const [])) ScoreIrTremoloEvent.fromJson(_cast(e)),
       ],
       strums: [
         if (json['strums'] != null)
-          for (final e in (json['strums']! as List)) ScoreIrStrumEvent.fromJson(_cast(e)),
+          for (final e in (_lOrNull(json, 'strums') ?? const [])) ScoreIrStrumEvent.fromJson(_cast(e)),
       ],
       chordAnchors: [
         if (json['chordAnchors'] != null)
-          for (final e in (json['chordAnchors']! as List))
+          for (final e in (_lOrNull(json, 'chordAnchors') ?? const []))
             ScoreIrChordAnchor.fromJson(_cast(e)),
       ],
       unsupportedSymbols: [
         if (json['unsupportedSymbols'] != null)
-          for (final e in (json['unsupportedSymbols']! as List))
+          for (final e in (_lOrNull(json, 'unsupportedSymbols') ?? const []))
             ScoreIrUnsupportedSymbol.fromJson(_cast(e)),
       ],
       review: json['review'] == null
@@ -193,6 +193,49 @@ class ScoreIr {
   /// 复核状态(校对台全曲逐小节确认后导出;内置金标准往返为已对照值,
   /// 物化不消费此字段)。null = 未复核。
   final ScoreIrReview? review;
+
+  /// 整份轻拷(评审51 #74):编辑器换声部与会话盖 reviewedAt 是两处
+  /// 独立消费方,字段复制各写一份会在 schema 加字段时漏同步——收敛到
+  /// 一处。工单 42 评审曾判 copyWith 暂缓(speculative),第二消费方
+  /// 落地后此判翻案。null 字段照旧,非 null 覆盖。
+  ScoreIr copyWith({
+    ScoreIrMeter? meter,
+    List<ScoreIrTempoChange>? tempoMap,
+    List<ScoreIrKeyChange>? keyMap,
+    List<ScoreIrMeasure>? measures,
+    double? melodyAlignBeats,
+    ScoreIrVoice? melody,
+    ScoreIrVoice? accompaniment,
+    List<ScoreIrRestEvent>? rests,
+    List<ScoreIrSlideEvent>? slides,
+    List<ScoreIrTremoloEvent>? tremolos,
+    List<ScoreIrStrumEvent>? strums,
+    List<ScoreIrChordAnchor>? chordAnchors,
+    List<ScoreIrUnsupportedSymbol>? unsupportedSymbols,
+    ScoreIrReview? review,
+  }) =>
+      ScoreIr(
+        schemaVersion: schemaVersion,
+        id: id,
+        title: title,
+        artist: artist,
+        meter: meter ?? this.meter,
+        tempoMap: tempoMap ?? this.tempoMap,
+        keyMap: keyMap ?? this.keyMap,
+        measures: measures ?? this.measures,
+        melodyAlignBeats: melodyAlignBeats ?? this.melodyAlignBeats,
+        tabChartId: tabChartId,
+        melodyChartId: melodyChartId,
+        melody: melody ?? this.melody,
+        accompaniment: accompaniment ?? this.accompaniment,
+        rests: rests ?? this.rests,
+        slides: slides ?? this.slides,
+        tremolos: tremolos ?? this.tremolos,
+        strums: strums ?? this.strums,
+        chordAnchors: chordAnchors ?? this.chordAnchors,
+        unsupportedSymbols: unsupportedSymbols ?? this.unsupportedSymbols,
+        review: review ?? this.review,
+      );
 
   Map<String, dynamic> toJson() => {
         'schemaVersion': schemaVersion,
@@ -292,7 +335,7 @@ class ScoreIrVoice {
         ],
         rests: [
           if (json['rests'] != null)
-            for (final e in (json['rests']! as List)) ScoreIrRest.fromJson(_cast(e)),
+            for (final e in (_lOrNull(json, 'rests') ?? const [])) ScoreIrRest.fromJson(_cast(e)),
         ],
       );
 
@@ -569,7 +612,8 @@ class ScoreIrEvidence {
         page: json['page'] == null ? null : _i(json, 'page'),
         bbox: json['bbox'] == null
             ? null
-            : [for (final v in (json['bbox']! as List)) (v as num).toDouble()],
+            : [for (final v in (_lOrNull(json, 'bbox') ?? const []))
+                 _doubleOf(v, 'bbox 元素')],
         source: _sOrNull(json, 'source'),
         confidence: json['confidence'] == null
             ? null
@@ -628,13 +672,13 @@ ScoreStrumKind _strumKind(String name) {
 }
 
 ChordFingering _fingering(Map<String, dynamic> json) => ChordFingering(
-      frets: [for (final v in _l(json, 'frets')) v as int],
-      fingers: [for (final v in _l(json, 'fingers')) v as int],
+      frets: _intList(json, 'frets'),
+      fingers: _intList(json, 'fingers'),
       baseFret: _i(json, 'baseFret'),
-      barres: [for (final v in _l(json, 'barres')) v as int],
+      barres: _intList(json, 'barres'),
       midi: json['midi'] == null
           ? null
-          : [for (final v in (json['midi']! as List)) v as int],
+          : [for (final v in (_lOrNull(json, 'midi') ?? const [])) _intOf(v, 'midi 元素')],
     );
 
 // ── JSON 取值帮手:类型不符当场拒析,消息指明键名(嵌套元素的坏项
@@ -679,6 +723,28 @@ List<Object?> _l(Map<String, dynamic> json, String key) {
   final v = json[key];
   if (v is List) return v;
   throw ScoreIrFormatException('$key 应为数组,实际 ${v?.runtimeType}');
+}
+/// 可选数组:缺省/null 给 null,非数组当场拒析(裸转型抛 TypeError 是
+/// Error 不是 Exception,43 的 Broken 兜底接不住)。
+List<Object?>? _lOrNull(Map<String, dynamic> json, String key) {
+  final v = json[key];
+  if (v == null) return null;
+  if (v is List) return v;
+  throw ScoreIrFormatException('$key 应为数组或缺省,实际 ${v.runtimeType}');
+}
+
+List<int> _intList(Map<String, dynamic> json, String key) =>
+    [for (final v in _l(json, key)) _intOf(v, '$key 元素')];
+
+int _intOf(Object? v, String what) {
+  if (v is int) return v;
+  if (v is num && v == v.truncateToDouble()) return v.toInt();
+  throw ScoreIrFormatException('$what 应为整数,实际 $v');
+}
+
+double _doubleOf(Object? v, String what) {
+  if (v is num) return v.toDouble();
+  throw ScoreIrFormatException('$what 应为数值,实际 $v');
 }
 
 bool _listEquals(List<double>? a, List<double>? b) {

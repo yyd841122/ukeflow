@@ -72,7 +72,7 @@ ScoreIr exportScoreIr({
     melodyAlignBeats: def.melodyAlignBeats,
     tabChartId: def.tabChartId,
     melodyChartId: def.melodyChartId,
-    melody: _tileVoice(melodyChart.notes),
+    melody: _tileVoice(melodyChart.notes, alignBeats: def.melodyAlignBeats),
     accompaniment: _tileVoice(tabChart.notes),
     rests: [
       for (final r in def.rests)
@@ -101,15 +101,24 @@ ScoreIr exportScoreIr({
 /// 声部切片:逐音时值 = 距下音 gap(同拍堆同一时值槽,小节末音收到
 /// 小节线),静默落声部休止(小节首音前 / 整小节;音间静默由前一音
 /// 时值表达)。输出序 = (beat, 录入序) 时序视图。
-ScoreIrVoice _tileVoice(List<TabNote> rawNotes) {
+/// [alignBeats] = 层 → 主轴偏移(旋律 melodyAlignBeats,伴奏 0)。切小节
+/// 按**主轴**网格(m×meter − align 为层内小节头,评审51):align 非 4 整除
+/// 时按层内网格切会产生跨主轴小节线的休止簿记,导出即校验必炸。
+ScoreIrVoice _tileVoice(List<TabNote> rawNotes, {double alignBeats = 0.0}) {
   final sorted = sortedTabNotes(rawNotes);
   final meter = beatsPerBar.toDouble();
-  final measureCount = _measureCountOf(sorted.last.beat, meter);
+  final align = alignBeats;
+  final measureCount = _measureCountOf(sorted.last.beat + align, meter);
+  // 切片起点:align=0 照旧从主轴 0 起(层内前导空小节的休止簿记是金
+  // 标准行为);align>0 从首事件所在主轴小节起(层内负拍区不造簿记)。
+  final startM = align > 0
+      ? ((sorted.first.beat + align) / meter).floor()
+      : 0;
   final notes = <ScoreIrNote>[];
   final rests = <ScoreIrRest>[];
   var next = 0;
-  for (var m = 0; m < measureCount; m++) {
-    final ms = m * meter;
+  for (var m = startM; m < measureCount; m++) {
+    final ms = m * meter - align;
     final me = ms + meter;
     final start = next;
     while (next < sorted.length && sorted[next].beat < me) {

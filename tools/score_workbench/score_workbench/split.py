@@ -183,6 +183,10 @@ def find_measure_boundaries(gray: np.ndarray, staff: TabStaff) -> tuple:
     y0, y1 = max(0, int(t - 2)), min(dark.shape[0], int(tb + BAR_EXTEND_FRAC * g) + 1)
     band = dark[y0:y1]
     need = (tb - t) - 2
+    # 小节线只在谱表界内找(评审51):半幅谱表外的通栏竖线(如另一半幅
+    # 位图的边)不该被采成小节界。
+    band[:, :max(0, int(staff.x0) - 2)] = False
+    band[:, min(band.shape[1], int(staff.x1) + 3):] = False
     cols = np.flatnonzero(band.sum(axis=0) >= need)
     cands = []
     for x in cols:
@@ -439,7 +443,10 @@ def _save_crop(gray: np.ndarray, band: LayerBand, path: Path) -> None:
     y1 = min(gray.shape[0], int(band.y1) + 1 + pad)
     x0 = max(0, int(band.x0) - pad)
     x1 = min(gray.shape[1], int(band.x1) + 1 + pad)
-    cv2.imwrite(str(path), gray[y0:y1, x0:x1])
+    # imwrite False = 磁盘/路径故障,报告会引用不存在的裁图(评审51):
+    # 当场带路径报错,不静默。
+    if not cv2.imwrite(str(path), gray[y0:y1, x0:x1]):
+        raise RuntimeError(f"裁图写盘失败:{path}")
 
 
 def _below_clusters(below, g):

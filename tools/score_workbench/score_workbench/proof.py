@@ -25,6 +25,7 @@ import datetime
 import json
 import os
 import re
+import threading
 
 PROOF_FILE = "proof.json"
 
@@ -74,13 +75,16 @@ def load_session(out_dir: str) -> dict:
     proof_path = os.path.join(out_dir, PROOF_FILE)
     if os.path.isfile(proof_path):
         saved = _read_json(proof_path)
-        session["melody"] = saved["melody"]
-        session["tab"] = saved["tab"]
-        session["meta"].update(saved.get("meta", {}))
-        session["chords"] = saved.get("chords", [])
-        confirmed = saved.get("confirmed", [])
-        n = len(session["melody"]["measures"])
-        session["confirmed"] = (confirmed + [False] * n)[:n]
+        # 指纹闸(评审51):proof.json 的编辑绑定识别源的 sha——同目录换了
+        # 谱(重认过别的曲),陈旧编辑叠上新几何比丢编辑更糟,整包弃用。
+        if saved.get("source_sha256") == melody["source"].get("sha256"):
+            session["melody"] = saved["melody"]
+            session["tab"] = saved["tab"]
+            session["meta"].update(saved.get("meta", {}))
+            session["chords"] = saved.get("chords", [])
+            confirmed = saved.get("confirmed", [])
+            n = len(session["melody"]["measures"])
+            session["confirmed"] = (confirmed + [False] * n)[:n]
     return session
 
 
@@ -90,6 +94,7 @@ def save_session(session: dict) -> None:
     payload = {
         "schema": "ukeflow.workbench.proof/1",
         "saved_at": _now(),
+        "source_sha256": session["melody"]["source"].get("sha256"),
         "melody": session["melody"],
         "tab": session["tab"],
         "meta": session["meta"],
@@ -97,10 +102,14 @@ def save_session(session: dict) -> None:
         "chords": session["chords"],
     }
     path = os.path.join(session["out_dir"], PROOF_FILE)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"   # 唯一临时名(并发保存不互踩)
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def measure_count(session: dict) -> int:
@@ -163,8 +172,19 @@ def anchor_layer_to_grid(session: dict, layer: str) -> int:
 
 
 def measure_beats(session: dict) -> float:
+    """拍号 → 每小节四分拍数。v1 仅支持 n/4(schema 定死 4/4 单位,变拍/
+    变单位须 bump schema,见 score_ir.dart):denominator 非 4 当场拒,
+    不静默错译成 n 个四分拍。"""
     m = _METER_RE.match(str(session["meta"]["meter"] or ""))
-    return float(m.group(1)) if m else 4.0
+    if not m:
+        raise ValueError(f"拍号 {session['meta']['meter']!r} 读不懂(要 n/4 形)")
+    num, den = int(m.group(1)), int(m.group(2))
+    if num < 1:
+        raise ValueError(f"拍号 {num}/{den}:每小节拍数须 ≥1")
+    if den != 4:
+        raise ValueError(f"拍号 {num}/{den}:v1 仅支持 n/4(印张 2/4 段按连拍"
+                         "格统一 4/4 转录,见 GLOSSARY 识谱源)")
+    return float(num)
 
 
 # ── 编辑操作(就地改会话;server 层负责持久化)────────────────────────
@@ -189,23 +209,35 @@ def confirm_all(session: dict) -> None:
     session["confirmed"] = [True] * measure_count(session)
 
 
+def _beat_key(n: dict):
+    """排序键:beat None 排最前(坏行不炸排序,preflight 逐行报)。"""
+    b = n.get("beat")
+    return (b is None, b if b is not None else 0.0)
+
+
 def _sorted_notes(measure: dict) -> None:
-    measure["notes"].sort(key=lambda n: n["beat"])
+    measure["notes"].sort(key=_beat_key)
 
 
 def edit_note(session: dict, layer: str, mi: int, row: int, data: dict) -> None:
     """改一行音(旋律:degree/dots_above/dots_below/beat/duration;
-    TAB:string/fret/beat/duration)。其余字段(x/evidence/缀记)照旧。"""
+    TAB:string/fret/beat/duration)。其余字段(x/evidence/缀记)照旧。
+    先全量解析再落字段——半程转换失败不许保留半改(评审51 #202)。"""
     note = _row(session, layer, mi, row, "notes")
-    for k in ("degree", "dots_above", "dots_below"):
-        if layer == "melody" and k in data:
-            note[k] = None if data[k] in ("", None) else int(data[k])
-    for k in ("string", "fret"):
-        if layer == "tab" and k in data:
-            note[k] = None if data[k] in ("", None) else int(data[k])
-    for k in ("beat", "duration"):
+    updates: dict = {}
+    keys = ("degree", "dots_above", "dots_below") if layer == "melody" \
+        else ("string", "fret")
+    for k in keys:
         if k in data:
-            note[k] = None if data[k] in ("", None) else float(data[k])
+            updates[k] = None if data[k] in ("", None) else int(data[k])
+    if "beat" in data:
+        if data["beat"] in ("", None):
+            raise ValueError("拍位不能为空(拍位是事件主键;删音走 delete)")
+        updates["beat"] = float(data["beat"])
+    if "duration" in data:
+        updates["duration"] = None if data["duration"] in ("", None) \
+            else float(data["duration"])
+    note.update(updates)
     _sorted_notes(_measure_at(session[layer], mi))
 
 
@@ -231,14 +263,17 @@ def delete_note(session: dict, layer: str, mi: int, row: int) -> None:
 
 def edit_rest(session: dict, layer: str, mi: int, row: int, data: dict) -> None:
     rest = _row(session, layer, mi, row, "rests")
+    kind = data.get("kind") if layer == "tab" else None
+    if kind is not None and kind not in ("rest8", "rest_whole"):
+        raise ValueError(f"休止种类只能是 rest8/rest_whole,得 {kind!r}")
+    updates = {}
     if "beat" in data:
-        rest["beat"] = _opt_float(data["beat"])
+        updates["beat"] = _opt_float(data["beat"])
     if "beats" in data:
-        rest["beats"] = _opt_float(data["beats"])
-    if layer == "tab" and "kind" in data:
-        if data["kind"] not in ("rest8", "rest_whole"):
-            raise ValueError(f"休止种类只能是 rest8/rest_whole,得 {data['kind']!r}")
-        rest["kind"] = data["kind"]
+        updates["beats"] = _opt_float(data["beats"])
+    if kind is not None:
+        updates["kind"] = kind
+    rest.update(updates)
 
 
 def add_rest(session: dict, layer: str, mi: int, data: dict) -> None:
@@ -262,14 +297,16 @@ TECHNIQUE_KINDS = ("roll", "strumUp", "strumDown", "shaft", "slide",
 
 def edit_technique(session: dict, mi: int, row: int, data: dict) -> None:
     tech = _row(session, "tab", mi, row, "techniques")
+    if "kind" in data and data["kind"] not in TECHNIQUE_KINDS:
+        raise ValueError(f"技巧种类非法:{data['kind']!r}")
+    updates = {}
     if "kind" in data:
-        if data["kind"] not in TECHNIQUE_KINDS:
-            raise ValueError(f"技巧种类非法:{data['kind']!r}")
-        tech["kind"] = data["kind"]
+        updates["kind"] = data["kind"]
     if "beat" in data:
-        tech["beat"] = _opt_float(data["beat"])
+        updates["beat"] = _opt_float(data["beat"])
     if "to_beat" in data:                      # 滑音止拍(export 用)
-        tech["to_beat"] = _opt_float(data["to_beat"])
+        updates["to_beat"] = _opt_float(data["to_beat"])
+    tech.update(updates)
 
 
 def add_technique(session: dict, mi: int, data: dict) -> None:
@@ -297,6 +334,8 @@ def batch_technique(session: dict, data: dict) -> int:
     lo, hi = int(data["from_measure"]), int(data["to_measure"])
     local = float(data["beat"])
     meter = measure_beats(session)
+    if not (0 <= lo <= hi < measure_count(session)):
+        raise ValueError(f"小节区间 [{lo},{hi}] 越界(0..{measure_count(session) - 1})")
     n = 0
     for mi in range(lo, hi + 1):
         m = _measure_at(session["tab"], mi)
@@ -355,6 +394,18 @@ def expand_x_mark(session: dict, mi: int, row: int, chord_data: dict) -> dict:
         session["chords"].append(anchor)
 
     x_strings = mark.get("strings") or None
+    # 还原边界(评审51 #366):下一 attack 不只看已有音,其余未消解 × 与
+    # 休止也算——连还原两枚 × 才不会把时值撑成重叠。
+    later = [n["beat"] for n in measure["notes"] if n["beat"] > beat + _EPS]
+    later += [m["beat"] for j, m in enumerate(marks)
+              if j != row and m.get("beat") is not None
+              and m["beat"] > beat + _EPS]
+    later += [r["beat"] for r in measure["rests"]
+              if r.get("beat") is not None and r["beat"] > beat + _EPS]
+    nxt = min(later, default=None)
+    bar_end = measure["start_beat"] + meter
+    duration_base = (min(nxt, bar_end) - beat if nxt is not None
+                     else bar_end - beat)
     created = 0
     for i, f in enumerate(frets):              # 下标 0 = ④ 弦(GLOSSARY 弦序)
         string = 4 - i
@@ -363,10 +414,7 @@ def expand_x_mark(session: dict, mi: int, row: int, chord_data: dict) -> dict:
         fret = 0 if f == 0 else f + base_fret - 1   # 窗口相对 → 绝对品位
         if x_strings is not None and string not in x_strings:
             continue
-        nxt = min((n["beat"] for n in measure["notes"] if n["beat"] > beat
-                   + _EPS), default=None)
-        duration = (nxt - beat if nxt is not None
-                    else measure["start_beat"] + meter - beat)
+        duration = duration_base
         measure["notes"].append({
             "string": string, "fret": fret, "beat": beat,
             "duration": round(duration, 4), "confidence": None,
@@ -384,9 +432,15 @@ def add_chord(session: dict, mi: int, data: dict) -> None:
 
 
 def edit_chord(session: dict, index: int, data: dict) -> None:
+    """编辑和弦锚:现存锚是嵌套形(fingering{}),先折平再合并——label-only
+    的编辑不再 KeyError,省略的指形字段保留不抹(评审51 #388)。"""
     chords = session["chords"]
-    chords[_check_row(index, len(chords))] = _chord_from(
-        chords[index]["measure"], {**chords[index], **data})
+    existing = chords[_check_row(index, len(chords))]
+    fg = existing["fingering"]
+    flat = {"beat": existing["beat"], "label": existing["label"],
+            "frets": fg["frets"], "fingers": fg["fingers"],
+            "baseFret": fg["baseFret"]}
+    chords[index] = _chord_from(existing["measure"], {**flat, **data})
 
 
 def delete_chord(session: dict, index: int) -> None:
@@ -469,14 +523,20 @@ def build_ir(session: dict, reviewed_at: str | None = None) -> tuple[dict, list]
     slides, tremolos, strums = [], [], []
     for mi, measure in enumerate(session["tab"]["measures"]):
         sys_i = _sys_of(session, mi)
+        # 未消解 × 不进 IR 也不静默:skipped 表列出(preflight 已阻塞,
+        # force 导出时这里兜住可见性,评审51 #470)
+        for m in measure["x_marks"]:
+            if str(m.get("kind", "")).startswith("x"):
+                skipped.append({"measure": mi + 1, "what": "×拨痕",
+                                "why": f"{m.get('kind')} 未消解,先还原或删除"})
         slots: list[tuple[float, float]] = []
-        for n in sorted(measure["notes"], key=lambda n: n["beat"]):
+        for n in sorted(measure["notes"], key=_beat_key):
             if n["string"] is None or n["fret"] is None or not n.get(
                     "duration"):
                 skipped.append({"measure": mi + 1, "what": "伴奏音",
                                 "why": _why_note(n)})
                 continue
-            accomp_notes.append(_ir_note(n))
+            accomp_notes.append(_ir_note(n, sys_i, sys_pages))
             slots.append((n["beat"], n["beat"] + n["duration"]))
         accomp_voice_rests.extend(_gap_rests(slots, measure["start_beat"],
                                              meter))
@@ -510,7 +570,7 @@ def build_ir(session: dict, reviewed_at: str | None = None) -> tuple[dict, list]
     melody_notes, melody_rests = [], []
     for mi, measure in enumerate(session["melody"]["measures"]):
         sys_i = _sys_of(session, mi)
-        for n in sorted(measure["notes"], key=lambda n: n["beat"]):
+        for n in sorted(measure["notes"], key=_beat_key):
             if n["degree"] is None or not n.get("duration"):
                 skipped.append({"measure": mi + 1, "what": "旋律音",
                                 "why": _why_note(n)})
@@ -593,22 +653,13 @@ def _main_beat(session: dict, chord: dict) -> float:
     return start + chord["beat"]
 
 
-def _ir_note(n: dict) -> dict:
+def _ir_note(n: dict, sys_index: int | None, sys_pages: dict) -> dict:
+    """伴奏音 → IR note。证据走 _ir_evidence 统一通道(带页码/人工来源,
+    此前自拼丢页码与 ×还原 来源,评审51 #596)。"""
     midi = OPEN_MIDI[n["string"]] + n["fret"]
-    entry = {"beat": n["beat"], "durationBeats": n["duration"],
-             "string": n["string"], "fret": n["fret"], "midi": midi,
-             "evidence": None}
-    ev = n.get("evidence")
-    if ev:
-        entry["evidence"] = {"bbox": ev.get("bbox"),
-                             "confidence": ev.get("confidence")}
-        if entry["evidence"]["confidence"] is None:
-            del entry["evidence"]["confidence"]
-        if entry["evidence"]["bbox"] is None:
-            del entry["evidence"]["bbox"]
-        if not entry["evidence"]:
-            entry["evidence"] = None
-    return entry
+    return {"beat": n["beat"], "durationBeats": n["duration"],
+            "string": n["string"], "fret": n["fret"], "midi": midi,
+            "evidence": _ir_evidence(n, sys_index, sys_pages)}
 
 
 def _sys_of(session: dict, mi: int) -> int | None:
@@ -714,15 +765,32 @@ def preflight(session: dict) -> list[dict]:
                     for n in m["notes"] if n["string"] is not None}
     for mi, measure in enumerate(session["tab"]["measures"]):
         for t in measure["techniques"]:
-            if t["kind"] == "slide" and t.get("to_beat") is not None:
-                if round(t["to_beat"], 6) not in accomp_beats:
-                    errors.append({"measure": mi + 1, "field": "slide",
-                                   "message": f"滑音止拍 @{t['to_beat']:g} "
-                                   "不落在伴奏任何音上"})
-            if t["beat"] is not None and not (0 <= t["beat"] <= total + _EPS):
+            if t["beat"] is None:
+                errors.append({"measure": mi + 1, "field": "technique",
+                               "message": f"技巧 {t['kind']} 缺拍位,先补"})
+            elif not (0 <= t["beat"] <= total + _EPS):
                 errors.append({"measure": mi + 1, "field": "technique",
                                "message": f"技巧 {t['kind']} 拍位 "
                                f"@{t['beat']:g} 出骨架(0..{total:g})"})
+            if t["kind"] == "slide":
+                if t.get("to_beat") is None:
+                    errors.append({"measure": mi + 1, "field": "slide",
+                                   "message": "滑音缺止拍,先在技巧行补 to_beat"})
+                elif round(t["to_beat"], 6) not in accomp_beats:
+                    errors.append({"measure": mi + 1, "field": "slide",
+                                   "message": f"滑音止拍 @{t['to_beat']:g} "
+                                   "不落在伴奏任何音上"})
+                elif t["beat"] is not None and t["to_beat"] <= t["beat"]:
+                    errors.append({"measure": mi + 1, "field": "slide",
+                                   "message": f"滑音止拍 @{t['to_beat']:g} 须晚于"
+                                   f"起拍 @{t['beat']:g}"})
+        # #470:未消解的 ×(非 barline 证据行)阻塞——还原为音或删
+        x_open = [m for m in measure["x_marks"]
+                  if str(m.get("kind", "")).startswith("x")]
+        if x_open:
+            errors.append({"measure": mi + 1, "field": "x_marks",
+                           "message": f"×拨痕 {len(x_open)} 枚未消解——按和弦"
+                           "还原为音,或确认是噪声后删除"})
     for c in session["chords"]:
         beat = _main_beat(session, c)
         if not (0 <= beat <= total + _EPS):
@@ -747,9 +815,29 @@ def _check_voice(session: dict, layer: str, mis: range, errors: list,
         measure = _measure_at(session[layer], mi)
         if measure is None:
             continue
-        slots: list[tuple[float, float, str]] = []
+        # 同拍事件分组(Dart 校验器 addSlot 同款语义,评审51 #847):同起点
+        # 多音 = 同一槽取最大跨度,不算重叠;音槽混休止、休止叠休止才算冲突。
+        grouped: dict[float, dict] = {}
+
+        def add_slot(start: float, end: float, is_note: bool, what: str,
+                     _g=grouped, _mi=mi + 1, _layer=layer, _name=name,
+                     _errors=errors) -> None:
+            g = _g.get(round(start, 6))
+            if g is None:
+                _g[round(start, 6)] = {"end": end, "note": is_note,
+                                       "rest": not is_note, "what": what}
+                return
+            clash = g["rest"] if is_note else (g["rest"] or g["note"])
+            if clash:
+                _errors.append({"measure": _mi, "field": _layer,
+                                "message": f"{_name}声部同拍事件重叠:"
+                                f"{what} 与 {g['what']}"})
+            g["end"] = max(g["end"], end)
+            g["note"] = g["note"] or is_note
+            g["rest"] = g["rest"] or not is_note
+
         seen: set[tuple[int, float]] = set()
-        for n in sorted(measure["notes"], key=lambda n: n["beat"]):
+        for n in sorted(measure["notes"], key=_beat_key):
             at = f"{name}音@{n['beat']:g}"
             if n["beat"] is None or n["beat"] < 0:
                 errors.append({"measure": mi + 1, "field": layer,
@@ -799,14 +887,16 @@ def _check_voice(session: dict, layer: str, mis: range, errors: list,
                 errors.append({"measure": mi + 1, "field": layer,
                                "message": f"{at} 时值未知(印张无节奏记号或未补)"})
                 continue
-            slots.append((n["beat"], n["beat"] + n["duration"], at))
+            add_slot(n["beat"], n["beat"] + n["duration"], True, at)
         for r in measure["rests"]:
             if not r.get("beats") or r["beats"] <= 0:
                 errors.append({"measure": mi + 1, "field": layer,
                                "message": f"{name}休止@{r['beat']:g} 拍数非法"})
                 continue
-            slots.append((r["beat"], r["beat"] + r["beats"],
-                          f"{name}休止@{r['beat']:g}"))
+            add_slot(r["beat"], r["beat"] + r["beats"], False,
+                     f"{name}休止@{r['beat']:g}")
+        slots = [(b, g["end"], g["what"])
+                 for b, g in sorted(grouped.items())]
         _check_closure(slots, measure["start_beat"], mi, name, layer,
                        meter, shift, total, errors, holes=(layer == "melody"))
 

@@ -44,6 +44,11 @@ List<String> validateScoreIr(ScoreIr ir) {
   if (ir.meter.beatsPerMeasure < 1 || ir.meter.beatUnit < 1) {
     err('拍号非法:每小节 ${ir.meter.beatsPerMeasure} 拍、${ir.meter.beatUnit} '
         '分音符为一拍,均须 ≥1');
+  } else if (ir.meter.beatsPerMeasure != 4 || ir.meter.beatUnit != 4) {
+    // v1 物化单速单调号且运行时 beatsPerBar 恒 4(schema 定死,见
+    // score_ir.dart meter 注):非 4/4 会被静默错译,当场拒。
+    err('拍号 ${ir.meter.beatsPerMeasure}/${ir.meter.beatUnit}:v1 仅支持 4/4'
+        '(印张 2/4 段按连拍格统一 4/4 转录;变拍/变单位须 bump schema)');
   }
   final beatsPerMeasure = ir.meter.beatsPerMeasure < 1
       ? 4
@@ -96,12 +101,19 @@ List<String> validateScoreIr(ScoreIr ir) {
       ? 0.0
       : ir.measures.last.startBeat + beatsPerMeasure;
 
-  if (ir.melodyAlignBeats < 0) {
+  if (ir.melodyAlignBeats.isNaN || ir.melodyAlignBeats.isInfinite) {
+    // NaN/∞ 进 shift 运算会在闭合核对 .floor() 处 UnsupportedError(评审51)
+    err('melodyAlignBeats(旋律对齐偏移)须有限,实际 ${ir.melodyAlignBeats}');
+  } else if (ir.melodyAlignBeats < 0) {
     err('melodyAlignBeats(旋律对齐偏移)为负:${ir.melodyAlignBeats}');
   }
   _validateVoice(ir.accompaniment, '伴奏', 0, gridEnd, beatsPerMeasure, err);
-  _validateVoice(ir.melody, '旋律', ir.melodyAlignBeats, gridEnd,
-      beatsPerMeasure, err);
+  // 坏 align 已单列报错,后续闭合约分喂容身值(NaN shift 会在小节号
+  // floor 处 UnsupportedError,评审51:报告归报告,算术不进坏值)。
+  final melodyShift =
+      ir.melodyAlignBeats.isFinite ? ir.melodyAlignBeats : 0.0;
+  _validateVoice(ir.melody, '旋律', melodyShift, gridEnd, beatsPerMeasure,
+      err);
 
   _validateChordAnchors(ir.chordAnchors, gridEnd, err);
   _checkAscendingInBounds(
@@ -175,6 +187,13 @@ void _validateVoice(
       err('$name 声部录入序错乱(拍位须不降):'
           '@${n.beat} 排在 @${voice.notes[i - 1].beat} 之后');
     }
+    if (shift > 0 && const {1, 3, 6, 8, 10}.contains(n.midi % 12)) {
+      // 简谱层只有自然音的数字记法(度数+八度点),变化音(midi 落黑键)
+      // 无度数可写——谱面布局按度数落位,C#/Db 会在预览渲染时才崩
+      // (评审51)。伴奏 TAB 层不受此限(品位音本就半音连续)。
+      err('$name 声部含变化音(midi ${n.midi} 落黑键):简谱记法暂不支持,'
+          '须在源里改记或 bump schema');
+    }
   }
   for (final r in voice.rests) {
     if (r.beat.isNaN || r.beat.isInfinite || r.beat < 0) {
@@ -201,10 +220,18 @@ void _validateVoice(
   }
 
   for (final n in voice.notes) {
-    addSlot(n.beat, n.beat + n.durationBeats, true, '音@${n.beat}');
+    if (!(n.beat.isNaN || n.beat.isInfinite || n.beat < 0)
+        && !(n.durationBeats.isNaN || n.durationBeats.isInfinite
+            || n.durationBeats <= 0)) {
+      // 已逐行报错的坏值不再进闭合算术(NaN 槽键/比较会污染全小节,评审51)
+      addSlot(n.beat, n.beat + n.durationBeats, true, '音@${n.beat}');
+    }
   }
   for (final r in voice.rests) {
-    addSlot(r.beat, r.beat + r.beats, false, '休止@${r.beat}');
+    if (!(r.beat.isNaN || r.beat.isInfinite || r.beat < 0)
+        && !(r.beats.isNaN || r.beats.isInfinite || r.beats <= 0)) {
+      addSlot(r.beat, r.beat + r.beats, false, '休止@${r.beat}');
+    }
   }
   if (slots.isEmpty) return;
   final firstStart = slots.keys.reduce((a, b) => a < b ? a : b) + shift;
@@ -275,7 +302,10 @@ void _checkAscendingInBounds(
   void Function(String) err,
 ) {
   for (var i = 0; i < beats.length; i++) {
-    if (beats[i] < 0 || beats[i] >= gridEnd) {
+    if (beats[i].isNaN || beats[i].isInfinite) {
+      // NaN 与任何比较都为 false,会静默穿过界检查再炸下游算术(评审51)
+      err('$what 拍位须有限:@${beats[i]}');
+    } else if (beats[i] < 0 || beats[i] >= gridEnd) {
       err('$what 拍位超出小节骨架:@${beats[i]}');
     }
     if (i > 0 && beats[i] <= beats[i - 1]) {
@@ -301,6 +331,13 @@ void _validateChordAnchors(
     }
     if (a.fingering.barres.any((b) => b < 1)) {
       err('和弦锚指形 barres 须 ≥ 1:@${a.beat} ${a.label}');
+    }
+    final midi = a.fingering.midi;
+    if (midi != null && midi.length != 4) {
+      // stringFrequencies 按下标取 midi,frets 4 项 + midi 短列会在示范音
+      // 计算 RangeError(评审51):源端先拒。
+      err('和弦锚指形 midi 须与 frets 同为 4 项,得 ${midi.length}:'
+          '@${a.beat} ${a.label}');
     }
   }
   _checkAscendingInBounds(

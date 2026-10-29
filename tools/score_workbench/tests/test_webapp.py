@@ -145,6 +145,8 @@ def _proof_via_api(client):
             _post(client, "/api/edit",
                   {"kind": "note", "op": "edit", "layer": "melody",
                    "measure": mi, "row": row, "data": {"duration": d}})
+    _post(client, "/api/edit", {"kind": "x", "op": "delete", "measure": 3,
+                                "row": 0})       # × 未消解是 preflight 阻塞项
     _post(client, "/api/confirm-all", {})
 
 
@@ -175,6 +177,8 @@ def test_export_blocked_without_measure_confirms(client, out_dir):
     code, body = _post(client, "/api/export", {})
     assert code == 409 and "确认" in body["error"]
     assert not (out_dir / "ir.json").exists()
+    _post(client, "/api/edit", {"kind": "x", "op": "delete", "measure": 3,
+                                "row": 0})
     _post(client, "/api/confirm-all", {})
     code, body = _post(client, "/api/export", {})
     assert code == 200

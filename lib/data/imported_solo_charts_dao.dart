@@ -43,16 +43,22 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
   /// 轻改存回(工单 45):源 JSON 改后整行落回——contentSha 随新源
   /// 现算,updatedAt/reviewedAt 随写随 bump(轻改自动记复核时刻,
   /// 与源内 review.reviewedAt 同步由会话层盖章),title/createdAt/
-  /// schemaVersion 不动。行不存在静默无操作(update 语义)。
-  Future<void> updateSource({
+  /// schemaVersion 不动。[expectedSourceJson] 给出时按内容条件写
+  /// (乐观并发,评审51:载入与更新之间被别处改过就 0 行不写);返回
+  /// 实际写入行数,0 = 行不存在或源已被并发改写。
+  Future<int> updateSource({
     required int id,
     required String sourceJson,
     String? reviewedAt,
+    String? expectedSourceJson,
   }) {
     final now = DateTime.now();
-    return (update(
-      importedSoloCharts,
-    )..where((row) => row.id.equals(id))).write(
+    return (update(importedSoloCharts)
+          ..where((row) => row.id.equals(id))
+          ..where((row) => expectedSourceJson == null
+              ? const Constant(true)
+              : row.sourceJson.equals(expectedSourceJson)))
+        .write(
       ImportedSoloChartsCompanion(
         sourceJson: Value(sourceJson),
         contentSha: Value(shaOf(sourceJson)),
@@ -70,11 +76,39 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// 按内容指纹查行(工单 44 重导入去重:同内容已入库则提示已有,
-  /// 不重复落行)。未入库返回 null。
+  /// 不重复落行)。未入库返回 null。contentSha 无唯一约束(并发导入
+  /// 理论可造重复),单行语义按标准纪律 limit(1)+id 定序,不赌
+  /// getSingleOrNull 的「恰好一行」(评审51;重复时取最早一条)。
   Future<ImportedSoloChart?> getByContentSha(String sha) {
-    return (select(
-      importedSoloCharts,
-    )..where((row) => row.contentSha.equals(sha))).getSingleOrNull();
+    return (select(importedSoloCharts)
+          ..where((row) => row.contentSha.equals(sha))
+          ..orderBy([(row) => OrderingTerm.asc(row.id)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// 查重+插入同一事务(评审51 #30:先查后插分离有竞态窗,并发导入
+  /// 造重复)。重复时**不插入**,返回既有行(id = 既有行 id)。
+  Future<({int id, bool existed})> addUnique({
+    required String title,
+    required String sourceJson,
+    required int schemaVersion,
+    String? reviewedAt,
+  }) {
+    final sha = shaOf(sourceJson);
+    return transaction(() async {
+      final existing = await getByContentSha(sha);
+      if (existing != null) {
+        return (id: existing.id, existed: true);
+      }
+      final id = await add(
+        title: title,
+        sourceJson: sourceJson,
+        schemaVersion: schemaVersion,
+        reviewedAt: reviewedAt,
+      );
+      return (id: id, existed: false);
+    });
   }
 
   /// 按行 id 取单行(工单 45 轻改会话读源用)。未入库返回 null。
