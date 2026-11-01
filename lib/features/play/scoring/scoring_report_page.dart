@@ -10,7 +10,8 @@ import 'practice_scoring_controller.dart';
 /// 跟练评分报告页(GLOSSARY「跟练评分」):全曲报告,看完即弃不落库。
 ///
 /// 版式(数据全来自 [practiceScoringProvider] 的报告,页内无计算状态):
-/// - 头部:准确率大字 + 五判定计数;
+/// - 头部:合格率大字(工单55:非「漏」且非「错」;覆盖在副行,防
+///   「弹了但错」计入准确率的误导)+ 五判定计数;
 /// - 延迟校准(GLOSSARY):倾向提示(meanSignedError 指方向)+ ±200ms
 ///   10ms 一档滑块(拖动实时重算)+ 保存(跨会话生效);
 /// - 最差三处;小节聚合条;行聚合;扫弦点轨道(按判定着色,点格重听)。
@@ -66,10 +67,10 @@ class _ReportBodyState extends ConsumerState<_ReportBody> {
         _SectionTitle('最差三处', scheme),
         _WorstList(report: report),
         const SizedBox(height: 16),
-        _SectionTitle('小节准确率', scheme),
+        _SectionTitle('小节合格率', scheme),
         _BarStrip(report: report),
         const SizedBox(height: 16),
-        _SectionTitle('分行准确率', scheme),
+        _SectionTitle('分行覆盖', scheme),
         _LineList(report: report),
         const SizedBox(height: 16),
         _SectionTitle('扫弦点轨道(点格重听)', scheme),
@@ -113,18 +114,19 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final result = report.result;
     final scheme = Theme.of(context).colorScheme;
+    final coverage = (result.accuracy * 100).round();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          result.total == 0 ? '—' : '${(result.accuracy * 100).round()}%',
+          result.total == 0 ? '—' : '${(passRate(result) * 100).round()}%',
           style: Theme.of(context).textTheme.displaySmall?.copyWith(
             fontWeight: FontWeight.w700,
             color: scheme.primary,
           ),
         ),
         Text(
-          '准确率 · 共 ${result.total} 下'
+          '合格 · 覆盖 $coverage% · 共 ${result.total} 下'
           '(准 ${result.onTime} · 早 ${result.early} · 晚 ${result.late} · '
           '漏 ${result.missed} · 错 ${result.wrong})',
           style: Theme.of(
@@ -314,14 +316,15 @@ class _BarStrip extends StatelessWidget {
             avatar: Icon(
               Icons.circle,
               size: 14,
-              color: (bar.matched / bar.total) >= 0.9
+              // 底色按合格率(工单55):全红小节不该是满格棕;覆盖数在头部。
+              color: (bar.passed / bar.total) >= 0.9
                   ? Theme.of(context).colorScheme.primary
-                  : (bar.matched / bar.total) >= 0.5
+                  : (bar.passed / bar.total) >= 0.5
                   ? Theme.of(context).colorScheme.tertiary
                   : Theme.of(context).colorScheme.error,
             ),
             label: Text(
-              '${bar.bar + 1}:${bar.matched}/${bar.total}',
+              '${bar.bar + 1}:${bar.passed}/${bar.total}',
               style: Theme.of(context).textTheme.labelMedium,
             ),
           ),

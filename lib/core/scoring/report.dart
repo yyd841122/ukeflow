@@ -127,33 +127,49 @@ List<StrumSpot> worstSpots(ScoringReport report, {int count = 3}) {
   return candidates.take(count).toList();
 }
 
+/// 合格率(工单55):非「漏」且非「错」占比——用户体感的「对了多少」。
+/// 覆盖率 = [ScoreResult.accuracy](非「漏」占比),两者拆开报防误导:
+/// 弹了但和弦错曾计入「准确率」,全错的曲子显示满格(工单 55 立票现场)。
+double passRate(ScoreResult result) =>
+    result.total == 0 ? 0 : (result.total - result.missed - result.wrong) / result.total;
+
 /// 小节聚合:每小节的命中/总数(谱序,无扫弦点的小节不出现)。
 class BarAccuracy {
   const BarAccuracy({
     required this.bar,
     required this.matched,
+    required this.passed,
     required this.total,
   });
 
   final int bar;
+
+  /// 命中数(非「漏」);[passed] = 其中和弦也对的数(合格)。
   final int matched;
+  final int passed;
   final int total;
 }
 
 List<BarAccuracy> accuracyByBar(ScoringReport report) {
   final order = <int>[];
-  final byBar = <int, (int, int)>{};
+  final byBar = <int, (int, int, int)>{};
   for (final spot in report.spots) {
     if (!byBar.containsKey(spot.barIndex)) order.add(spot.barIndex);
-    final (matched, total) = byBar[spot.barIndex] ?? (0, 0);
+    final (matched, passed, total) = byBar[spot.barIndex] ?? (0, 0, 0);
     byBar[spot.barIndex] = (
       matched + (spot.judgment == StrumJudgment.missed ? 0 : 1),
+      passed + (spot.judgment == StrumJudgment.missed || spot.judgment == StrumJudgment.wrong ? 0 : 1),
       total + 1,
     );
   }
   return [
     for (final bar in order)
-      BarAccuracy(bar: bar, matched: byBar[bar]!.$1, total: byBar[bar]!.$2),
+      BarAccuracy(
+        bar: bar,
+        matched: byBar[bar]!.$1,
+        passed: byBar[bar]!.$2,
+        total: byBar[bar]!.$3,
+      ),
   ];
 }
 

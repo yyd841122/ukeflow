@@ -100,6 +100,31 @@ void main() {
     expect(byBar[3].matched, 4);
   });
 
+  test('小节聚合:passed 把「错」从合格里剔除(工单55,全红小节不该满格)', () {
+    final onsets = allOnTime();
+    final report = reportOf(onsets, verify: (i, _) => i < 12); // 小节 3 全错
+    final byBar = accuracyByBar(report);
+    expect(byBar[0].passed, 4, reason: '全准 = 全合格');
+    expect(byBar[3].matched, 4, reason: '错也算听到(覆盖)');
+    expect(byBar[3].passed, 0, reason: '全错小节合格 0 —— 底色应全红');
+  });
+
+  test('passRate:非「漏」且非「错」占比;total=0 → 0(工单55)', () {
+    expect(passRate(reportOf(allOnTime()).result), 1);
+    // 16 点:漏 1(点 0)+ 错 1(点 3 时机准和弦错)→ 合格 14/16。
+    final onsets = allOnTime();
+    onsets[0] = -99;
+    final mixed = reportOf(
+      onsets,
+      verify: (i, _) => i != 3,
+    );
+    expect(mixed.result.missed, 1);
+    expect(mixed.result.wrong, 1);
+    expect(passRate(mixed.result), closeTo(14 / 16, 1e-9));
+    // 覆盖率口径不变(「错」计入覆盖):15/16。
+    expect(mixed.result.accuracy, closeTo(15 / 16, 1e-9));
+  });
+
   test('行聚合:行号带所属段落,各行的命中/总数', () {
     final onsets = allOnTime();
     onsets[0] = -99; // 段1行1 漏 1
