@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -8,6 +10,7 @@ import 'package:ukeflow/core/model/builtin_strum_patterns.dart';
 import 'package:ukeflow/core/model/chord.dart';
 import 'package:ukeflow/core/practice/play_timeline.dart';
 import 'package:ukeflow/core/scoring/strum_scorer.dart';
+import 'package:ukeflow/features/play/scoring/chroma_debug_probe.dart';
 import 'package:ukeflow/features/play/scoring/practice_scoring_controller.dart';
 
 import 'helpers/chart_fixtures.dart';
@@ -525,5 +528,116 @@ void main() {
 
     final live = container.read(practiceScoringProvider).liveVerdicts!;
     expect(live, everyElement(StrumJudgment.onTime), reason: '变速段按新周期折秒,照常判准');
+  });
+
+  test('[DEBUG-chroma] 强开探针:finish 取证落盘,meta 与报告同判(工单 54)', () async {
+    final tmp = Directory.systemTemp.createTempSync('chroma-probe-e2e');
+    final logs = <String>[];
+    ChromaDebugProbe.forceEnabled = true;
+    ChromaDebugProbe.outputDirOverride = tmp;
+    ChromaDebugProbe.logOverride = logs.add;
+    addTearDown(() {
+      ChromaDebugProbe.forceEnabled = null;
+      ChromaDebugProbe.outputDirOverride = null;
+      ChromaDebugProbe.logOverride = null;
+      tmp.deleteSync(recursive: true);
+    });
+
+    armHandle();
+    await controller().startSession();
+    controller().onPassStart();
+    await feed(standardPass(wrongAt: {5}));
+    handle.closeSession();
+    controller().finishSession();
+
+    // 落盘 fire-and-forget:轮询等 meta.json(收尾标记,真 IO 重试防挂)。
+    final sessionsDir = Directory('${tmp.path}/ukulele-chroma-dump');
+    final sessions = <Directory>[];
+    for (var i = 0; i < 100; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      sessions
+        ..clear()
+        ..addAll(
+          sessionsDir.existsSync()
+              ? sessionsDir
+                    .listSync()
+                    .whereType<Directory>()
+                    .where((d) => File('${d.path}/meta.json').existsSync())
+              : <Directory>[],
+        );
+      if (sessions.isNotEmpty) break;
+    }
+    expect(sessions, hasLength(1));
+    final meta = jsonDecode(
+      File('${sessions.first.path}/meta.json').readAsStringSync(),
+    ) as Map<String, Object?>;
+    final wav = File('${sessions.first.path}/session.wav');
+    expect(wav.existsSync(), isTrue);
+    expect(wav.lengthSync(), greaterThan(44100 * 2), reason: '整遍 WAV 至少 1s');
+
+    // meta 与报告同判:verdicts 与 slots 同长,slot 5 = wrong。
+    final report = container.read(practiceScoringProvider).report!;
+    final verdicts = meta['verdicts']! as List<Object?>;
+    expect(verdicts, hasLength(report.spots.length));
+    expect((verdicts[5] as Map)['judgment'], 'wrong');
+    final byChordLine = logs.singleWhere((l) => l.contains('byChord'));
+    expect(byChordLine, contains('wrong=1'));
+    expect(
+      logs.where((l) => l.contains('slot i=5 ')).single,
+      contains('verdict=wrong'),
+      reason: 'logs=$logs',
+    );
+
+    // 色度证据:20 个 onset(4 预备 + 16 正曲),16 个配上槽。
+    expect((meta['onsets'] as List), hasLength(20));
+    expect((meta['pairs'] as List), hasLength(16));
+    expect((meta['chroma'] as List), hasLength(20));
+    expect(
+      (meta['chroma'] as List).where((c) => (c as Map)['paired'] == true),
+      hasLength(16),
+    );
+    // 延迟:standardPass 链路 +80ms,预备中位数校准吸收(±容差内)。
+    final latency = (meta['latencySec'] as num).toDouble();
+    expect(latency, closeTo(0.08, 0.03), reason: 'latency=$latency');
+    expect(meta['latencySource'], 'calibrated');
+  });
+
+  test('封闭集只含谱面和弦:会话柄多余变体不参赛(工单54 真机定案回归)', () async {
+    final tmp = Directory.systemTemp.createTempSync('chroma-probe-closed');
+    final logs = <String>[];
+    ChromaDebugProbe.forceEnabled = true;
+    ChromaDebugProbe.outputDirOverride = tmp;
+    ChromaDebugProbe.logOverride = logs.add;
+    addTearDown(() {
+      ChromaDebugProbe.forceEnabled = null;
+      ChromaDebugProbe.outputDirOverride = null;
+      ChromaDebugProbe.logOverride = null;
+      tmp.deleteSync(recursive: true);
+    });
+
+    armHandle();
+    // 模拟生产现场(工单54 真机定案):会话柄给的是全和弦库,C 三和弦的
+    // 超集变体全在候选里——真实琴声的余弦分会被 Cmaj7/Am7 以 0.003-0.03
+    // 反超,C 槽系统性灭灯。
+    handle.chords['Cmaj7'] = chordWithMidi(const [60, 64, 67, 71]);
+    handle.chords['Am7'] = chordWithMidi(const [57, 60, 64, 67]);
+    handle.chords['Dm11'] = chordWithMidi(const [50, 53, 57, 60]);
+
+    await controller().startSession();
+    controller().onPassStart();
+    await feed(standardPass());
+    handle.closeSession();
+    controller().finishSession();
+
+    final startLine = logs.singleWhere((l) => l.contains('pass start'));
+    expect(startLine, contains('Am:['), reason: '谱面和弦在封闭集:$startLine');
+    expect(startLine, contains('C:['));
+    expect(startLine.contains('Am7:'), isFalse, reason: '谱面外变体不参赛:$startLine');
+    expect(startLine.contains('Cmaj7:'), isFalse, reason: startLine);
+    expect(startLine.contains('Dm11:'), isFalse, reason: startLine);
+
+    // 判定面:标准弹奏(全对)在污染候选下不得产生 wrong。
+    final report = container.read(practiceScoringProvider).report!;
+    expect(report.result.wrong, 0, reason: '弹对了就是对的,变体不参赛');
   });
 }

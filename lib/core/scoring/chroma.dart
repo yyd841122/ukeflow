@@ -67,6 +67,17 @@ class ChromaMatcher {
   final List<String> _labels;
   final List<ChromaVector> _templates;
 
+  /// 全模板得分(降序):[bestMatch] 的审计缝——插桩与离线回灌要看
+  /// 「目标以外差多少」,只有 argmax 不够(工单 54)。排序仅供展示,
+  /// 判定语义仍以 [bestMatch] 为准。
+  List<({String label, double score})> scoresFor(ChromaVector chroma) {
+    final out = [
+      for (var i = 0; i < _templates.length; i++)
+        (label: _labels[i], score: cosineSimilarity(chroma, _templates[i])),
+    ]..sort((a, b) => b.score.compareTo(a.score));
+    return out;
+  }
+
   /// 最佳匹配;全零色度(静音/无信号)返回 null。
   ChromaBestMatch? bestMatch(ChromaVector chroma) {
     var sum = 0.0;

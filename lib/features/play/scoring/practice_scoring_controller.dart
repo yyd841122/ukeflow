@@ -18,6 +18,7 @@ import '../../../core/tuner/tuner_recorder.dart';
 import '../../../data/settings_providers.dart';
 import '../play_practice_controller.dart'
     show PlayPracticeController, playPracticeProvider;
+import 'chroma_debug_probe.dart';
 import 'practice_session_handle.dart';
 
 /// 评分会话状态(GLOSSARY「跟练评分」)。
@@ -136,6 +137,13 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   MicAudioBuffer _buffer = MicAudioBuffer();
   final _onsets = <_OnsetRec>[];
 
+  /// [DEBUG-chroma] 插桩(工单 54):release/测试宿主恒 null,零开销。
+  /// 不用 static final 缓存——enabled 现读(测试缝逐用例强开)。
+  ChromaDebugProbe? _probeObj;
+  ChromaDebugProbe? get _probe => ChromaDebugProbe.enabled
+      ? (_probeObj ??= ChromaDebugProbe())
+      : null;
+
   // 当前遍的期望点(拍域)、时间轴、锚点秒与周期;onPassStart 时由会话
   // 柄取定。时间轴缓存自取:曲末/停止时跟练控制器先清时间轴,报告组装
   // 仍要谱面信息(小节/槽位/行归属)。
@@ -161,18 +169,30 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
 
   PracticeSessionHandle get _handle => ref.read(practiceScoringHandleProvider);
 
-  /// 判定用谱面和弦 → 发声音高类(0..11)的封闭集。主指法即用户照图
-  /// 按的那一个;音高类从发声基频换算(midi 字段缺位同样可算)。
-  Map<String, List<int>> get _midiByChord => {
-    for (final entry in _handle.chords.entries)
-      if (entry.value.fingerings.isNotEmpty)
-        entry.key: [
-          for (final freq in entry.value.primaryFingering.stringFrequencies)
-            if (freq != null)
-              ((69 + 12 * math.log(freq / 440) / math.ln2).round() % 12 + 12) %
-                  12,
-        ],
-  };
+  /// 判定用谱面和弦 → 发声音高类(0..11)的封闭集。**封闭集只含本遍
+  /// 谱面出现的和弦**(工单54 真机定案:[_handle.chords] 生产侧是全和弦
+  /// 库,547 个模板里 C 三和弦的超集变体 Cmaj7/Am7 等以 0.003-0.03 的
+  /// 余弦分系统性反超纯三和弦目标,C 槽灭灯、G 次之、G7 变体最少反而
+  /// 全过——收窄后真实 C 窗 0.90 vs 次名 0.42,判然分明)。主指法即
+  /// 用户照图按的那一个;音高类从发声基频换算(midi 字段缺位同样可算)。
+  Map<String, List<int>> get _midiByChord {
+    final sessionChords = <String>{
+      for (final t in _strumTargets)
+        if (t.chord != null) t.chord!,
+    };
+    return {
+      for (final entry in _handle.chords.entries)
+        if (sessionChords.contains(entry.key) &&
+            entry.value.fingerings.isNotEmpty)
+          entry.key: [
+            for (final freq in entry.value.primaryFingering.stringFrequencies)
+              if (freq != null)
+                ((69 + 12 * math.log(freq / 440) / math.ln2).round() % 12 +
+                    12) %
+                    12,
+          ],
+    };
+  }
 
   @override
   PracticeScoringState build() {
@@ -243,6 +263,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     _onsets.clear();
     _buffer = MicAudioBuffer();
     _chromaCache.clear();
+    _probe?.passStart(
+      chordsMidi: _midiByChord,
+      periodMs: _passPeriodMs,
+      targetCount: _strumTargets.length,
+    );
     // 实时判定清零(工单 36):循环重开清零、回到开头清零,同一入口。
     _chromaCheckAt = null;
     state = state.copyWith(
@@ -268,7 +293,9 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   /// (一开播就停)不弹报告直接回 idle——与 demo 同语义。
   void finishSession() {
     if (state.status != ScoringStatus.listening) return;
-    _reportLatencySec = _calibratedLatency();
+    final prepPairs = _prepPairs();
+    final calibrated = calibrateLatencySec(prepPairs);
+    _reportLatencySec = calibrated ?? _persistedLatencySec();
     _replayTimes = _buildReplayTimes();
     final report = _buildReport(_reportLatencySec);
     // 停麦 fire-and-forget:fake zone 里 cancel/close 的 Future 不被 pump
@@ -285,6 +312,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
       );
       return;
     }
+    _probeDump(
+      report: report,
+      calibrated: calibrated,
+      prepPairErrSec: [for (final (_, _, err) in prepPairs) err],
+    );
     state = state.copyWith(
       status: ScoringStatus.finished,
       suspended: false,
@@ -539,14 +571,16 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   /// 链路延迟:预备四下的 matched 误差中位数;采不到回退持久化值。
   /// 全 onset 参与配对比 worry 无虞:正曲首拍距预备末拍恒 1 拍,产品域
   /// 内 1 拍 ≥288ms(208BPM)> 容差 180ms,正曲 onset 进不了预备配对。
-  double _calibratedLatency() {
-    final pairs = matchPairs(
-      targets: _prepTargets,
-      onsets: _scoredOnsets,
-      toleranceSec: strumToleranceSec,
-    );
-    return calibrateLatencySec(pairs) ?? _persistedLatencySec();
-  }
+  double _calibratedLatency() =>
+      calibrateLatencySec(_prepPairs()) ?? _persistedLatencySec();
+
+  /// 预备数拍的配对(校准与 [DEBUG-chroma] 取证共用;latencySec 传 0,
+  /// 误差即原始链路偏移)。
+  List<ScoredPair> _prepPairs() => matchPairs(
+    targets: _prepTargets,
+    onsets: _scoredOnsets,
+    toleranceSec: strumToleranceSec,
+  );
 
   double _persistedLatencySec() => ref.read(scoringLatencyMsProvider) / 1000.0;
 
@@ -590,11 +624,25 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   /// 120ms 保住最短可用窗)。窗尾单源 [_chromaWindowEnd],实时判定与
   /// 报告期同窗。
   ChromaBestMatch? _chromaBest(ChromaMatcher matcher, int onsetIndex) {
-    final onset = _onsets[onsetIndex];
-    final samples = _buffer.window(onset.engineSec - 0.02, _chromaWindowEnd(onsetIndex));
-    if (samples.isEmpty) return null;
+    final w = _chromaWindow(onsetIndex);
+    if (w.samples.isEmpty) return null;
     return matcher.bestMatch(
-      chromaFromSamples(samples, sampleRate: micSampleRate),
+      chromaFromSamples(w.samples, sampleRate: micSampleRate),
+    );
+  }
+
+  /// onset 色度窗(样本 + 引擎秒端点):窗策略单源,判定与 [DEBUG-chroma]
+  /// 取证同窗(工单 54 离线回灌按端点重切)。
+  ({Float64List samples, double startSec, double endSec}) _chromaWindow(
+    int onsetIndex,
+  ) {
+    final onset = _onsets[onsetIndex];
+    final startSec = onset.engineSec - 0.02;
+    final endSec = _chromaWindowEnd(onsetIndex);
+    return (
+      samples: _buffer.window(startSec, endSec),
+      startSec: startSec,
+      endSec: endSec,
     );
   }
 
@@ -606,6 +654,103 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
         ? _onsets[onsetIndex + 1].engineSec - onset.engineSec
         : 0.3;
     return onset.engineSec + math.min(0.3, math.max(nextGap - 0.01, 0.12));
+  }
+
+  /// [DEBUG-chroma] 取证(工单 54,release/测试宿主为 null 桩):与判定
+  /// 同算式重算逐 onset 窗+色度+全模板分(窗口/窗口期同单源,数据即判定
+  /// 现场),连同配对、判定、延迟校准与整遍 WAV 交探针落盘。fire-and-
+  /// forget:落盘失败不拦报告(日志里有 FAILED 行)。
+  void _probeDump({
+    required ScoringReport report,
+    required double? calibrated,
+    required List<double> prepPairErrSec,
+  }) {
+    final probe = _probe;
+    if (probe == null) return;
+    final matcher = _matcher;
+    final strums = _passTimeline?.strums;
+    final pairs = matchPairs(
+      targets: _strumTargets,
+      onsets: _scoredOnsets,
+      toleranceSec: strumToleranceSec,
+      latencySec: _reportLatencySec,
+    );
+    final pairedOnsets = {for (final (_, oi, _) in pairs) oi};
+    final chromaRecs = <ChromaDebugChromaRec>[];
+    for (var oi = 0; oi < _onsets.length && matcher != null; oi++) {
+      final w = _chromaWindow(oi);
+      final samples = w.samples;
+      var energy = 0.0;
+      for (final s in samples) {
+        energy += s * s;
+      }
+      final rms = samples.isEmpty ? 0.0 : math.sqrt(energy / samples.length);
+      final chroma = samples.isEmpty
+          ? null
+          : chromaFromSamples(samples, sampleRate: micSampleRate);
+      final best = chroma == null ? null : matcher.bestMatch(chroma);
+      chromaRecs.add(
+        ChromaDebugChromaRec(
+          onsetIndex: oi,
+          paired: pairedOnsets.contains(oi),
+          startSec: w.startSec,
+          endSec: w.endSec,
+          sampleCount: samples.length,
+          rms: rms,
+          bins: chroma?.bins ?? Float64List(12),
+          scores: chroma == null
+              ? const {}
+              : {for (final s in matcher.scoresFor(chroma)) s.label: s.score},
+          bestLabel: best?.label,
+          bestScore: best?.score ?? 0,
+        ),
+      );
+    }
+    final wav = _buffer.startSec == null
+        ? null
+        : _buffer.wavSnippet(startSec: _buffer.startSec!, endSec: _buffer.endSec!);
+    unawaited(
+      probe.dump(
+        ChromaDebugDump(
+          anchorSec: _passAnchorSec,
+          periodMs: _passPeriodMs,
+          bufferStartSec: _buffer.startSec,
+          bufferEndSec: _buffer.endSec,
+          latencySec: _reportLatencySec,
+          latencySource: calibrated == null ? 'persisted' : 'calibrated',
+          prepPairErrSec: prepPairErrSec,
+          chordsMidi: _midiByChord,
+          threshold: chromaMatchThreshold,
+          slots: [
+            for (var i = 0; i < _strumTargets.length; i++)
+              ChromaDebugSlotRec(
+                barIndex: i < (strums?.length ?? 0) ? strums![i].barIndex : -1,
+                slotInBar: i < (strums?.length ?? 0) ? strums![i].slotInBar : -1,
+                beat: _strumTargets[i].beat,
+                chord: _strumTargets[i].chord,
+              ),
+          ],
+          verdicts: [
+            for (final v in report.result.verdicts)
+              (judgment: v.judgment.name, errSec: v.errorSec),
+          ],
+          onsets: [
+            for (final o in _onsets)
+              ChromaDebugOnsetRec(
+                engineSec: o.engineSec,
+                beat: o.beat,
+                periodMs: o.periodMs,
+              ),
+          ],
+          pairs: [
+            for (final (ti, oi, err) in pairs)
+              (targetIndex: ti, onsetIndex: oi, errSec: err),
+          ],
+          chroma: chromaRecs,
+          wav: wav,
+        ),
+      ),
+    );
   }
 
   /// 重听定位:命中点用检出时刻,漏点用期望时刻(锚点+拍×当前遍周期;

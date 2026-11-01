@@ -27,6 +27,10 @@ dependencies:
   file_selector: ^1.1.0
   # 导入独奏谱内容指纹(工单 43):源 JSON 的 sha256 落 contentSha 列。
   crypto: ^3.0.0
+  # [DEBUG-chroma] 插桩(工单 54):评分会话音频+色度证据落 cache 目录
+  # 供 adb run-as 回灌。仅 debug 探针引用(FLUTTER_TEST/rel 判定关);
+  # drift_flutter 已传递引入,这里转直接依赖。
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

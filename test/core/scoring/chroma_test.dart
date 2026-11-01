@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -121,6 +122,27 @@ void main() {
     expect(cosineSimilarity(cT, gT), lessThan(1));
   });
 
+  test('scoresFor:降序全模板分,首位与 bestMatch 同判(工单 54 审计缝)', () {
+    final m = matcher();
+    final c = chromaOf(chordSignal(voicings['C']!), 0, 0.3);
+    final scores = m.scoresFor(c);
+    expect(scores.first.label, 'C'); // C 信号对 C 模板最高
+    for (var i = 1; i < scores.length; i++) {
+      expect(scores[i].score, lessThanOrEqualTo(scores[i - 1].score));
+    }
+    final best = m.bestMatch(c)!;
+    expect(scores.first.label, best.label);
+    expect(scores.first.score, closeTo(best.score, 1e-12));
+    // 逐项与余弦定义对账(模板已归一,分数即点积)。
+    for (final entry in voicings.entries) {
+      final expected = cosineSimilarity(c, chordTemplate(entry.value));
+      expect(
+        scores.firstWhere((s) => s.label == entry.key).score,
+        closeTo(expected, 1e-12),
+      );
+    }
+  });
+
   test('静音窗:零向量,bestMatch 返回 null(不判对也不判错)', () {
     final c = chromaFromSamples(Float64List(8192), sampleRate: sr);
     expect(matcher().bestMatch(c), isNull);
@@ -131,4 +153,59 @@ void main() {
     final c = chromaOf(signal, 0.1, 0.1 + 0.02); // 20ms << 4096 样本
     expect(matcher().bestMatch(c), isNotNull);
   });
+
+  test('真机黄金样张(工单54 回灌):真实 C 扫弦窗在封闭集里 C 大幅胜出', () {
+    // 2026-11-01 真机会话(两只老虎 50%,OPPO PCAM00)slot 37 的色度窗
+    // (onset+56.155s 起 320ms,滤前 PCM16):top 类 C:670 E:598 G:318,
+    // 教科书级 C 大三。真实信号的全部物理(琴弦泛音/麦 HAL/房间/嘀声
+    // 残余)都锁在这 28KB 里——色度参数漂移,这里红。
+    final wav = File('test/fixtures/scoring/real_uke_c_window.wav').readAsBytesSync();
+    final samples = _pcm16MonoFromWav(wav);
+    expect(samples.length, 14112, reason: '320ms @44.1kHz');
+    final c = chromaFromSamples(samples, sampleRate: sr);
+
+    const closed = <String, List<int>>{
+      'C': [67, 60, 64, 72],
+      'G': [55, 62, 67, 71],
+      'G7': [55, 62, 65, 71],
+    };
+    final m = ChromaMatcher(midiByChord: closed);
+    final best = m.bestMatch(c)!;
+    final scores = m.scoresFor(c);
+    expect(best.label, 'C', reason: '真 C 窗必须命中 C');
+    expect(best.score, greaterThan(0.85), reason: '封闭集下余弦分真机实测 0.9x');
+    expect(
+      best.score - scores[1].score,
+      greaterThan(0.25),
+      reason: '对 G/G7 的余量;分数若贴近,阈值/归一漂移先行报警',
+    );
+  });
+}
+
+/// 最小 RIFF 解析:取 data 块的 PCM16 mono 样本(测试专用,只认自产
+/// wrapPcm16MonoWav 的规范形态)。
+Float64List _pcm16MonoFromWav(Uint8List wav) {
+  final bd = ByteData.sublistView(wav);
+  expect(wav.lengthInBytes, greaterThanOrEqualTo(44));
+  expect(wav[0], 0x52); // 'R'
+  expect(wav[8], 0x57); // 'W'
+  var pos = 12;
+  var dataStart = -1, dataLen = 0;
+  while (pos + 8 <= wav.lengthInBytes) {
+    final id = String.fromCharCodes(wav.sublist(pos, pos + 4));
+    final size = bd.getUint32(pos + 4, Endian.little);
+    if (id == 'data') {
+      dataStart = pos + 8;
+      dataLen = size;
+      break;
+    }
+    pos += 8 + size + (size.isOdd ? 1 : 0);
+  }
+  expect(dataStart, greaterThanOrEqualTo(44), reason: '无 data 块');
+  final n = dataLen ~/ 2;
+  final out = Float64List(n);
+  for (var i = 0; i < n; i++) {
+    out[i] = bd.getInt16(dataStart + i * 2, Endian.little) / 32767.0;
+  }
+  return out;
 }
