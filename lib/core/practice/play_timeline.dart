@@ -129,6 +129,19 @@ class PlayTimeline {
   /// practiceStateAt），与名义曲长至差一次四舍五入。
   Duration get totalDuration =>
       Duration(milliseconds: (totalBeats * periodMs).round());
+
+  /// 首小节的和弦名(按拍序去重;工单 53 预备数拍期预告的数据源)。小节
+  /// 分配约定(每个和弦记号独占一小节)下结构上至多一个;谱首无和弦记号
+  /// 时为空表——右手照扫无和弦可依,预告卡不渲染。
+  List<String> get firstBarChords {
+    final names = <String>[];
+    for (final strum in strums) {
+      if (strum.barIndex > 0) break; // strums 按时刻升序,首小节尽在头部。
+      final chord = strum.chord;
+      if (chord != null && !names.contains(chord)) names.add(chord);
+    }
+    return names;
+  }
 }
 
 /// 时间轴编译器：弹唱谱+节奏型+BPM（+变速）→ [PlayTimeline]。

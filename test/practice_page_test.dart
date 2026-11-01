@@ -7,6 +7,7 @@ import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/data/settings_providers.dart';
 import 'package:ukeflow/core/tuner/tuner_recorder.dart';
+import 'package:ukeflow/features/chords/chord_diagram.dart';
 import 'package:ukeflow/features/demo/demo_playback_controller.dart';
 import 'package:ukeflow/features/play/play_practice_controller.dart';
 import 'package:ukeflow/features/play/practice_page.dart';
@@ -188,6 +189,43 @@ void main() {
 
     await advanceAndPump(tester, 800); // 过第 1 预备拍(750ms)
     expect(tester.widget<Text>(find.byKey(const Key('prep-count'))).data, '3');
+  });
+
+  testWidgets('预备期首小节和弦预告(工单 53):倒计旁名字+指法图,进曲即隐', (tester) async {
+    await pumpPage(tester);
+    await tester.ensureVisible(find.byKey(const Key('practice-start')));
+    await tester.tap(find.byKey(const Key('practice-start')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.byKey(const Key('prep-first-chords')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('prep-first-chords')),
+        matching: find.text('Am'),
+      ),
+      findsOneWidget,
+      reason: 'fixture 首小节 [Am]',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('prep-first-chords')),
+        matching: find.byType(ChordDiagram),
+      ),
+      findsOneWidget,
+      reason: '指法小图随和弦库就绪',
+    );
+
+    // 进曲即隐:预告随倒计面板整体消失,不残留(非常驻预告)。
+    await advanceAndPump(tester, 3100);
+    expect(find.byKey(const Key('prep-count')), findsNothing);
+    expect(find.byKey(const Key('prep-first-chords')), findsNothing);
+
+    // 回到开头重进预备:预告随倒计重现(循环遍间停顿同理)。
+    await tester.tap(find.byKey(const Key('practice-restart')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.byKey(const Key('prep-first-chords')), findsOneWidget);
   });
 
   testWidgets('暂停冻结画面,继续后随引擎时刻续跑', (tester) async {

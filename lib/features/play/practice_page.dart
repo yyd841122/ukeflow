@@ -317,37 +317,57 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
     AsyncValue<ChordLibrary> libraryAsync,
   ) {
     final scoring = ref.watch(practiceScoringProvider);
+    // 和弦库缺位(资产坏损等极端路径)不冻结练习:指法小图缺席,
+    // 和弦名/歌词/箭头照走(视图对查不到的和弦本就兜底显示名字)。
+    // Riverpod 3 的 AsyncValue.value 在 error 态返回 null,恰作降级判据。
+    final chords = _chordMap(libraryAsync.value);
     return Column(
       children: [
         Expanded(
           child: prepCount != null
-              ? _prepPanel(prepCount!, scoring)
-              : _songBody(libraryAsync, state.pattern, scoring.liveVerdicts),
+              ? _prepPanel(prepCount!, scoring, chords)
+              : _songBody(chords, state.pattern, scoring.liveVerdicts),
         ),
         _controls(state),
       ],
     );
   }
 
-  /// 预备数拍面板:大字倒计 + 提示。预备拍的声音由调度器管(专用音源),
-  /// 这里只读 [prepStateAt] 的倒计。评分开着加一句校准引导(预备数拍
-  /// 期间用户照常扫四下,GLOSSARY「延迟校准」)。
-  Widget _prepPanel(int prepCount, PracticeScoringState scoring) {
+  /// 预备数拍面板:大字倒计 + 首小节和弦预告(工单 53,进曲前把手摆到位)
+  /// + 提示。预备拍的声音由调度器管(专用音源),这里只读 [prepStateAt] 的
+  /// 倒计。评分开着加一句校准引导(预备数拍期间用户照常扫四下,GLOSSARY
+  /// 「延迟校准」)。预告随本面板整体存在:进曲即隐,无预备即无预告。
+  Widget _prepPanel(
+    int prepCount,
+    PracticeScoringState scoring,
+    Map<String, Chord> chords,
+  ) {
     final hint = scoring.status == ScoringStatus.listening
         ? '跟着拍子扫四下,我在校准延迟'
         : prepCount > 2
         ? '跟着拍子数,准备手指'
         : '马上开弹';
+    final firstChords = _controller.timeline?.firstBarChords ?? const [];
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          '$prepCount',
-          key: const Key('prep-count'),
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$prepCount',
+              key: const Key('prep-count'),
+              style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            // 谱首无和弦记号(空表)无可预告,不占位。
+            if (firstChords.isNotEmpty) ...[
+              const SizedBox(width: 24),
+              PrepFirstChordPreview(chordNames: firstChords, chords: chords),
+            ],
+          ],
         ),
         const SizedBox(height: 12),
         Text(
@@ -362,7 +382,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
   }
 
   Widget _songBody(
-    AsyncValue<ChordLibrary> libraryAsync,
+    Map<String, Chord> chords,
     StrumPattern pattern,
     List<StrumJudgment?>? liveVerdicts,
   ) {
@@ -372,10 +392,6 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
       // 首查前的过渡帧(轮询首查同步,常态 ≤ 一帧)。
       return const Center(child: CircularProgressIndicator());
     }
-    // 和弦库缺位(资产坏损等极端路径)不冻结练习:指法小图缺席,
-    // 和弦名/歌词/箭头照走(视图对查不到的和弦本就兜底显示名字)。
-    // Riverpod 3 的 AsyncValue.value 在 error 态返回 null,恰作降级判据。
-    final chords = _chordMap(libraryAsync.value);
     return PracticeView(
       timeline: timeline,
       practice: visual,

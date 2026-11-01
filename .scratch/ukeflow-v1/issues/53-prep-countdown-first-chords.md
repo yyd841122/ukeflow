@@ -13,8 +13,9 @@
 
 **Blocked by:** 无
 
-**Status:** ready-for-agent
+**Status:** implemented (awaiting device check)
 
 ## Comments
 
 - 2026-10-30 (立票): 33/36 验收现场 UX 反馈。同场另一条 UX 观察:运行态箭头条无图例,判定四色(绿准/蓝早/黄晚/灰漏/红错)语义不可自解释,用户当场问「变色什么意思」——是否给运行态加常驻小图例与 36 报告页图例统一,留用户定夺,暂不立案。
+- 2026-11-01 (实现): 三处落地。①数据缝 `PlayTimeline.firstBarChords`(纯 getter:strums 按 barIndex==0 头部取和弦名按拍序去重,strums 升序故 break 即出;小节分配约定「每和弦记号独占一小节」下结构上至多 1 个,按拍序列出是防御性语义,编译器构造不出多和弦首小节故无对应测试);②视图件 `PrepFirstChordPreview`(practice_view.dart 公有,primaryContainer 卡=名字+指法小图 56px+「第 1 小节」题注,和弦库缺位时名字照走小图缺席,与 _ChordCard 同一降级语义;键 prep-first-chords / prep-first-chord-diagram-<名>);③页面接线(practice_page.dart):_runningBody 把 `_chordMap(libraryAsync.value)` 算一次传两支,_prepPanel 倒计数字旁挂预告(横排 Row,24px 间距)。范围纪律照守:预告数据是静态首小节 getter 不是预告窗,仅随倒计面板存在(进曲即隐、回到开头/循环遍间随倒计重现),右栏常驻预告未复活;倒计数字/预备拍声/_pick/校准采样零改动;四线谱跟练(tab_practice_* 链)未碰,留 46。测试缝对账:「无预备不显示」——产品里直接开播路径不存在(start/restart/passEnd 全走 4 拍预备,控制器已测),缝由 prepCount!=null 面板门控结构性覆盖。红-绿验证:两测试先红(getter 编译红+页面 findsNothing 红)后绿。flutter 978 全绿(+2)+analyzer 净+check.sh 全闸(pytest 163)。真机待验清单:①预备 4→1 期间倒计旁见首小节和弦名+指法图;②进曲即隐不残留;③回到开头/循环第 2 遍预备重现;④首小节和弦为空(曲首无记号谱)时只有倒计无预告卡;⑤窄屏(小屏机)倒计+预告不溢出。

@@ -359,6 +359,78 @@ class _ChordCard extends StatelessWidget {
   }
 }
 
+/// 预备数拍期首小节和弦预告(工单 53):倒计数字旁的「进曲前把手摆到位」。
+/// 数据是静态的首小节和弦(时间轴 firstBarChords),不是预告窗——仅预备
+/// 期随倒计面板显示,进曲即随面板整体消失,与已撤的右栏常驻预告划清界限。
+class PrepFirstChordPreview extends StatelessWidget {
+  const PrepFirstChordPreview({
+    super.key,
+    required this.chordNames,
+    required this.chords,
+  });
+
+  /// 首小节和弦名(按拍序;谱首无和弦记号时为空,调用方不渲染本卡)。
+  final List<String> chordNames;
+
+  /// 和弦名 → 和弦(指法图数据;库缺位时名字照走、小图缺席)。
+  final Map<String, Chord> chords;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final onCard = scheme.onPrimaryContainer;
+    return Container(
+      key: const Key('prep-first-chords'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final name in chordNames)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (chords[name] case final chord?)
+                      ChordDiagram(
+                        key: Key('prep-first-chord-diagram-$name'),
+                        fingering: chord.primaryFingering,
+                        width: 56,
+                      ),
+                    Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: onCard,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '第 1 小节',
+            style: TextStyle(
+              fontSize: 12,
+              color: onCard.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 下一和弦小预告(俄罗斯方块式,工单 10 预告窗的最小切片):
 /// 小尺寸名字+指法图,次级容器弱化——「待会儿换到什么」扫一眼即知,
 /// 不与当前和弦卡抢注意力。
