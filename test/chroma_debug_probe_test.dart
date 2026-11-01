@@ -4,27 +4,22 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/wav_pcm16.dart';
+import 'package:ukeflow/core/scoring/strum_scorer.dart';
 import 'package:ukeflow/features/play/scoring/chroma_debug_probe.dart';
+
+import 'helpers/chroma_probe_fixtures.dart';
 
 /// [DEBUG-chroma] 探针(工单 54):取证 JSON 的机器可读契约(meta.json
 /// 是离线回灌的输入,字段名漂移=回灌工具静默坏)+ logcat 块格式 +
 /// 测试宿主默认关(保护控制器测试零 IO)。
 void main() {
-  final logs = <String>[];
+  late List<String> logs;
   late Directory tmp;
 
   setUp(() {
-    logs.clear();
-    tmp = Directory.systemTemp.createTempSync('chroma-probe-test');
-    ChromaDebugProbe.forceEnabled = true;
-    ChromaDebugProbe.outputDirOverride = tmp;
-    ChromaDebugProbe.logOverride = logs.add;
-    addTearDown(() {
-      ChromaDebugProbe.forceEnabled = null;
-      ChromaDebugProbe.outputDirOverride = null;
-      ChromaDebugProbe.logOverride = null;
-      tmp.deleteSync(recursive: true);
-    });
+    final armed = armChromaDebugProbe();
+    logs = armed.logs;
+    tmp = armed.dir;
   });
 
   /// 一份典型取证:C/G/G7 会话,3 槽(C 错、C 准、G 漏)+ 1 个未配对
@@ -46,6 +41,7 @@ void main() {
     return ChromaDebugDump(
       anchorSec: 10.0,
       periodMs: 1500,
+      sampleRate: 44100,
       bufferStartSec: 9.8,
       bufferEndSec: 15.2,
       latencySec: 0.091,
@@ -63,9 +59,9 @@ void main() {
         ChromaDebugSlotRec(barIndex: 1, slotInBar: 0, beat: 8, chord: 'G'),
       ],
       verdicts: const [
-        (judgment: 'wrong', errSec: -0.091),
-        (judgment: 'onTime', errSec: 0.01),
-        (judgment: 'missed', errSec: 0),
+        (judgment: StrumJudgment.wrong, errSec: -0.091),
+        (judgment: StrumJudgment.onTime, errSec: 0.01),
+        (judgment: StrumJudgment.missed, errSec: 0),
       ],
       onsets: const [
         ChromaDebugOnsetRec(engineSec: 10.5, beat: 4.02, periodMs: 1500),

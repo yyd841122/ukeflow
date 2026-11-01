@@ -44,3 +44,11 @@
   - **余下 4 个 wrong 逐窗核过,全是真判定**:slot 8(G 目标)窗内纯 C 声(best C 0.873)、slot 28(G7 目标)窗内纯 C 声(best C 0.773)——两次换和弦没跟上,真错;slot 13/23(G 目标)窗内 G 型声,但 G7 以 **0.011/0.028** 的余量反超(G 与 G7 共享 G/B/D,只差 F,窗内稍有 F 能量/噪声铺开就翻)。
   - **留档(非本票修复项)**:G/G7 一线之差是「argmax 即判决」语义的固有边距问题——若后续想宽,候选改法是「目标过阈值且与 best 差 < 边距则不判错」(margin 判决),真机数据已备好两个 case,可另立小票。
   - **顺带观察**:本遍预备四下没扫(prepPairs=0),校准回退持久化 100ms;覆盖率 14/40 也比上一遍低——预备照常扫弦,时机校准与配对都会更准(校准链路本身没毛病,err ±20-60ms 正常)。
+
+- 2026-11-01 (双轴评审落地,收口补遗): Standards 轴 0 硬违规 + 6 judgement call,Spec 轴 1 partial + 1 次要。落地修复:
+  - **meta 采样率单源**(两轴同点名):`micSampleRate` 硬编码 44100 → 经 `ChromaDebugDump.sampleRate` 从常量传入——meta 是离线回灌秒↔样本换算锚,常量变更不再说谎。
+  - **判定枚举过探针**:`verdicts` 从字符串化改携带 `StrumJudgment`,聚合走穷尽 switch(新判定值漏计即编译红),序列化边缘才 `.name`。
+  - **探针强开三连转共享夹具**(`test/helpers/chroma_probe_fixtures.dart`):三处用例复制消除,漏复位不再可能;顺带 `dump ->` 行对 meta 缺位改 existsSync 哨兵。
+  - **票面测试缝欠账补齐**(Spec 轴 partial):chordSignal 扩泛音列(harmonics,三次谐波落纯五度类=变体抢分的合成近似)/整体失谐(±25¢/±40¢)/闷弦(mutedStrings)三变体 + 各自命中与余量断言——探针矩阵从票外临时物转正为回归。
+  - **GLOSSARY 补「封闭集」词条**(含 Avoid:全库候选混用/识别混用)。
+  - **评审保留(留档不改)**:slots/verdicts 平行数组与哨兵值双编码(barIndex -1 vs nullable chord)——meta schema `chroma-debug-probe/1` 已被两份真机样张与回灌工具冻结,结构翻新属 schema 2 的事, Debug 探针不值得。

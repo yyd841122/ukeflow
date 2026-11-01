@@ -714,6 +714,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
         ChromaDebugDump(
           anchorSec: _passAnchorSec,
           periodMs: _passPeriodMs,
+          sampleRate: micSampleRate,
           bufferStartSec: _buffer.startSec,
           bufferEndSec: _buffer.endSec,
           latencySec: _reportLatencySec,
@@ -732,7 +733,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
           ],
           verdicts: [
             for (final v in report.result.verdicts)
-              (judgment: v.judgment.name, errSec: v.errorSec),
+              (judgment: v.judgment, errSec: v.errorSec),
           ],
           onsets: [
             for (final o in _onsets)

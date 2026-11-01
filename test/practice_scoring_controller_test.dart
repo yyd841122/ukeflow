@@ -10,10 +10,10 @@ import 'package:ukeflow/core/model/builtin_strum_patterns.dart';
 import 'package:ukeflow/core/model/chord.dart';
 import 'package:ukeflow/core/practice/play_timeline.dart';
 import 'package:ukeflow/core/scoring/strum_scorer.dart';
-import 'package:ukeflow/features/play/scoring/chroma_debug_probe.dart';
 import 'package:ukeflow/features/play/scoring/practice_scoring_controller.dart';
 
 import 'helpers/chart_fixtures.dart';
+import 'helpers/chroma_probe_fixtures.dart';
 import 'helpers/scoring_fixtures.dart';
 
 /// 跟练评分控制器(工单 33):假录音器+假引擎+假会话柄的会话生命周期、
@@ -531,17 +531,8 @@ void main() {
   });
 
   test('[DEBUG-chroma] 强开探针:finish 取证落盘,meta 与报告同判(工单 54)', () async {
-    final tmp = Directory.systemTemp.createTempSync('chroma-probe-e2e');
-    final logs = <String>[];
-    ChromaDebugProbe.forceEnabled = true;
-    ChromaDebugProbe.outputDirOverride = tmp;
-    ChromaDebugProbe.logOverride = logs.add;
-    addTearDown(() {
-      ChromaDebugProbe.forceEnabled = null;
-      ChromaDebugProbe.outputDirOverride = null;
-      ChromaDebugProbe.logOverride = null;
-      tmp.deleteSync(recursive: true);
-    });
+    final armed = armChromaDebugProbe();
+    final logs = armed.logs;
 
     armHandle();
     await controller().startSession();
@@ -551,7 +542,7 @@ void main() {
     controller().finishSession();
 
     // 落盘 fire-and-forget:轮询等 meta.json(收尾标记,真 IO 重试防挂)。
-    final sessionsDir = Directory('${tmp.path}/ukulele-chroma-dump');
+    final sessionsDir = Directory('${armed.dir.path}/ukulele-chroma-dump');
     final sessions = <Directory>[];
     for (var i = 0; i < 100; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -603,17 +594,8 @@ void main() {
   });
 
   test('封闭集只含谱面和弦:会话柄多余变体不参赛(工单54 真机定案回归)', () async {
-    final tmp = Directory.systemTemp.createTempSync('chroma-probe-closed');
-    final logs = <String>[];
-    ChromaDebugProbe.forceEnabled = true;
-    ChromaDebugProbe.outputDirOverride = tmp;
-    ChromaDebugProbe.logOverride = logs.add;
-    addTearDown(() {
-      ChromaDebugProbe.forceEnabled = null;
-      ChromaDebugProbe.outputDirOverride = null;
-      ChromaDebugProbe.logOverride = null;
-      tmp.deleteSync(recursive: true);
-    });
+    final armed = armChromaDebugProbe();
+    final logs = armed.logs;
 
     armHandle();
     // 模拟生产现场(工单54 真机定案):会话柄给的是全和弦库,C 三和弦的

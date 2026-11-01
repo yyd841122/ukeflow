@@ -20,28 +20,44 @@ void main() {
   };
 
   /// 合成一段扫弦拟声:各弦基频正弦 × 各自错峰起振 × 指数衰减 + 微噪声。
+  /// 变体参数(工单54 测试缝转正:真实信号特征的合成近似,探针矩阵
+  /// 从票外临时物转正为回归)——
+  /// - [harmonics]:每弦谐波列数(1=纯基频;3=基频+2 泛音,幅度 1、1/2、
+  ///   1/4,频率 = n×基频)。真实琴弦带谐波列,三次谐波落纯五度类,是
+  ///   「花哨变体抢分」的合成近似。
+  /// - [detuneCents]:整体失谐,音分(正=偏高;±25¢/±40¢ 为票面探针
+  ///   矩阵档位)。
+  /// - [mutedStrings]:闷弦数(自低音弦侧闷掉,该弦不发声音高)——手型
+  ///   按着但弦没响,模板仍含它(模板=按法骨架的设计前提)。
   Float64List chordSignal(
     List<int> midiNotes, {
     double startSec = 0,
     double lengthSec = 0.3,
     double amp = 0.4,
     int seed = 3,
+    int harmonics = 1,
+    double detuneCents = 0,
+    int mutedStrings = 0,
   }) {
     final total = (0.5 * sr).round();
     final out = Float64List(total);
     final random = math.Random(seed);
     final start = (startSec * sr).round();
     final len = (lengthSec * sr).round();
+    final detune = math.pow(2, detuneCents / 1200).toDouble();
     for (var s = 0; s < midiNotes.length; s++) {
-      final f = 440.0 * math.pow(2, (midiNotes[s] - 69) / 12);
+      if (s < mutedStrings) continue; // 闷弦:不发声
+      final base =
+          440.0 * math.pow(2, (midiNotes[s] - 69) / 12) * detune;
       final offset = start + s * (0.005 * sr).round(); // 弦间错峰 5ms
-      for (var i = 0; offset + i < total && i < len; i++) {
-        final t = i / sr;
-        out[offset + i] +=
-            math.sin(2 * math.pi * f * t) *
-            amp /
-            midiNotes.length *
-            math.exp(-t / 0.08);
+      for (var h = 0; h < harmonics; h++) {
+        final f = base * (h + 1);
+        final hAmp = amp / midiNotes.length / (h + 1) / harmonics * 2;
+        for (var i = 0; offset + i < total && i < len; i++) {
+          final t = i / sr;
+          out[offset + i] +=
+              math.sin(2 * math.pi * f * t) * hAmp * math.exp(-t / 0.08);
+        }
       }
     }
     for (var i = 0; i < total; i++) {
@@ -154,8 +170,42 @@ void main() {
     expect(matcher().bestMatch(c), isNotNull);
   });
 
-  test('真机黄金样张(工单54 回灌):真实 C 扫弦窗在封闭集里 C 大幅胜出', () {
-    // 2026-11-01 真机会话(两只老虎 50%,OPPO PCAM00)slot 37 的色度窗
+  test('变体·泛音列(工单54 测试缝):带谐波的扫弦仍命中自己且有分数余量', () {
+    // 三次谐波落纯五度类(真实琴弦特征,「花哨变体抢分」的合成近似):
+    // 封闭集下目标仍须第一,余量作回归闸。
+    for (final entry in voicings.entries) {
+      final c = chromaOf(chordSignal(entry.value, harmonics: 3), 0, 0.3);
+      final m = matcher();
+      final best = m.bestMatch(c)!;
+      final scores = m.scoresFor(c);
+      expect(best.label, entry.key, reason: '信号 ${entry.key}(泛音列)');
+      expect(
+        best.score - scores[1].score,
+        greaterThan(0.05),
+        reason: '${entry.key} 对次名余量:${best.score} vs ${scores[1].score}',
+      );
+    }
+  });
+
+  test('变体·失谐(工单54 测试缝):±25¢/±40¢ 整体失谐不翻判定', () {
+    for (final cents in const [-40.0, -25.0, 25.0, 40.0]) {
+      final c = chromaOf(chordSignal(voicings['C']!, detuneCents: cents), 0, 0.3);
+      final best = matcher().bestMatch(c)!;
+      expect(best.label, 'C', reason: '失谐 $cents¢');
+      expect(best.score, greaterThan(chromaMatchThreshold), reason: '失谐 $cents¢');
+    }
+  });
+
+  test('变体·闷弦(工单54 测试缝):闷一根弦仍命中(模板=按法骨架)', () {
+    // C [0,0,0,3] 手型闷掉低音弦:模板含 4 弦,信号只 3 弦——封闭验证
+    // 按目标仍须过闸且第一。
+    final c = chromaOf(chordSignal(voicings['C']!, mutedStrings: 1), 0, 0.3);
+    final best = matcher().bestMatch(c)!;
+    expect(best.label, 'C');
+    expect(best.score, greaterThan(chromaMatchThreshold));
+  });
+
+  test('真机黄金样张(工单54 回灌):真实 C 扫弦窗在封闭集里 C 大幅胜出', () {    // 2026-11-01 真机会话(两只老虎 50%,OPPO PCAM00)slot 37 的色度窗
     // (onset+56.155s 起 320ms,滤前 PCM16):top 类 C:670 E:598 G:318,
     // 教科书级 C 大三。真实信号的全部物理(琴弦泛音/麦 HAL/房间/嘀声
     // 残余)都锁在这 28KB 里——色度参数漂移,这里红。

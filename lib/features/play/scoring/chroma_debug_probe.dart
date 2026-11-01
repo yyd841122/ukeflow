@@ -19,6 +19,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/scoring/strum_scorer.dart' show StrumJudgment;
+
 /// 逐槽记录:谱面定位(小节/槽位,与报告轨道对得上)+ 拍位与目标和弦。
 final class ChromaDebugSlotRec {
   const ChromaDebugSlotRec({
@@ -87,6 +89,7 @@ final class ChromaDebugDump {
   const ChromaDebugDump({
     required this.anchorSec,
     required this.periodMs,
+    required this.sampleRate,
     required this.bufferStartSec,
     required this.bufferEndSec,
     required this.latencySec,
@@ -105,6 +108,9 @@ final class ChromaDebugDump {
   final double anchorSec;
   final double periodMs;
 
+  /// 麦采样率(meta 的秒↔样本换算锚,单源 [micSampleRate] 常量)。
+  final int sampleRate;
+
   /// 整遍缓冲的引擎秒端点:WAV 样本 0 = [bufferStartSec]
   /// (离线回灌的秒→样本换算:sampleIndex = (t − start) × rate)。
   final double? bufferStartSec;
@@ -119,9 +125,10 @@ final class ChromaDebugDump {
   final Map<String, List<int>> chordsMidi;
   final double threshold;
 
-  /// 谱序槽位([ChromaDebugSlotRec])与逐槽判定(判定名 + 时机误差秒)。
+  /// 谱序槽位([ChromaDebugSlotRec])与逐槽判定(枚举过探针,序列化
+  /// 边缘才转字符串;聚合走枚举穷尽 switch,新判定值漏计即编译红)。
   final List<ChromaDebugSlotRec> slots;
-  final List<({String judgment, double errSec})> verdicts;
+  final List<({StrumJudgment judgment, double errSec})> verdicts;
 
   final List<ChromaDebugOnsetRec> onsets;
 
@@ -179,7 +186,8 @@ class ChromaDebugProbe {
       final wav = File('$dirPath/session.wav');
       _log(
         'dump -> $dirPath '
-        '(meta.json=${_kb(meta.lengthSync())} wav=${wav.existsSync() ? _kb(wav.lengthSync()) : "-"})',
+        '(meta.json=${meta.existsSync() ? _kb(meta.lengthSync()) : "-"} '
+        'wav=${wav.existsSync() ? _kb(wav.lengthSync()) : "-"})',
       );
     } on Object catch (e) {
       _log('dump FAILED:$e');
@@ -196,7 +204,7 @@ class ChromaDebugProbe {
       'latency=${_ms(d.latencySec)}ms src=${d.latencySource} '
       'prepPairs=${d.prepPairErrSec.length} errs=[$errs]ms threshold=${d.threshold}',
     );
-    final judgmentByTarget = <int, ({String judgment, double errSec})>{
+    final judgmentByTarget = <int, ({StrumJudgment judgment, double errSec})>{
       for (var i = 0; i < d.verdicts.length; i++) i: d.verdicts[i],
     };
     final onsetByTarget = {for (final p in d.pairs) p.targetIndex: p};
@@ -209,7 +217,7 @@ class ChromaDebugProbe {
         'slot i=$i bar=${slot.barIndex}.${slot.slotInBar} '
         'chord=${slot.chord ?? "-"} tgtBeat=${slot.beat.toStringAsFixed(2)} '
         'onset=${pair?.onsetIndex ?? "-"} err=${verdict == null ? "-" : '${_ms(verdict.errSec)}ms'} '
-        'verdict=${verdict?.judgment ?? "-"}${_chromaTail(chromaByOnset, pair?.onsetIndex)}',
+        'verdict=${verdict?.judgment.name ?? "-"}${_chromaTail(chromaByOnset, pair?.onsetIndex)}',
       );
     }
     final pairedOnsets = {for (final p in d.pairs) p.onsetIndex};
@@ -249,11 +257,23 @@ class ChromaDebugProbe {
 
   String _summaryLine(
     ChromaDebugDump d,
-    Map<int, ({String judgment, double errSec})> judgmentByTarget,
+    Map<int, ({StrumJudgment judgment, double errSec})> judgmentByTarget,
   ) {
-    final counts = <String, int>{};
-    for (final v in judgmentByTarget.values) {
-      counts[v.judgment] = (counts[v.judgment] ?? 0) + 1;
+    // 枚举穷尽 switch 计数:StrumJudgment 增值即编译红,不静默漏计。
+    var onTime = 0, early = 0, late = 0, wrong = 0, missed = 0;
+    for (final v in d.verdicts) {
+      switch (v.judgment) {
+        case StrumJudgment.onTime:
+          onTime++;
+        case StrumJudgment.early:
+          early++;
+        case StrumJudgment.late:
+          late++;
+        case StrumJudgment.wrong:
+          wrong++;
+        case StrumJudgment.missed:
+          missed++;
+      }
     }
     final byChord = <String, List<int>>{}; // chord → [matched, wrong, total]
     for (var i = 0; i < d.slots.length; i++) {
@@ -263,19 +283,17 @@ class ChromaDebugProbe {
       final judgment = judgmentByTarget[i]?.judgment;
       if (judgment == null) continue;
       agg[2]++;
-      if (judgment != 'missed') agg[0]++;
-      if (judgment == 'wrong') agg[1]++;
+      if (judgment != StrumJudgment.missed) agg[0]++;
+      if (judgment == StrumJudgment.wrong) agg[1]++;
     }
     final byChordRepr = [
       for (final e in byChord.entries)
         '${e.key}: match=${e.value[0]}/${e.value[2]} wrong=${e.value[1]}',
     ].join(', ');
-    final matched =
-        (counts['onTime'] ?? 0) + (counts['early'] ?? 0) + (counts['late'] ?? 0) + (counts['wrong'] ?? 0);
+    final matched = onTime + early + late + wrong;
     return 'summary total=${d.slots.length} matched=$matched '
-        '(onTime=${counts['onTime'] ?? 0} early=${counts['early'] ?? 0} '
-        'late=${counts['late'] ?? 0} wrong=${counts['wrong'] ?? 0}) '
-        'missed=${counts['missed'] ?? 0} | byChord $byChordRepr';
+        '(onTime=$onTime early=$early late=$late wrong=$wrong) '
+        'missed=$missed | byChord $byChordRepr';
   }
 
   // ── 样张落盘 ─────────────────────────────────────────────────────
@@ -303,7 +321,7 @@ class ChromaDebugProbe {
   Map<String, Object?> _metaMap(ChromaDebugDump d, DateTime now) => {
     'schema': 'chroma-debug-probe/1',
     'capturedAt': now.toIso8601String(),
-    'micSampleRate': 44100,
+    'micSampleRate': d.sampleRate,
     'threshold': d.threshold,
     'anchorSec': d.anchorSec,
     'periodMs': d.periodMs,
@@ -325,7 +343,11 @@ class ChromaDebugProbe {
     ],
     'verdicts': [
       for (var i = 0; i < d.verdicts.length; i++)
-        {'i': i, 'judgment': d.verdicts[i].judgment, 'errSec': d.verdicts[i].errSec},
+        {
+          'i': i,
+          'judgment': d.verdicts[i].judgment.name,
+          'errSec': d.verdicts[i].errSec,
+        },
     ],
     'onsets': [
       for (var i = 0; i < d.onsets.length; i++)
