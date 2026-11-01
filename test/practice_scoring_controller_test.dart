@@ -553,7 +553,14 @@ void main() {
               ? sessionsDir
                     .listSync()
                     .whereType<Directory>()
-                    .where((d) => File('${d.path}/meta.json').existsSync())
+                    // 完成哨兵判内容不判存在:writeAsString 先建文件(打开
+                    // 即存在)后落内容,撞进「存在未刷」窗口读到空串
+                    // (2026-11-01 实证 ~50% flake)——meta 经单次 write
+                    // 落盘,见长即完整。
+                    .where((d) {
+                      final meta = File('${d.path}/meta.json');
+                      return meta.existsSync() && meta.lengthSync() > 0;
+                    })
               : <Directory>[],
         );
       if (sessions.isNotEmpty) break;
