@@ -9,6 +9,10 @@
 /// 恒关,控制器内为 null 桩,零开销零 IO。测试经 [forceEnabled] +
 /// [outputDirOverride] + [logOverride] 强开(探针自测与控制器级端到端)。
 ///
+/// 样张自含:logcat 块同文落 `log.txt` 进样张目录(工单54 retro:logcat
+/// 环形缓冲分钟级即冲掉头部行,两次真机拔取都丢过 passStart/延迟行——
+/// 回灌只拉目录即可,logcat 降级为便利通道)。
+///
 /// 定案纪律(票面):探针只取证不修改——窗策略/归一/模板/阈值候选全部
 /// 留给数据回来后的修复票,这里不预设方向。
 library;
@@ -176,31 +180,38 @@ class ChromaDebugProbe {
   }
 
   /// finish 一次性取证:先吐 logcat 块(即便落盘失败,判定现场也已在
-  /// 日志里),再落 meta.json + session.wav 到 cache 子目录。
+  /// 日志里,且同文将随 log.txt 落盘),再落 meta.json + session.wav +
+  /// log.txt 到 cache 子目录。
   Future<void> dump(ChromaDebugDump d) async {
-    _dumpLogcat(d);
+    final lines = <String>[];
+    void log(String line) {
+      (logOverride ?? debugPrint)('[DEBUG-chroma] $line');
+      lines.add(line);
+    }
+
+    _dumpLogcat(d, log);
     final String dirPath;
     try {
-      dirPath = await _writeSample(d);
+      dirPath = await _writeSample(d, lines);
       final meta = File('$dirPath/meta.json');
       final wav = File('$dirPath/session.wav');
-      _log(
+      log(
         'dump -> $dirPath '
         '(meta.json=${meta.existsSync() ? _kb(meta.lengthSync()) : "-"} '
         'wav=${wav.existsSync() ? _kb(wav.lengthSync()) : "-"})',
       );
     } on Object catch (e) {
-      _log('dump FAILED:$e');
+      log('dump FAILED:$e');
     }
   }
 
   // ── logcat 块 ────────────────────────────────────────────────────
 
-  void _dumpLogcat(ChromaDebugDump d) {
+  void _dumpLogcat(ChromaDebugDump d, void Function(String line) log) {
     final errs = [
       for (final e in d.prepPairErrSec) _ms(e),
     ].join(',');
-    _log(
+    log(
       'latency=${_ms(d.latencySec)}ms src=${d.latencySource} '
       'prepPairs=${d.prepPairErrSec.length} errs=[$errs]ms threshold=${d.threshold}',
     );
@@ -213,7 +224,7 @@ class ChromaDebugProbe {
       final slot = d.slots[i];
       final verdict = judgmentByTarget[i];
       final pair = onsetByTarget[i];
-      _log(
+      log(
         'slot i=$i bar=${slot.barIndex}.${slot.slotInBar} '
         'chord=${slot.chord ?? "-"} tgtBeat=${slot.beat.toStringAsFixed(2)} '
         'onset=${pair?.onsetIndex ?? "-"} err=${verdict == null ? "-" : '${_ms(verdict.errSec)}ms'} '
@@ -223,13 +234,13 @@ class ChromaDebugProbe {
     final pairedOnsets = {for (final p in d.pairs) p.onsetIndex};
     for (final c in d.chroma) {
       if (pairedOnsets.contains(c.onsetIndex)) continue;
-      _log(
+      log(
         'unpaired oi=${c.onsetIndex} beat=${d.onsets[c.onsetIndex].beat.toStringAsFixed(2)} '
         'win=${_ms(c.endSec - c.startSec)}ms n=${c.sampleCount} rms=${c.rms.toStringAsFixed(3)} '
         '${_topClasses(c)} best=${c.bestLabel ?? "-"} ${c.bestScore.toStringAsFixed(3)}',
       );
     }
-    _log(_summaryLine(d, judgmentByTarget));
+    log(_summaryLine(d, judgmentByTarget));
   }
 
   /// 槽行尾的色度段(配对了才有窗):窗长/样本/RMS/top 类/全模板分/best。
@@ -298,7 +309,7 @@ class ChromaDebugProbe {
 
   // ── 样张落盘 ─────────────────────────────────────────────────────
 
-  Future<String> _writeSample(ChromaDebugDump d) async {
+  Future<String> _writeSample(ChromaDebugDump d, List<String> logLines) async {
     final root = outputDirOverride ?? await getApplicationCacheDirectory();
     final now = DateTime.now();
     final dir = Directory(
@@ -307,10 +318,15 @@ class ChromaDebugProbe {
       '${now.year}${_p2(now.month)}${_p2(now.day)}-${_p2(now.hour)}${_p2(now.minute)}${_p2(now.second)}',
     );
     await dir.create(recursive: true);
-    // WAV 先落、meta.json 收尾当「完成」标记:见到 meta 即样张齐全。
+    // WAV 先落、meta.json 收尾当「完成」标记:见到 meta 即样张齐全;
+    // log.txt = logcat 块同文(logcat 环会冲头部行,样张自含)。
     final wav = d.wav;
     if (wav != null) {
       await File('${dir.path}${Platform.pathSeparator}session.wav').writeAsBytes(wav);
+    }
+    if (logLines.isNotEmpty) {
+      await File('${dir.path}${Platform.pathSeparator}log.txt')
+          .writeAsString('${logLines.join('\n')}\n');
     }
     await File(
       '${dir.path}${Platform.pathSeparator}meta.json',

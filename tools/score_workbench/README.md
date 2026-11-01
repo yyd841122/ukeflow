@@ -11,8 +11,8 @@ IR 数据表,点击互跳,逐小节确认,全曲确认导出 ScoreIR JSON,builti
 ## 搭建
 
 ```sh
-python3 -m venv /tmp/swwenv           # venv 路径随意,/tmp 惯例同 pdf_census
-/tmp/swwenv/bin/pip install -r requirements.txt
+python3 -m venv .venv                  # venv 常驻本目录(工单54 retro:/tmp 跨天即清,pytest 闸静默失联;check.sh 同路径找它)
+.venv/bin/pip install -r requirements.txt
 cd tools/score_workbench              # 以下命令均在此目录跑
 ```
 
@@ -34,7 +34,7 @@ cp /tmp/dolce/public/redist/ocr/{ch_PP-OCRv6_small_rec_infer.onnx,ppocrv6_dict.t
 ## 用法
 
 ```sh
-PY=/tmp/swwenv/bin/python
+PY=.venv/bin/python  # 即 tools/score_workbench/.venv(check.sh 兼容旧 /tmp/swwenv)
 $PY -m score_workbench.cli checkup ~/ukeflow-sources/gs-aini.pdf          # 只体检
 $PY -m score_workbench.cli triage  ~/ukeflow-sources/gs-aini.pdf          # 判别,JSON → stdout
 $PY -m score_workbench.cli triage  x.pdf --out report.json                # 报告落盘
@@ -49,7 +49,7 @@ $PY -m score_workbench.cli serve out/layout                               # 校�
 $PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像素考古探针(retro)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
 cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
-/tmp/swwenv/bin/python -m pytest tests/ -q                                # 全部测试
+.venv/bin/python -m pytest tests/ -q                                      # 全部测试
 ```
 
 ## 报告形状

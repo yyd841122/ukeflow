@@ -107,8 +107,10 @@ const double strumToleranceSec = 0.18;
 /// 「准」窗(秒):命中后 |误差| ≤ 它算准,否则分早/晚。
 const double strumOnTimeWindowSec = 0.05;
 
-/// 「错」验证回调:onset 下标 + 该点目标和弦 → 是否对。实现在调用侧
-/// (Chroma 封闭验证,纯函数不掺频谱)。
+/// 「错」验证回调:onset 下标 + 该点目标和弦 → **返回 true = 和弦对**
+/// (判「错」即返回 false)。实现在调用侧(Chroma 封闭验证,纯函数不掺
+/// 频谱);新测试回调先对既有用例的方向(`verify: (i, _) => i != 3` =
+/// 点 3 错)再落笔。
 typedef ChordVerifier = bool Function(int onsetIndex, String chord);
 
 /// 一对候选配对(target 下标, onset 下标, 时机误差秒)。配对产出供

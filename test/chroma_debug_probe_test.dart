@@ -94,8 +94,19 @@ void main() {
     expect(sessions, hasLength(1), reason: '一次 dump 一个会话目录');
     final meta = File('${sessions.first.path}/meta.json');
     final wav = File('${sessions.first.path}/session.wav');
+    final logTxt = File('${sessions.first.path}/log.txt');
     expect(meta.existsSync(), isTrue);
     expect(wav.existsSync(), isTrue);
+    expect(
+      logTxt.existsSync(),
+      isTrue,
+      reason: 'logcat 块同文落样张(环冲不丢头部行,工单54 retro)',
+    );
+    expect(
+      logTxt.readAsStringSync(),
+      contains('latency=91ms'),
+      reason: 'log.txt 含延迟行',
+    );
 
     final j = jsonDecode(meta.readAsStringSync()) as Map<String, Object?>;
     expect(j['schema'], 'chroma-debug-probe/1');

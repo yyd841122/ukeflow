@@ -23,11 +23,14 @@ flutter analyze
 if [ "${1:-full}" = quick ]; then exit 0; fi
 flutter test
 # Python 工具侧（工单 48 retro：整票交付全在 tools/，commit 时零 guardrail）。
-# venv 在 /tmp 易失，不在则跳过并提示重建（README 两行）；语料测试自身 skipif。
-if [ -x /tmp/swwenv/bin/python ]; then
+# venv 常驻 tools/score_workbench/.venv（工单54 retro：原 /tmp 惯例跨天即清，
+# pytest 闸静默失联），兼容旧 /tmp/swwenv；都不在则跳过并提示重建（README 两行）。
+if [ -x tools/score_workbench/.venv/bin/python ]; then
+  (cd tools/score_workbench && ./.venv/bin/python -m pytest tests/ -q)
+elif [ -x /tmp/swwenv/bin/python ]; then
   (cd tools/score_workbench && /tmp/swwenv/bin/python -m pytest tests/ -q)
 else
-  echo '— score_workbench venv 不在(/tmp/swwenv),跳过 pytest;要跑按其 README 重建'
+  echo '— score_workbench venv 不在(tools/score_workbench/.venv),跳过 pytest;要跑按其 README 重建'
 fi
 # 工单49 retro:真值 fixture 漂移闸(Dart 常量 ↔ pytest fixture 单源,
 # 陈了会让对账闸以「莫名 diff」报错而非「fixture 过期」)。

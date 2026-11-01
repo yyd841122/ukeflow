@@ -28,7 +28,8 @@ error.log
 spikes/
 
 # Python 工具(tools/score_workbench 等,工单47 起)
-__pycache__/
+__pycache__
+.venv//
 .venv/
 *.pyc
 .pytest_cache/
