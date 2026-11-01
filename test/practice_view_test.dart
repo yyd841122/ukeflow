@@ -259,6 +259,23 @@ void main() {
     expect(find.byKey(const Key('next-chord-card')), findsNothing);
   });
 
+  testWidgets('预备意图卡(工单 53):专属键/题注,库缺位名字照走小图缺席', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: Center(child: ChordCard.prep(chordName: 'Am'))),
+      ),
+    );
+
+    expect(find.byKey(const Key('prep-first-chords')), findsOneWidget);
+    expect(find.text('第 1 小节'), findsOneWidget);
+    expect(find.text('Am'), findsOneWidget);
+    expect(
+      find.byType(ChordDiagram),
+      findsNothing,
+      reason: '和弦库缺位:名字照走,小图缺席(与 current/next 同一降级语义)',
+    );
+  });
+
   testWidgets('窄屏(360dp)不溢出', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3.0;

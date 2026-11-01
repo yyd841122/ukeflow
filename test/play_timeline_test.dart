@@ -68,13 +68,13 @@ void main() {
     expect(timeline.totalDuration, const Duration(milliseconds: 4000));
   });
 
-  test('首小节和弦(工单 53 预备期预告数据):取首小节去重,曲首无和弦为空表', () {
+  test('首小节和弦(工单 53 预备期预告数据):取首小节首弦,曲首无和弦为 null', () {
     final timeline = compileTimeline(
       chart: parseChart('{start_of_verse}\n[Am]啦啦\n[C]啦啦\n{end_of_verse}\n'),
       pattern: builtinStrumPatterns.first,
       bpm: 120,
     );
-    expect(timeline.firstBarChords, ['Am'], reason: '首小节即第 1 个和弦记号');
+    expect(timeline.firstBarChord, 'Am', reason: '首小节即第 1 个和弦记号');
 
     // 曲首无和弦记号:右手照扫无和弦可依,预告无数据。
     final leading = compileTimeline(
@@ -82,7 +82,7 @@ void main() {
       pattern: builtinStrumPatterns.first,
       bpm: 120,
     );
-    expect(leading.firstBarChords, isEmpty);
+    expect(leading.firstBarChord, isNull);
   });
 
   test('无和弦行占一小节延续当前和弦；曲首无和弦则 chord 为 null', () {

@@ -347,7 +347,7 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
         : prepCount > 2
         ? '跟着拍子数,准备手指'
         : '马上开弹';
-    final firstChords = _controller.timeline?.firstBarChords ?? const [];
+    final firstChord = _controller.timeline?.firstBarChord;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -362,10 +362,10 @@ class _PracticePageState extends PracticeSessionState<PracticePage> {
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
-            // 谱首无和弦记号(空表)无可预告,不占位。
-            if (firstChords.isNotEmpty) ...[
+            // 谱首无和弦记号(首小节 null)无可预告,不占位。
+            if (firstChord != null) ...[
               const SizedBox(width: 24),
-              PrepFirstChordPreview(chordNames: firstChords, chords: chords),
+              ChordCard.prep(chordName: firstChord, chord: chords[firstChord]),
             ],
           ],
         ),

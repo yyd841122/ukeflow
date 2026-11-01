@@ -56,12 +56,12 @@ class PracticeView extends StatelessWidget {
             alignment: WrapAlignment.center,
             spacing: 12,
             children: [
-              _ChordCard(
+              ChordCard.current(
                 chordName: practice.currentStrum?.chord,
                 chord: _currentChord,
               ),
               if (_nextChordName case final nextName?)
-                _NextChordCard(chordName: nextName, chord: chords[nextName]),
+                ChordCard.next(chordName: nextName, chord: chords[nextName]),
             ],
           ),
         ),
@@ -299,24 +299,92 @@ class _ChordLyricLine extends StatelessWidget {
   }
 }
 
-/// 当前和弦卡:和弦名 + 指法小图,主色容器突出(练习状态里「此刻按什么」)。
-/// [chordName] 直接来自扫弦事件,不依赖查表;[chord] 查表成功才有指法小图
-/// (和弦库缺位的降级路径下名字照走、小图缺席)。
-class _ChordCard extends StatelessWidget {
-  const _ChordCard({required this.chordName, required this.chord});
+/// 和弦卡(三处共用形状,单一实现):指法小图 + 名字/题注一行。三个
+/// 意图各配一套表皮——current(曲内当前和弦主卡,大图大字)/next(俄罗斯
+/// 方块预告,弱化小卡)/prep(工单 53 预备数拍期的首小节预告:倒计数字旁
+/// 的「进曲前把手摆到位」,数据是静态首小节和弦而非预告窗,仅随倒计
+/// 面板存在,进曲即隐)。降级语义在此单一实现:名字直接来自扫弦事件/
+/// 时间轴,不依赖查表;查表成功才有指法小图,和弦库缺位的降级路径下
+/// 名字照走、小图缺席。
+class ChordCard extends StatelessWidget {
+  const ChordCard.current({super.key, required this.chordName, this.chord})
+    : _intent = _CardIntent.current;
 
+  const ChordCard.next({super.key, required this.chordName, this.chord})
+    : _intent = _CardIntent.next;
+
+  const ChordCard.prep({super.key, required this.chordName, this.chord})
+    : _intent = _CardIntent.prep;
+
+  final _CardIntent _intent;
+
+  /// 和弦名:直接来自扫弦事件/时间轴,不依赖查表(库缺位时名字照走)。
   final String? chordName;
+
+  /// 查表所得和弦(指法图数据);null = 小图缺席。
   final Chord? chord;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final onCard = scheme.onPrimaryContainer;
+    final (
+      cardKey,
+      diagramKey,
+      nameKey,
+      containerColor,
+      onCardColor,
+      padding,
+      gap,
+      diagramWidth,
+      nameFontSize,
+      caption,
+      captionFontSize,
+    ) = switch (_intent) {
+      _CardIntent.current => (
+        const Key('chord-card'),
+        const Key('chord-diagram'),
+        const Key('chord-name'),
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
+        const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        14.0,
+        76.0,
+        30.0,
+        '当前和弦',
+        12.0,
+      ),
+      _CardIntent.next => (
+        const Key('next-chord-card'),
+        const Key('next-chord-diagram'),
+        const Key('next-chord-name'),
+        scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        8.0,
+        44.0,
+        18.0,
+        '下一和弦',
+        10.0,
+      ),
+      _CardIntent.prep => (
+        const Key('prep-first-chords'),
+        const Key('prep-first-chord-diagram'),
+        const Key('prep-first-chord-name'),
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        8.0,
+        56.0,
+        20.0,
+        '第 1 小节',
+        12.0,
+      ),
+    };
     return Container(
-      key: const Key('chord-card'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      key: cardKey,
+      padding: padding,
       decoration: BoxDecoration(
-        color: scheme.primaryContainer,
+        color: containerColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -324,11 +392,11 @@ class _ChordCard extends StatelessWidget {
         children: [
           if (chord != null) ...[
             ChordDiagram(
-              key: const Key('chord-diagram'),
+              key: diagramKey,
               fingering: chord!.primaryFingering,
-              width: 76,
+              width: diagramWidth,
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: gap),
           ],
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -336,19 +404,19 @@ class _ChordCard extends StatelessWidget {
             children: [
               Text(
                 chordName ?? '—',
-                key: const Key('chord-name'),
+                key: nameKey,
                 style: TextStyle(
-                  fontSize: 30,
+                  fontSize: nameFontSize,
                   fontWeight: FontWeight.w700,
-                  color: onCard,
+                  color: onCardColor,
                   height: 1.1,
                 ),
               ),
               Text(
-                '当前和弦',
+                caption,
                 style: TextStyle(
-                  fontSize: 12,
-                  color: onCard.withValues(alpha: 0.7),
+                  fontSize: captionFontSize,
+                  color: onCardColor.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -359,135 +427,7 @@ class _ChordCard extends StatelessWidget {
   }
 }
 
-/// 预备数拍期首小节和弦预告(工单 53):倒计数字旁的「进曲前把手摆到位」。
-/// 数据是静态的首小节和弦(时间轴 firstBarChords),不是预告窗——仅预备
-/// 期随倒计面板显示,进曲即随面板整体消失,与已撤的右栏常驻预告划清界限。
-class PrepFirstChordPreview extends StatelessWidget {
-  const PrepFirstChordPreview({
-    super.key,
-    required this.chordNames,
-    required this.chords,
-  });
+/// 表皮意图(当前/下一/预备):形状同一,调色/尺寸/键/题注各配一套。
+enum _CardIntent { current, next, prep }
 
-  /// 首小节和弦名(按拍序;谱首无和弦记号时为空,调用方不渲染本卡)。
-  final List<String> chordNames;
-
-  /// 和弦名 → 和弦(指法图数据;库缺位时名字照走、小图缺席)。
-  final Map<String, Chord> chords;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final onCard = scheme.onPrimaryContainer;
-    return Container(
-      key: const Key('prep-first-chords'),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              for (final name in chordNames)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (chords[name] case final chord?)
-                      ChordDiagram(
-                        key: Key('prep-first-chord-diagram-$name'),
-                        fingering: chord.primaryFingering,
-                        width: 56,
-                      ),
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: onCard,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '第 1 小节',
-            style: TextStyle(
-              fontSize: 12,
-              color: onCard.withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 下一和弦小预告(俄罗斯方块式,工单 10 预告窗的最小切片):
-/// 小尺寸名字+指法图,次级容器弱化——「待会儿换到什么」扫一眼即知,
-/// 不与当前和弦卡抢注意力。
-class _NextChordCard extends StatelessWidget {
-  const _NextChordCard({required this.chordName, required this.chord});
-
-  final String? chordName;
-  final Chord? chord;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final onCard = scheme.onSecondaryContainer;
-    return Container(
-      key: const Key('next-chord-card'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (chord != null) ...[
-            ChordDiagram(
-              key: const Key('next-chord-diagram'),
-              fingering: chord!.primaryFingering,
-              width: 44,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                chordName ?? '—',
-                key: const Key('next-chord-name'),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: onCard,
-                  height: 1.1,
-                ),
-              ),
-              Text(
-                '下一和弦',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: onCard.withValues(alpha: 0.7),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
