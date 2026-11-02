@@ -1,0 +1,2065 @@
+{
+ "schema": "ukeflow.eval.truth/1",
+ "id": "gs-aini-tab",
+ "version": 1,
+ "title": "爱你不是两三天",
+ "frozen_at": "2026-11-02",
+ "source": {
+  "base_transcription": "builtin ai-ni-bu-shi-liang-san-tian-solo(dump_tab_truth,484 音)@2c64c19",
+  "archaeology": [
+   "工单37 转录台账",
+   "工单39 印张像素考古",
+   "工单50 300dpi 几何档案",
+   "工单56 裁片终审 2026-11-02"
+  ],
+  "transcription_notes": 484,
+  "adjudications": "工单56 争议项裁片终审 2026-11-02:逐项 PDF 嵌入位图核验(原生分辨率/12x/20x),base=2c64c19 dump_tab_truth 底稿;用户裁决 8 项修正全部采纳,拍108+ 永久弃用,v1 按 0-36+80-108 冻结"
+ },
+ "meta": {
+  "tempo": 78,
+  "beats_per_bar": 4,
+  "key": "1=E",
+  "main_axis_beats": 108,
+  "event_count": 324
+ },
+ "payload": {
+  "chords": [
+   {
+    "beat": "4",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "6",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "8",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "10",
+    "label": "Bsus4",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "12",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "14",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "16",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "20",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "22",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "24",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "26",
+    "label": "C#m7",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "28",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "30",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "32",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "36",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "38",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "40",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "42",
+    "label": "C#m7",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "44",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "46",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "48",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "52",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "56",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "58",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "60",
+    "label": "C#m7",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "62",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "64",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "66",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "68",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "70",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "72",
+    "label": "G#7",
+    "frets": [
+     1,
+     3,
+     2,
+     3
+    ]
+   },
+   {
+    "beat": "74",
+    "label": "C#m7",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "76",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "78",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "80",
+    "label": "B",
+    "frets": [
+     4,
+     3,
+     2,
+     2
+    ]
+   },
+   {
+    "beat": "84",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "88",
+    "label": "G#7",
+    "frets": [
+     1,
+     3,
+     2,
+     3
+    ]
+   },
+   {
+    "beat": "90",
+    "label": "C#m7",
+    "frets": [
+     4,
+     4,
+     4,
+     4
+    ]
+   },
+   {
+    "beat": "92",
+    "label": "A",
+    "frets": [
+     2,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "beat": "94",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "96",
+    "label": "F#m",
+    "frets": [
+     2,
+     1,
+     2,
+     0
+    ]
+   },
+   {
+    "beat": "98",
+    "label": "D7",
+    "frets": [
+     -1,
+     2,
+     -1,
+     3
+    ]
+   },
+   {
+    "beat": "100",
+    "label": "E",
+    "frets": [
+     4,
+     4,
+     4,
+     2
+    ]
+   },
+   {
+    "beat": "104",
+    "label": "G#7",
+    "frets": [
+     1,
+     3,
+     2,
+     3
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": "b1",
+    "label": "第1小节(全小节休止)",
+    "from_beat": "0",
+    "to_beat": "4",
+    "evidence_level": "裁片12x核验 2026-11-02"
+   },
+   {
+    "id": "intro",
+    "label": "前奏 b2-b5",
+    "from_beat": "4",
+    "to_beat": "20",
+    "evidence_level": "争议项裁片12x/24x/原生逐项终审 2026-11-02;×弦号与时值承 37/39 转录+听验基线"
+   },
+   {
+    "id": "verse-a",
+    "label": "主歌一遍 b6-b9",
+    "from_beat": "20",
+    "to_beat": "36",
+    "evidence_level": "37/39 转录+听验基线;虚按③/拨× 裁片抽查 2026-11-02"
+   },
+   {
+    "id": "chorus",
+    "label": "副歌B高置+尾段 b21-b27",
+    "from_beat": "80",
+    "to_beat": "108",
+    "evidence_level": "37/39 转录+听验基线;bar21/22+D7 裁片核验,89+ 箭头方向未核(待裁定)"
+   }
+  ],
+  "columns": [
+   {
+    "beat": "4",
+    "segment": "intro",
+    "status": "adjudicated",
+    "tech": "roll",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "9/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "5",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "11/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "6",
+    "segment": "intro",
+    "status": "adjudicated",
+    "tech": "roll",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "15/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 2
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "8",
+    "segment": "intro",
+    "status": "adjudicated",
+    "tech": "roll",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "9",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 6
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "19/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 7
+     }
+    ],
+    "muted": [],
+    "duration": "1"
+   },
+   {
+    "beat": "21/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "11",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "23/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "12",
+    "segment": "intro",
+    "status": "adjudicated",
+    "tech": "roll",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 2
+     }
+    ],
+    "duration": "1"
+   },
+   {
+    "beat": "13",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "digit",
+      "fret": 4
+     }
+    ],
+    "muted": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "53/4",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "27/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 2
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "14",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "29/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "15",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "31/2",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "16",
+    "segment": "intro",
+    "status": "adjudicated",
+    "tech": "roll",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "17",
+    "segment": "intro",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 1,
+      "kind": "digit",
+      "fret": 9
+     }
+    ],
+    "muted": [],
+    "duration": "3"
+   },
+   {
+    "beat": "20",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "41/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "21",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "43/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "22",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "45/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "23",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "47/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "24",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "49/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "25",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "51/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "26",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "53/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "27",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "55/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "28",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "57/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "29",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "59/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "30",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "61/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "31",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "63/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "32",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 3,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "65/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "33",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "67/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "34",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "69/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "35",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "71/2",
+    "segment": "verse-a",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "80",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "81",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "163/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "327/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "82",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "tremolo",
+    "marks": [
+     {
+      "string": 4,
+      "kind": "x"
+     },
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 2,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [],
+    "duration": "2"
+   },
+   {
+    "beat": "84",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "85",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "171/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "343/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "86",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tie": true,
+    "marks": [],
+    "evidence": "8x 裁片:↓@85.75 起弧→淡×柱@86,存在确证",
+    "duration": "1/4"
+   },
+   {
+    "beat": "345/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "173/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "347/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "87",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "175/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "351/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "88",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "89",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "179/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "359/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "90",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tie": true,
+    "marks": [],
+    "evidence": "系统6裁片:弧线在拍90 上方,存在确证",
+    "duration": "1/4"
+   },
+   {
+    "beat": "361/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "3/4"
+   },
+   {
+    "beat": "91",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "183/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "367/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "92",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "93",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "187/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "375/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "94",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "95",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "191/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "383/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "96",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "97",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "195/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "391/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "98",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 4,
+      "kind": "muted"
+     },
+     {
+      "string": 2,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1"
+   },
+   {
+    "beat": "99",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 4,
+      "kind": "muted"
+     },
+     {
+      "string": 2,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/2"
+   },
+   {
+    "beat": "199/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 4,
+      "kind": "muted"
+     },
+     {
+      "string": 2,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/4"
+   },
+   {
+    "beat": "399/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "marks": [
+     {
+      "string": 3,
+      "kind": "x"
+     },
+     {
+      "string": 1,
+      "kind": "x"
+     }
+    ],
+    "muted": [
+     {
+      "string": 4,
+      "kind": "muted"
+     },
+     {
+      "string": 2,
+      "kind": "muted"
+     }
+    ],
+    "duration": "1/4"
+   },
+   {
+    "beat": "100",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "101",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "203/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "407/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "102",
+    "segment": "chorus",
+    "status": "pending",
+    "tie": true,
+    "marks": [],
+    "reason": "未对印张核验(工单39 遗留#4;39 推断数据空档互证,印张形态待裁片)",
+    "duration": "1/4"
+   },
+   {
+    "beat": "409/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "205/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "411/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "103",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "207/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "415/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "104",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1"
+   },
+   {
+    "beat": "105",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "211/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "423/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "106",
+    "segment": "chorus",
+    "status": "pending",
+    "tie": true,
+    "marks": [],
+    "reason": "未对印张核验(工单39 遗留#4)",
+    "duration": "1/4"
+   },
+   {
+    "beat": "425/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "213/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "427/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "107",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumDown",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/2"
+   },
+   {
+    "beat": "215/2",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   },
+   {
+    "beat": "431/4",
+    "segment": "chorus",
+    "status": "adjudicated",
+    "tech": "strumUp",
+    "tech_pending": true,
+    "reason": "箭头方向惯例预置未逐支核验(工单39 遗留#3;bar21/22 抽查 7/15 与预置不符,已核者已改)",
+    "marks": [],
+    "duration": "1/4"
+   }
+  ],
+  "rests": [
+   {
+    "beat": "0",
+    "beats": "4",
+    "status": "adjudicated",
+    "evidence": "第1小节 TAB 全小节休止块(挂②线下,12x 裁片;10-25『纯空谱』结论系漏看,更正)"
+   },
+   {
+    "beat": "7",
+    "beats": "1/2",
+    "status": "adjudicated",
+    "evidence": "工单37 台账+工单39 裁片(实心点+尾钩)"
+   }
+  ],
+  "ties": [
+   {
+    "from_beat": "19/2",
+    "to_beat": "10",
+    "status": "adjudicated",
+    "evidence": "⑦@9.5⌒⑦@10 同品延音弧(原生位图裁片);原『①4@10+滑音』系字形误读(数字4杆垂线下),@10 无新 attack"
+   },
+   {
+    "from_beat": "17",
+    "to_beat": "35/2",
+    "status": "adjudicated",
+    "evidence": "⑨@17⌒⑨@17.5⌒⑨@18 双弧延音链,末音带长音椭圆(12x 裁片);单 attack ①9@17 吃满 17→20"
+   },
+   {
+    "from_beat": "35/2",
+    "to_beat": "18",
+    "status": "adjudicated",
+    "evidence": "同上链第二弧"
+   }
+  ],
+  "slides": [],
+  "uncovered": [
+   {
+    "from_beat": "36",
+    "to_beat": "80",
+    "desc": "主歌二遍+移位句+副歌A(b10-b20):已转录、未冻结进 v1(同型段落,扩展走 v2)"
+   },
+   {
+    "from_beat": "108",
+    "to_beat": null,
+    "desc": "印张 p2 剩余段(b28+):间奏(震音椭圆)/二段主歌(拨 P)/转调 1=F+3/4(b42)/尾段,全未转录——用户终审裁决永久弃用(2026-11-02,评测只考已转录段)"
+   }
+  ]
+ },
+ "payload_sha256": "034d42c42c98ed5c5bcceb14878a666a91e00060bc0b29ffcccbc1da466da7c6"
+}

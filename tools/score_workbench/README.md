@@ -47,8 +47,12 @@ $PY -m score_workbench.cli recognize-tab x.pdf --out-dir out/layout       # TAB 
 $PY -m score_workbench.cli diff-tab out/layout/tab.json tab-gt.json       # ×TAB 真值 diff
 $PY -m score_workbench.cli serve out/layout                               # 校对台(51,127.0.0.1:8765)
 $PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像素考古探针(retro)
+$PY -m score_workbench.cli build-evalset --tab-gt gt.json --chords chords.json \
+    --corrections adjudications.json --out evalset/gs-aini-tab-v1.json --version 1  # 冻结评测集(56)
+$PY -m score_workbench.cli eval-joint cand.json                           # 联合事件 F1 评分(56)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
 cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
+cd ../.. && dart run tools/dump_eval_chords.dart > /tmp/chords.json       # 导和弦锚(56,评测集输入)
 .venv/bin/python -m pytest tests/ -q                                      # 全部测试
 ```
 
@@ -98,6 +102,18 @@ cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 
   ±0.35 拍 + 同弦优先配对)/ 时值(同弦连续对的印张时值对真值拍距)/
   休止 P-R(全小节休止不在真值事件模型,单列)/ 技巧 F1(roll/strumUp/
   strumDown/tremolo/slide 分类 P-R-F1)。
+- `evalset/`(56):**冻结评测集** `gs-aini-tab-v1.json`(版本+payload
+  sha256,手改即哈希闸红)+ `adjudications.json`(裁片终审修正,构建输入)
+  + `gs-aini-tab-v1-ledger.md`(已裁定/待裁定/未覆盖三类台账+评分契约)。
+  底稿=builtin 484 音历史转录,评测集按裁决**有意偏离** App 常量——不走
+  真值漂移闸,以自身哈希自洽;改动走版本号(build-evalset --version N)。
+- `eval-joint`:`ukeflow.eval.report/1`(56)——联合事件 F1 评分器(ADR-0010
+  决策 1/2):事件=弦品+起音+节奏三件套全对才算 TP,一对一,τ=min(1/32 拍,
+  真值最短相邻起音间隔之半),有理数精确比;印张符号层与统一展开事件层分开
+  计分(展开 `eval_expand` 单源,×吃冻结和弦锚);±0.35 拍降级为空间漂移
+  诊断另报;per-segment 拆分;待裁定槽(箭头方向未核/连音柱未验)对称出分;
+  报告带 gate(事件 F1≥0.90 = 晋级线)。候选格式 `ukeflow.eval.candidate/1`,
+  评分器不做候选路适配。
 - `diff-melody`:`ukeflow.workbench.melody_diff/1` — 真值按 4 拍连拍格切块,
   草稿小节按 read_beats 贪心凑块(2/4 变拍两小节并块),逐位比度数+八度点
   (印张点数=应用+1)/块内拍位/时值(休止感知);真值窗口外草稿尾部只计不比。
@@ -127,6 +143,10 @@ cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 
 - `proof.py` — 校对台状态层(工单51):会话装/存(proof.json)、行级
   编辑、× 还原、重锚定、ScoreIR 装配 + preflight;`webapp.py` — Flask
   工厂(路由/条带渲染),`static/` — 单页前端
+- `eval_expand.py` — 统一展开规则(工单56):符号列×和弦锚→播放事件,
+  真值与候选同一函数;`eval_truth.py` — 评测集装载/校验/哈希/三类台账;
+  `eval_scorer.py` — 联合事件 F1(两层计分+诊断);`eval_build.py` —
+  底稿×裁决修正→冻结评测集(确定性,可重跑出 v2)
 - `report.py` — 编排+报告;`cli.py` — argparse 入口
 
 ## 几何基线(像素考古档案,工单39/41/48 实测;300dpi 单表见

@@ -38,6 +38,9 @@ from pathlib import Path
 from . import __version__
 from .checkup import checkup_pdf
 from .classify import SCORE_TYPES, checkup_kind
+from .eval_build import build_evalset
+from .eval_scorer import joint_report
+from .eval_truth import DEFAULT_PATH, load_evalset
 from .melodic_diff import diff_melody
 from .melody import recognize_melody_pdf
 from .probe import probe_image
@@ -116,6 +119,27 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="识别产物目录(须含 layout/melody/tab.json)")
     p_srv.add_argument("--port", type=int, default=8765, metavar="N",
                        help="监听端口(默认 8765;恒绑 127.0.0.1)")
+    p_bev = sub.add_parser("build-evalset", help="构建冻结评测集(工单56)")
+    p_bev.add_argument("--tab-gt", required=True, metavar="FILE",
+                       help="dump_tab_truth.dart 导出的底稿 JSON")
+    p_bev.add_argument("--chords", required=True, metavar="FILE",
+                       help="dump_eval_chords.dart 导出的和弦锚 JSON")
+    p_bev.add_argument("--corrections", required=True, metavar="FILE",
+                       help="裁决修正 JSON(裁片终审记录)")
+    p_bev.add_argument("--out", required=True, metavar="FILE",
+                       help="冻结评测集落盘路径")
+    p_bev.add_argument("--version", type=int, required=True, metavar="N",
+                       help="评测集版本号(冻结后改动走新版本)")
+    p_ev = sub.add_parser("eval-joint", help="联合事件 F1 评分(工单56)")
+    p_ev.add_argument("candidate", metavar="CANDIDATE.json",
+                      help="候选草稿(ukeflow.eval.candidate/1)")
+    p_ev.add_argument("--evalset", default=None, metavar="FILE",
+                      help=f"冻结评测集(缺省包内 {DEFAULT_PATH})")
+    p_ev.add_argument("--include-pending", action="store_true",
+                      help="待裁定项也入分(默认只评已裁定)")
+    p_ev.add_argument("--layer", choices=("events", "symbols", "both"),
+                      default="both", help="计分层(默认两层都报)")
+    p_ev.add_argument("--out", metavar="FILE", help="报告落盘(缺省 stdout 摘要)")
     return parser
 
 
@@ -137,6 +161,10 @@ def main(argv=None) -> int:
             return _diff_tab(args)
         if args.command == "serve":
             return _serve(args)
+        if args.command == "build-evalset":
+            return _build_evalset(args)
+        if args.command == "eval-joint":
+            return _eval_joint(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
                               args.y1, args.ink_max, args.ascii_step,
@@ -325,5 +353,76 @@ def _checkup(args) -> int:
     return 0
 
 
+
+def _build_evalset(args) -> int:
+    with open(args.tab_gt, encoding="utf-8") as fh:
+        tab_gt = json.load(fh)
+    with open(args.chords, encoding="utf-8") as fh:
+        chords = json.load(fh)
+    with open(args.corrections, encoding="utf-8") as fh:
+        corrections = json.load(fh)
+    doc = build_evalset(tab_gt, chords, corrections, args.version,
+                        corrections.get("date", ""))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n",
+                   encoding="utf-8")
+    from .eval_truth import ledger_stats, validate_evalset
+    validate_evalset(doc)
+    led = ledger_stats(doc)
+    cols = doc["payload"]["columns"]
+    by_seg = {}
+    for c in cols:
+        by_seg[c.get("segment")] = by_seg.get(c.get("segment"), 0) + 1
+    print(f"评测集 v{doc['version']} → {args.out}(payload sha256 "
+          f"{doc['payload_sha256'][:12]}…)")
+    print(f"  列 {len(cols)} / 事件 {doc['meta']['event_count']}:"
+          + " ".join(f"{k or '无段'}={v}" for k, v in by_seg.items()))
+    print(f"  台账:已裁定列 {led['columns']['adjudicated']} / "
+          f"待裁定列 {led['columns']['pending']} / "
+          f"方向未核 {led['pending_direction_slots']} 槽 / "
+          f"可评事件覆盖率 {led['coverage_of_scorable_events']:.0%}")
+    for u in led["uncovered"]:
+        print(f"  未覆盖: {u['from_beat']}–{u['to_beat'] or '∞'} {u['desc']}")
+    return 0
+
+
+def _eval_joint(args) -> int:
+    import sys as _sys
+    from fractions import Fraction
+    path = args.evalset or str(Path(__file__).parent / DEFAULT_PATH)
+    doc = load_evalset(path)
+    with open(args.candidate, encoding="utf-8") as fh:
+        cand = json.load(fh)
+    report = joint_report(doc, cand, include_pending=args.include_pending)
+    if args.out:
+        Path(args.out).write_text(
+            json.dumps(report, ensure_ascii=False, indent=1) + "\n",
+            encoding="utf-8")
+    ev, sy = report["events"], report["symbols"]
+    print(f"{Path(args.candidate).name} × 评测集 v{doc['version']}"
+          f"(τ={report['tol_beat']} 拍,和弦锚={report['chords_used']})")
+    print(f"  事件层: tp={ev['tp']} fp={ev['fp']} fn={ev['fn']} "
+          f"P={ev['precision']} R={ev['recall']} F1={ev['f1']:.4f} "
+          f"(节奏错 {ev['rhythm_miss']['count']})")
+    print(f"  符号层: tp={sy['tp']} fp={sy['fp']} fn={sy['fn']} "
+          f"F1={sy['f1']:.4f}")
+    sp = report["diagnostics"]["spatial"]
+    if sp["n"]:
+        print(f"  空间漂移诊断(另报):n={sp['n']} "
+              f"平均|Δ拍|={sp['mean_abs_beat']} 最大={sp['max_abs_beat']}")
+    for seg, r in report["per_segment"].items():
+        print(f"    [{seg}] F1={r['f1']:.4f} (tp={r['tp']} fp={r['fp']} "
+              f"fn={r['fn']})")
+    g = report["gate"]
+    print(f"  晋级线(事件 F1≥0.90):{'PASS' if g['pass'] else '未过'}"
+          f"(F1={g['events_f1']:.4f})")
+    if report["expansion_warnings"]:
+        print(f"  展开告警 {len(report['expansion_warnings'])} 条"
+              f"(详见报告)", file=_sys.stderr)
+    return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

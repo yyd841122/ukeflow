@@ -1,0 +1,101 @@
+{
+ "comment": "工单56 争议项裁片终审 2026-11-02:逐项 PDF 嵌入位图核验(原生分辨率/12x/20x),base=2c64c19 dump_tab_truth 底稿;用户裁决 8 项修正全部采纳,拍108+ 永久弃用,v1 按 0-36+80-108 冻结",
+ "date": "2026-11-02",
+ "base_commit": "2c64c19",
+ "note_columns": {
+  "9": [
+   {
+    "string": 1,
+    "kind": "digit",
+    "fret": 6
+   }
+  ],
+  "10": [],
+  "13": [
+   {
+    "string": 2,
+    "kind": "digit",
+    "fret": 4
+   }
+  ],
+  "17": [
+   {
+    "string": 1,
+    "kind": "digit",
+    "fret": 9
+   }
+  ],
+  "17.5": [],
+  "18": []
+ },
+ "tech_add": [
+  {
+   "beat": "12",
+   "kind": "roll"
+  }
+ ],
+ "tech_remove": [
+  "14"
+ ],
+ "tech_direction": {
+  "80": "strumUp",
+  "81": "strumUp",
+  "81.5": "strumDown",
+  "84": "strumUp",
+  "85": "strumUp",
+  "85.75": "strumDown"
+ },
+ "tech_direction_pending_from": "89",
+ "rests_add": [
+  {
+   "beat": "0",
+   "beats": "4",
+   "evidence": "第1小节 TAB 全小节休止块(挂②线下,12x 裁片;10-25『纯空谱』结论系漏看,更正)"
+  }
+ ],
+ "ties_add": [
+  {
+   "from_beat": "19/2",
+   "to_beat": "10",
+   "evidence": "⑦@9.5⌒⑦@10 同品延音弧(原生位图裁片);原『①4@10+滑音』系字形误读(数字4杆垂线下),@10 无新 attack"
+  },
+  {
+   "from_beat": "17",
+   "to_beat": "35/2",
+   "evidence": "⑨@17⌒⑨@17.5⌒⑨@18 双弧延音链,末音带长音椭圆(12x 裁片);单 attack ①9@17 吃满 17→20"
+  },
+  {
+   "from_beat": "35/2",
+   "to_beat": "18",
+   "evidence": "同上链第二弧"
+  }
+ ],
+ "slides_remove": [
+  "19/2"
+ ],
+ "tie_columns": [
+  {
+   "beat": "86",
+   "status": "adjudicated",
+   "evidence": "8x 裁片:↓@85.75 起弧→淡×柱@86,存在确证"
+  },
+  {
+   "beat": "90",
+   "status": "adjudicated",
+   "evidence": "系统6裁片:弧线在拍90 上方,存在确证"
+  },
+  {
+   "beat": "102",
+   "status": "pending",
+   "reason": "未对印张核验(工单39 遗留#4;39 推断数据空档互证,印张形态待裁片)"
+  },
+  {
+   "beat": "106",
+   "status": "pending",
+   "reason": "未对印张核验(工单39 遗留#4)"
+  }
+ ],
+ "tech_x_marks": [
+  "12"
+ ]
+}
