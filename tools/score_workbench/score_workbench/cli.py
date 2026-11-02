@@ -174,6 +174,23 @@ def _build_parser() -> argparse.ArgumentParser:
                         default=vlm_poc.BUDGET_CNY_DEFAULT, metavar="N",
                         help=f"预算上限 ¥(默认 {vlm_poc.BUDGET_CNY_DEFAULT};"
                              f"越线告警停止)")
+    p_dce = sub.add_parser("dolce-eval", help="工单58③ dolce 整页输出×旋律真值复评")
+    p_dce.add_argument("doc", metavar="FILE", help="dolce -f 123 输出文件")
+    p_dce.add_argument("--layout", required=True, metavar="FILE",
+                       help="工单48 版面切分 layout.json")
+    p_dce.add_argument("--score-page", type=int, default=0, metavar="N",
+                       help="layout.score_pages 下标(默认 0;p0=印张b1-13)")
+    p_dce.add_argument("--start-bars", default=None, metavar="N,N",
+                       help="显式印张起始小节,按存活行序(如 p1 灰字锚 14,18,22;"
+                            "不给则走结构枚举)")
+    p_dce.add_argument("--truth", required=True, metavar="FILE",
+                       help="dump_melody_truth 旋律真值 JSON(参照级)")
+    p_dce.add_argument("--align-beats", type=float, default=20.0, metavar="N",
+                       help="melodyAlignBeats(旋律格→印张格偏移)")
+    p_dce.add_argument("--window", default="6-13", metavar="A-B",
+                       help="计分印张小节号窗(默认 6-13;p0 布局号==印张号)")
+    p_dce.add_argument("--dot-shift", type=int, default=-1, metavar="N",
+                       help="印张八度点位移(gs 约定=点数减一,默认 -1)")
     p_vas = sub.add_parser("vlm-assemble", help="工单57 候选合并+过筛标段")
     p_vas.add_argument("--runs-dir", required=True, metavar="DIR",
                        help="vlm-run 产物目录(读 cand/)")
@@ -182,6 +199,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p_vas.add_argument("--out", required=True, metavar="FILE",
                        help="整表候选落盘路径(ukeflow.eval.candidate/1)")
     return parser
+
+
+def _dolce_eval(args) -> int:
+    from . import dolce_poc
+
+    doc_text = open(args.doc, encoding="utf-8").read()
+    layout_doc = json.load(open(args.layout, encoding="utf-8"))
+    truth = json.load(open(args.truth, encoding="utf-8"))
+    lo, hi = (int(x) for x in args.window.split("-"))
+    starts = (None if args.start_bars is None
+              else [int(x) for x in args.start_bars.split(",")])
+    rep = dolce_poc.run_eval(
+        doc_text, layout_doc, args.score_page, truth["notes"],
+        args.align_beats, lo, hi, dot_shift=args.dot_shift,
+        start_bars=starts)
+    print(json.dumps(rep, ensure_ascii=False, indent=2))
+    return 0
 
 
 def main(argv=None) -> int:
@@ -212,6 +246,8 @@ def main(argv=None) -> int:
             return _vlm_run(args)
         if args.command == "vlm-assemble":
             return _vlm_assemble(args)
+        if args.command == "dolce-eval":
+            return _dolce_eval(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
                               args.y1, args.ink_max, args.ascii_step,

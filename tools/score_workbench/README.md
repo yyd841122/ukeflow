@@ -57,6 +57,8 @@ $PY -m score_workbench.cli vlm-run --image page0.png --unit page0 \
     --out-dir ~/ukeflow-sources/vlm-poc-57/runs                # VLM 直读单单元(57,key 走环境变量)
 $PY -m score_workbench.cli vlm-assemble --runs-dir ~/ukeflow-sources/vlm-poc-57/runs \
     --units page0,page1,page2 --out cand-wholepage.json        # 合并+过筛已裁定拍段(57)
+$PY -m score_workbench.cli dolce-eval page0.123 --layout out/layout/layout.json \
+    --score-page 0 --truth /tmp/gs-aini-melody-gt.json --window 6-13   # dolce 整页输出×旋律真值(58③)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
 cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
 cd ../.. && dart run tools/dump_eval_chords.dart > /tmp/chords.json       # 导和弦锚(56,评测集输入)
