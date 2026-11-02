@@ -13,6 +13,7 @@
 报告里注明。
 """
 
+from collections import namedtuple
 from fractions import Fraction
 
 from . import __version__
@@ -22,6 +23,9 @@ from .eval_truth import in_scope
 REPORT_SCHEMA = "ukeflow.eval.report/1"
 CAP = Fraction(1, 32)
 SPATIAL_DIAG_TOL = Fraction(7, 20)      # ±0.35 拍:空间漂移诊断窗(非标准)
+
+# 计分条目:key 桶 + 拍位 + 时值(后两段 = 诊断定位/per-segment 用)
+ScoredItem = namedtuple("ScoredItem", "key beat dur segment ref")
 
 
 def _prf(tp, fp, fn):
@@ -40,7 +44,7 @@ def tolerance(truth_events) -> Fraction:
 
 
 def _match(truth, cand, tol):
-    """按 key 桶一对一最大配对(|Δbeat| ≤ tol)。
+    """按 key 桶一对一最大配对(|Δbeat| < tol,严格:恰在 τ 上判错)。
 
     key 相同才可能成对;桶小、tol < 半间隔,近邻唯一——Kuhn 增广路取
     桶内最大配对,邻表按近先序保证平局取更近者。返回 [(ti, ci)]。"""
@@ -59,7 +63,7 @@ def _match(truth, cand, tol):
         adj = {}
         for ti in tis:
             near = sorted((abs(truth[ti][1] - cand[c][1]), c) for c in cis
-                          if abs(truth[ti][1] - cand[c][1]) <= tol)
+                          if abs(truth[ti][1] - cand[c][1]) < tol)
             adj[ti] = [c for _, c in near]
         match_c = {}
         for ti in sorted(tis, key=lambda t: truth[t][1]):
@@ -80,7 +84,8 @@ def _augment(ti, adj, seen, match_c):
 
 
 def score_layer(truth_items, cand_items, tol):
-    """条目 = (key, beat, dur|None):key+拍位+dur 全对才算 TP;
+    """条目 = (key, beat, dur|None):key+拍位+dur 全对才算 TP;拍位/时值
+    都是严格小于 tol(恰在 τ 上判错,工单56「容差 <1/32 拍」字面);
     成对但 dur 错 = rhythm_miss(FP+FN 照计,单列诊断)。"""
     pairs = _match(truth_items, cand_items, tol)
     tp = rhythm_miss = 0
@@ -98,7 +103,7 @@ def score_layer(truth_items, cand_items, tol):
                               "key": list(map(str, truth_items[ti][0])),
                               "truth": None if td is None else str(td),
                               "cand": None if cd is None else str(cd)})
-        elif abs(td - cd) <= tol:
+        elif abs(td - cd) < tol:
             tp += 1
         else:
             rhythm_miss += 1
@@ -165,36 +170,56 @@ def _spatial_diagnostics(truth_events, cand_events, tol, truth_pairs_t, cand_pai
             "spatial": spatial}
 
 
+def _symbol_items(cols, rests, ties, slides, skip_tech_beats=(),
+                  skip_tiecol_beats=()):
+    """印张符号层计分条目,真值侧与候选侧共用(评审56:两抄收拢)。
+
+    调用方负责行级准入(真值先过 in_scope;候选原样);skip_* = 真值侧
+    待裁定槽位(箭头方向未核/连音柱未验)按拍对称出分,另报 unverified。
+    """
+    items = []
+    for col in cols:
+        beat = rat(col["beat"])
+        for m in col.get("marks") or []:
+            key = ("m", m["kind"], m["string"],
+                   m.get("fret") if m["kind"] == "digit" else None)
+            items.append(ScoredItem(key, beat, None, None, None))
+        if col.get("tech") and beat not in skip_tech_beats:
+            items.append(ScoredItem(("t", col["tech"]), beat, None, None, None))
+        if col.get("tie") and beat not in skip_tiecol_beats:
+            items.append(ScoredItem(("tiecol",), beat, None, None, None))
+    for r in rests:
+        items.append(ScoredItem(("rest",), rat(r["beat"]), rat(r["beats"]),
+                                None, None))
+    for t in ties:
+        items.append(ScoredItem(("tie", rat(t["from_beat"])),
+                                rat(t["from_beat"]),
+                                rat(t["to_beat"]) - rat(t["from_beat"]),
+                                None, None))
+    for s in slides:
+        items.append(ScoredItem(("slide",), rat(s["from_beat"]),
+                                rat(s["to_beat"]) - rat(s["from_beat"]),
+                                None, None))
+    return items
+
+
 def truth_items_from(doc, include_pending=False):
     """真值两层的计分条目:事件层 + 符号层。"""
     payload = doc["payload"]
     chords = payload.get("chords", [])
     cols = [c for c in payload["columns"] if in_scope(c, include_pending)]
     rests = [r for r in payload.get("rests", []) if in_scope(r, include_pending)]
-    ties = list(payload.get("ties", []))
+    ties = [t for t in payload.get("ties", []) if in_scope(t, include_pending)]
     slides = [s for s in payload.get("slides", []) if in_scope(s, include_pending)]
     events, _ = expand_events(cols, chords)
-    ev_items = [((e.string, e.fret), e.onset, e.duration,
-                 e.segment, e.ref) for e in events]
-    sym_items = []
-    for col in cols:
-        beat = rat(col["beat"])
-        for m in col.get("marks") or []:
-            key = ("m", m["kind"], m["string"],
-                   m.get("fret") if m["kind"] == "digit" else None)
-            sym_items.append((key, beat, None))
-        if col.get("tech") and not col.get("tech_pending"):
-            sym_items.append((("t", col["tech"]), beat, None))
-        if col.get("tie") and col.get("status") != "pending":
-            sym_items.append((("tiecol",), beat, None))
-    for r in rests:
-        sym_items.append((("rest",), rat(r["beat"]), rat(r["beats"])))
-    for t in ties:
-        sym_items.append((("tie", rat(t["from_beat"])), rat(t["from_beat"]),
-                          rat(t["to_beat"]) - rat(t["from_beat"])))
-    for s in slides:
-        sym_items.append((("slide",), rat(s["from_beat"]),
-                          rat(s["to_beat"]) - rat(s["from_beat"])))
+    ev_items = [ScoredItem((e.string, e.fret), e.onset, e.duration,
+                           e.segment, e.ref) for e in events]
+    sym_items = _symbol_items(
+        cols, rests, ties, slides,
+        skip_tech_beats={rat(c["beat"]) for c in payload["columns"]
+                         if c.get("tech_pending")},
+        skip_tiecol_beats={rat(c["beat"]) for c in payload["columns"]
+                           if c.get("tie") and c.get("status") == "pending"})
     return ev_items, sym_items, events
 
 
@@ -206,35 +231,13 @@ def candidate_items(cand_doc, chords, skip_tech_beats=(), skip_tiecol_beats=()):
     if cand_doc.get("schema") != "ukeflow.eval.candidate/1":
         raise ValueError("候选草稿 schema 须为 ukeflow.eval.candidate/1")
     cols = cand_doc["columns"]
-    rests = cand_doc.get("rests", [])
-    slides = cand_doc.get("slides", [])
-    ties = cand_doc.get("ties", [])
     events, warns = expand_events(cols, chords)
-    ev_items = [((e.string, e.fret), e.onset, e.duration, e.segment, e.ref)
-                for e in events]
-    sym_items = []
-    for col in cols:
-        beat = rat(col["beat"])
-        for m in col.get("marks") or []:
-            key = ("m", m["kind"], m["string"],
-                   m.get("fret") if m["kind"] == "digit" else None)
-            sym_items.append((key, beat, None))
-        if col.get("tech"):
-            if beat in skip_tech_beats:
-                continue
-            sym_items.append((("t", col["tech"]), beat, None))
-        if col.get("tie"):
-            if beat in skip_tiecol_beats:
-                continue
-            sym_items.append((("tiecol",), beat, None))
-    for r in rests:
-        sym_items.append((("rest",), rat(r["beat"]), rat(r["beats"])))
-    for t in ties:
-        sym_items.append((("tie", rat(t["from_beat"])), rat(t["from_beat"]),
-                          rat(t["to_beat"]) - rat(t["from_beat"])))
-    for s in slides:
-        sym_items.append((("slide",), rat(s["from_beat"]),
-                          rat(s["to_beat"]) - rat(s["from_beat"])))
+    ev_items = [ScoredItem((e.string, e.fret), e.onset, e.duration,
+                           e.segment, e.ref) for e in events]
+    sym_items = _symbol_items(cols, cand_doc.get("rests", []),
+                              cand_doc.get("ties", []),
+                              cand_doc.get("slides", []),
+                              skip_tech_beats, skip_tiecol_beats)
     return ev_items, sym_items, events, warns
 
 
@@ -285,7 +288,7 @@ def joint_report(doc, cand_doc, include_pending=False):
         "per_segment": {k: v for k, v in per_seg.items()},
         "diagnostics": diag,
         "ledger": led,
-        "gate": {"passage_line": "TAB 联合事件 F1 ≥ 0.90",
+        "gate": {"passing_line": "TAB 联合事件 F1 ≥ 0.90",
                  "events_f1": ev_all["f1"],
                  "pass": ev_all["f1"] >= 0.90},
     }

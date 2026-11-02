@@ -23,7 +23,6 @@ from .eval_expand import expand_events, rat
 from .eval_truth import SCHEMA, payload_sha256
 
 MAIN_AXIS_BEATS = 108
-BASELINE_EVIDENCE = "37/39 转录+真机听验基线"
 
 SEGMENTS = [
     {"id": "b1", "label": "第1小节(全小节休止)", "from_beat": "0",
@@ -92,7 +91,7 @@ def _muted_for(marks, beat, chords):
 
 def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
                   version: int, frozen_at: str) -> dict:
-    chords = [{"beat": _num(c["beat"]), "label": c["label"],
+    chords = [{"beat": _rat_str(c["beat"]), "label": c["label"],
                "frets": c["frets"]} for c in chords_dump["chords"]]
     cols = _group_notes(tab_gt["notes"])
     # ── 裁决修正:整列替换(增/删/改品位)──
@@ -115,14 +114,14 @@ def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
     dir_pending_from = rat(dir_pending_from) if dir_pending_from else None
     tremolos = {rat(t["beat"]) for t in tab_gt["tremolos"]}
     tie_cols = {rat(t["beat"]): t for t in corrections.get("tie_columns") or []}
-    rests = [{"beat": _f(r["beat"]), "beats": _f(r["beats"]),
+    rests = [{"beat": _rat_str(r["beat"]), "beats": _rat_str(r["beats"]),
               "status": "adjudicated",
               "evidence": "工单37 台账+工单39 裁片(实心点+尾钩)"}
              for r in tab_gt["rests"]
              if rat(r["beat"]) not in {rat(b) for b in
                                        corrections.get("rests_remove") or []}]
     for add in corrections.get("rests_add") or []:
-        rests.append({"beat": _f(add["beat"]), "beats": _f(add["beats"]),
+        rests.append({"beat": _rat_str(add["beat"]), "beats": _rat_str(add["beats"]),
                       "status": add.get("status", "adjudicated"),
                       "evidence": add.get("evidence", "")})
     slides = [s for s in tab_gt["slides"]
@@ -138,7 +137,7 @@ def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
     for beat in all_beats:
         seg = next((s["id"] for s in SEGMENTS
                     if rat(s["from_beat"]) <= beat < rat(s["to_beat"])), None)
-        col = {"beat": _num(beat), "segment": seg,
+        col = {"beat": _rat_str(beat), "segment": seg,
                "status": "adjudicated"}
         notes = cols.get(beat)
         tech = strums.get(beat)
@@ -181,7 +180,7 @@ def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
         nxt = [b for b in attack_beats if beat < b <= end] \
             + [b for b in rest_beats if beat < b <= end]
         dur = (min(nxt) if nxt else end) - beat
-        col["duration"] = _num(dur)
+        col["duration"] = _rat_str(dur)
     out.sort(key=lambda c: rat(c["beat"]))
     payload = {
         "chords": chords,
@@ -189,7 +188,7 @@ def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
         "columns": out,
         "rests": sorted(rests, key=lambda r: rat(r["beat"])),
         "ties": ties,
-        "slides": [{"from_beat": _f(s["fromBeat"]), "to_beat": _f(s["toBeat"]),
+        "slides": [{"from_beat": _rat_str(s["fromBeat"]), "to_beat": _rat_str(s["toBeat"]),
                     "status": "adjudicated",
                     "evidence": "工单39 第3小节重读裁片"} for s in slides],
         "uncovered": UNCOVERED,
@@ -222,12 +221,8 @@ def build_evalset(tab_gt: dict, chords_dump: dict, corrections: dict,
     }
 
 
-def _num(f) -> str:
+def _rat_str(v) -> str:
     """Fraction → 冻结文件的有理数串("4"/"19/2");JSON 数值装不下 1/3。"""
-    f = rat(f)
+    f = rat(v)
     return str(f.numerator) if f.denominator == 1 \
         else f"{f.numerator}/{f.denominator}"
-
-
-def _f(v) -> str:
-    return _num(v)

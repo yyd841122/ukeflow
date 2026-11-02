@@ -4,8 +4,6 @@
 段过滤、tech_x_marks 保 × 列。
 """
 
-from fractions import Fraction as F
-
 from score_workbench.eval_build import build_evalset
 from score_workbench.eval_expand import expand_events
 from score_workbench.eval_truth import payload_sha256, validate_evalset

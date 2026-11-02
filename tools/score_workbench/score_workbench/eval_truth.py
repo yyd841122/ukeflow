@@ -11,7 +11,6 @@ payload sha256;真值冻结后改动走版本号(票面范围纪律)。历史转
 
 import hashlib
 import json
-from fractions import Fraction
 
 from .eval_expand import rat
 

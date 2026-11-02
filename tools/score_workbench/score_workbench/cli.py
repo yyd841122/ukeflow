@@ -137,8 +137,6 @@ def _build_parser() -> argparse.ArgumentParser:
                       help=f"冻结评测集(缺省包内 {DEFAULT_PATH})")
     p_ev.add_argument("--include-pending", action="store_true",
                       help="待裁定项也入分(默认只评已裁定)")
-    p_ev.add_argument("--layer", choices=("events", "symbols", "both"),
-                      default="both", help="计分层(默认两层都报)")
     p_ev.add_argument("--out", metavar="FILE", help="报告落盘(缺省 stdout 摘要)")
     return parser
 
@@ -388,8 +386,6 @@ def _build_evalset(args) -> int:
 
 
 def _eval_joint(args) -> int:
-    import sys as _sys
-    from fractions import Fraction
     path = args.evalset or str(Path(__file__).parent / DEFAULT_PATH)
     doc = load_evalset(path)
     with open(args.candidate, encoding="utf-8") as fh:
@@ -419,7 +415,7 @@ def _eval_joint(args) -> int:
           f"(F1={g['events_f1']:.4f})")
     if report["expansion_warnings"]:
         print(f"  展开告警 {len(report['expansion_warnings'])} 条"
-              f"(详见报告)", file=_sys.stderr)
+              f"(详见报告)", file=sys.stderr)
     return 0
 
 

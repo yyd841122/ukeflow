@@ -42,8 +42,10 @@ def test_joint_verdict_requires_all_three_components():
 def test_onset_within_tol_is_tp_beyond_is_not():
     truth = [ev(1, 2, "1", "1")]
     assert score_layer(truth, [ev(1, 2, "1", "1")], F(1, 32))["tp"] == 1
-    # 恰在 τ 上(=1/32)算中(闭);超半格(1/16)不算
-    assert score_layer(truth, [ev(1, 2, "33/32", "1")], F(1, 32))["tp"] == 1
+    # 严格小于(工单56「容差 <1/32 拍」字面):恰在 τ 上(=1/32)判错
+    assert score_layer(truth, [ev(1, 2, "33/32", "1")], F(1, 32))["tp"] == 0
+    # 半个 τ(=1/64)内算中
+    assert score_layer(truth, [ev(1, 2, "65/64", "1")], F(1, 32))["tp"] == 1
     assert score_layer(truth, [ev(1, 2, "17/16", "1")], F(1, 32))["tp"] == 0
 
 
@@ -82,4 +84,10 @@ def test_rational_exact_beats_float_drift():
     # 时值同理:1/3 对 0.25 判错
     rep = score_layer([ev(1, 2, "13", "1/3")], [ev(1, 2, "13", "0.25")],
                       F(1, 32))
+    assert rep["tp"] == 0 and rep["rhythm_miss"]["count"] == 1
+
+
+def test_duration_boundary_is_strict_too():
+    # 恰差 τ 的时值同样判错(严格小于对拍位与时值一视同仁)
+    rep = score_layer([ev(1, 2, "0", "1")], [ev(1, 2, "0", "33/32")], F(1, 32))
     assert rep["tp"] == 0 and rep["rhythm_miss"]["count"] == 1
