@@ -50,6 +50,13 @@ $PY -m score_workbench.cli probe crops/p00h0s01_jianpu.png --x1 420       # 像�
 $PY -m score_workbench.cli build-evalset --tab-gt gt.json --chords chords.json \
     --corrections adjudications.json --out evalset/gs-aini-tab-v1.json --version 1  # 冻结评测集(56)
 $PY -m score_workbench.cli eval-joint cand.json                           # 联合事件 F1 评分(56)
+$PY -m score_workbench.cli vlm-prepare --pdf x.pdf --layout out/layout/layout.json \
+    --out-dir ~/ukeflow-sources/vlm-poc-57 --score-pages 0,1,2 \
+    --systems page0:0,page0:1,page1:4,page1:5,page2:6          # 整谱页拼装+系统裁块(57)
+$PY -m score_workbench.cli vlm-run --image page0.png --unit page0 \
+    --out-dir ~/ukeflow-sources/vlm-poc-57/runs                # VLM 直读单单元(57,key 走环境变量)
+$PY -m score_workbench.cli vlm-assemble --runs-dir ~/ukeflow-sources/vlm-poc-57/runs \
+    --units page0,page1,page2 --out cand-wholepage.json        # 合并+过筛已裁定拍段(57)
 cd ../.. && dart run tools/dump_melody_truth.dart > /tmp/gt.json          # 导旋律真值(49)
 cd ../.. && dart run tools/dump_tab_truth.dart > /tmp/tab-gt.json         # 导 TAB 真值(50)
 cd ../.. && dart run tools/dump_eval_chords.dart > /tmp/chords.json       # 导和弦锚(56,评测集输入)
@@ -98,6 +105,13 @@ cd ../.. && dart run tools/dump_eval_chords.dart > /tmp/chords.json       # 导�
   tremolo → tremolos、slide → slides(止拍须人工补),shaft/ellipse 留
   草稿证据不导出。`preflight` 镜像 Dart 校验器关键规则(逐小节拍长闭合
   按小节自己的窗核对/弦品界/同弦同刻/滑音端点/骨架界),权威仍在 App 端。
+- `vlm_poc`(57):VLM 直读 TAB POC 抓手(ADR-0010 主线实测)。冻结提示词
+  (`PROMPT`/`PROMPT_VERSION`,批量期禁改)+ DeepSeek vision 调用(key 只走
+  `DEEPSEEK_API_KEY` 环境变量;原始响应/候选/账本落 out-dir,不入库不入
+  git)+ 归一(duration 持续窗重算与真值同规,muted 不入码)+ 过筛已裁定
+  拍段标段;账本逐调用记 usage/峰谷/成本(官方 Flash 价表折算),失败调用
+  也记账。输入制备 = PDF 嵌入位图原生拼装整谱页 + 系统条带裁块(整块全层,
+  保留完整节奏带;300dpi 骨架坐标→原生换算)。
 - `diff-tab`:`ukeflow.workbench.tab_diff/1` — 四维:数字正确率(拍位
   ±0.35 拍 + 同弦优先配对)/ 时值(同弦连续对的印张时值对真值拍距)/
   休止 P-R(全小节休止不在真值事件模型,单列)/ 技巧 F1(roll/strumUp/

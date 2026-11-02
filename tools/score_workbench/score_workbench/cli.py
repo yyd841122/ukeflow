@@ -27,6 +27,17 @@
       小节 IR 表,点击互跳、逐小节确认、全曲确认导出 ScoreIR JSON;
       载 builtin 真值 JSON 跑对照(diff 报告即验收面板)。
       只绑 127.0.0.1。状态存 <out-dir>/proof.json,导出落 <out-dir>/ir.json。
+  vlm-prepare --pdf PDF --layout FILE --out-dir DIR --score-pages 0,1,2
+      [--systems page0:0,page0:1,...]
+      工单57 输入制备:PDF 嵌入位图原生拼装整谱页(page{N}.png)+ 系统条带
+      裁块(整块全层,保留完整节奏带;300dpi 骨架坐标→原生换算)。
+  vlm-run --image FILE --unit NAME --out-dir DIR [--model M] [--budget-cny N]
+      工单57 VLM 直读:冻结提示词 × 图片 → DeepSeek vision → 归一候选。
+      key 从环境变量 DEEPSEEK_API_KEY 读;原始响应/候选/账本落 out-dir
+      (仓库外,不入库不入 git);候选未过筛留全时值轴。
+  vlm-assemble --runs-dir DIR --units a,b,c --out FILE
+      工单57 候选合并 → 过筛已裁定拍段(0-36+80-108)→ 标段 → 整表候选,
+      交 eval-joint 评分。
 """
 
 import argparse
@@ -49,6 +60,7 @@ from .report import report_json, triage_pdf
 from .split import split_pdf
 from .tab import recognize_tab_pdf
 from .tab_diff import diff_tab
+from . import vlm_poc
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -138,6 +150,37 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ev.add_argument("--include-pending", action="store_true",
                       help="待裁定项也入分(默认只评已裁定)")
     p_ev.add_argument("--out", metavar="FILE", help="报告落盘(缺省 stdout 摘要)")
+    p_vpr = sub.add_parser("vlm-prepare", help="工单57 输入制备:整谱页拼装+系统裁块")
+    p_vpr.add_argument("--pdf", required=True, metavar="FILE",
+                       help="曲源 PDF(嵌入位图原生拼装,不重采样)")
+    p_vpr.add_argument("--layout", required=True, metavar="FILE",
+                       help="split 产物 layout.json(系统 block 坐标)")
+    p_vpr.add_argument("--out-dir", required=True, metavar="DIR",
+                       help="产物目录(page{N}.png + crop-*.png)")
+    p_vpr.add_argument("--score-pages", default="0", metavar="N,N",
+                       help="整谱页号(逗号分隔,对应 layout score_pages)")
+    p_vpr.add_argument("--systems", default="", metavar="pageN:M",
+                       help="裁块清单(逗号分隔,如 page0:0,page1:4)")
+    p_vrun = sub.add_parser("vlm-run", help="工单57 VLM 直读单单元")
+    p_vrun.add_argument("--image", required=True, metavar="FILE",
+                        help="输入位图(整谱页或系统条带 PNG)")
+    p_vrun.add_argument("--unit", required=True, metavar="NAME",
+                        help="单元名(候选/原始响应/账本按此命名)")
+    p_vrun.add_argument("--out-dir", required=True, metavar="DIR",
+                        help="运行产物目录(raw/ cand/ ledger.jsonl)")
+    p_vrun.add_argument("--model", default=vlm_poc.MODEL_DEFAULT, metavar="M",
+                        help=f"模型(默认 {vlm_poc.MODEL_DEFAULT})")
+    p_vrun.add_argument("--budget-cny", type=float,
+                        default=vlm_poc.BUDGET_CNY_DEFAULT, metavar="N",
+                        help=f"预算上限 ¥(默认 {vlm_poc.BUDGET_CNY_DEFAULT};"
+                             f"越线告警停止)")
+    p_vas = sub.add_parser("vlm-assemble", help="工单57 候选合并+过筛标段")
+    p_vas.add_argument("--runs-dir", required=True, metavar="DIR",
+                       help="vlm-run 产物目录(读 cand/)")
+    p_vas.add_argument("--units", required=True, metavar="NAME,NAME",
+                       help="参与合并的单元名(逗号分隔)")
+    p_vas.add_argument("--out", required=True, metavar="FILE",
+                       help="整表候选落盘路径(ukeflow.eval.candidate/1)")
     return parser
 
 
@@ -163,6 +206,12 @@ def main(argv=None) -> int:
             return _build_evalset(args)
         if args.command == "eval-joint":
             return _eval_joint(args)
+        if args.command == "vlm-prepare":
+            return _vlm_prepare(args)
+        if args.command == "vlm-run":
+            return _vlm_run(args)
+        if args.command == "vlm-assemble":
+            return _vlm_assemble(args)
         if args.command == "probe":
             print(probe_image(args.image, args.x0, args.x1, args.y0,
                               args.y1, args.ink_max, args.ascii_step,
@@ -419,6 +468,39 @@ def _eval_joint(args) -> int:
     return 0
 
 
+
+
+def _vlm_prepare(args) -> int:
+    import json as _json
+    with open(args.layout, encoding="utf-8") as fh:
+        layout = _json.load(fh)
+    pages = [int(x) for x in args.score_pages.split(",") if x]
+    made = vlm_poc.prepare_pages(args.pdf, layout, pages, args.out_dir)
+    for m in made:
+        print(f"整谱页 → {m}")
+    if args.systems:
+        specs = [s.strip() for s in args.systems.split(",") if s.strip()]
+        for m in vlm_poc.prepare_crops(args.out_dir, layout, specs,
+                                       args.out_dir):
+            print(f"系统条带 → {m}")
+    return 0
+
+
+def _vlm_run(args) -> int:
+    cand = vlm_poc.run_image(args.image, args.unit, args.out_dir,
+                             model=args.model, budget_cny=args.budget_cny)
+    meta = cand["meta"]
+    if meta["finish_reason"] not in ("stop", None):
+        print(f"⚠ finish_reason={meta['finish_reason']}(输出可能被截断,"
+              f"原始响应见 raw/)", file=sys.stderr)
+    return 0
+
+
+def _vlm_assemble(args) -> int:
+    units = [u.strip() for u in args.units.split(",") if u.strip()]
+    vlm_poc.assemble(args.runs_dir, units, args.out)
+    return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
-

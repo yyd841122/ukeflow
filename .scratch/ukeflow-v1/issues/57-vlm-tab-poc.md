@@ -10,14 +10,37 @@
 
 **Blocked by:** 56
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] key 环境变量接线(不入库)
-- [ ] 提示词定版 + 输出契约 JSON
-- [ ] 整页 vs 裁块两形态跑通 gs-aini 样张
-- [ ] 56 评分器打分 + 未见曲复测
-- [ ] POC 报告落 docs/research/(可复现命令+成本清单)
+- [x] key 环境变量接线(不入库)(DEEPSEEK_API_KEY 只走环境;harness `require_key` 缺失即报错,不落盘)
+- [x] 提示词定版 + 输出契约 JSON(`PROMPT_VERSION="57-v1"` 冻结于 vlm_poc.py,单测钉锚;契约=ukeflow.eval.candidate/1)
+- [x] 整页 vs 裁块两形态跑通 gs-aini 样张(整页 3 页 + 裁块 5 系统条带,原生位图拼装/整块全层裁块,9 调用零截断零告警)
+- [x] 56 评分器打分 + 未见曲复测(裁块 F1=0.1924 / 整页 F1=0.1905,**未过晋级线 0.90**;按票面纪律「晋级后复测」——未晋级,未见曲复测不适用)
+- [x] POC 报告落 docs/research/(可复现命令+成本清单)(`docs/research/2026-11-02-vlm-tab-poc-57.md`)
 
 ## Comments
 
 - 2026-11-02 (立票): Codex 工程判断:裁块 VLM POC 值得做(置信度 ~80%),整页直读稳定过 TAB 晋级线的先验低(≤25%)——正面依据是 TAB 符号集小(数字网格),负面是空间关系复杂/长序列漏项/本项目反复误读实证。学术基准「MLLM 读谱弱」不能直接外推:WildScore 等评的是谱面推理问答,非逐音转录 F1。分别测数字、弦归属、音柱关联、节奏、完整事件,不看「整页 JSON 看着合理」。
+
+- 2026-11-02 (收口): 五项全落地,**晋级线未过(否定性结论,证据充分)**——
+  裁块事件 F1=0.1924、整页 0.1905(晋级线 0.90,差一个数量级;Codex 立票先验
+  ≤25% 命中)。成本 ¥0.8408/上限 ¥20。要点:
+  - **读对音、读错拍**:候选 (弦,品) 对自身命中 0.92-0.95(读出来的多是真音),
+    但对真值覆盖仅 0.64(裁块)/0.47(整页);拍位全部落 0.25 网格但累加错、
+    整小节连锁漂移。**瓶颈 = 节奏网格重建**,不是音高识别,也不是提示词量级。
+  - 「裁块破坏上下文」假设部分证伪:裁块没塌(与 dolce 简谱裁条行为不同),
+    两形态事件 F1 打平;整页反而大面积漏读(159 事件 vs 真值 324,顶线①弦
+    崩得最狠)。
+  - 模型路由实测:`deepseek-v4-flash-vision-exp` 已退役,官方路由 deepseek-flash
+    (V4.1-Flash-1017),默认思考 effort=high(首调 16k 全烧 reasoning、正文空);
+    冻结配置 = thinking low + max_tokens 65536 + temp 0 + json_object。
+  - 退路链指向:工单58(商业引擎筛选/换源)升下一优先;混合路若做应为
+    「外部拍位骨架锚定 + VLM/OCR 只做音位」,VLM 自主重建节奏网格不可行。
+  - 顺带发现 ①:印张 bar3 中部印 C#m7,App builtin(→冻结锚)@10=Bsus4——
+    39 收口回改清单建议加核此枚;②muted 记分口径注记(推导产物不入码,
+    台账「kind:muted」句以评分器行为为准)。
+  - 落地:tools/score_workbench/vlm_poc.py(PROMPT 57-v1 冻结+单测 20)+ CLI
+    vlm-prepare/vlm-run/vlm-assemble + README;pytest 198→218,check.sh 全闸
+    (analyzer 净+flutter 979+双漂移闸)。原始响应/候选/账本在
+    ~/ukeflow-sources/vlm-poc-57/(仓库外,不入 git);报告
+    docs/research/2026-11-02-vlm-tab-poc-57.md(逐调用成本表+错误解剖+复现链)。
