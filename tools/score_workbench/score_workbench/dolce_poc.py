@@ -28,7 +28,8 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 
 # C 大调度数基音(d=1..7),App 纯旋律版落指框架(E→C 平移后)。
-_C_MAJOR_BASE = {1: 60, 2: 62, 3: 64, 4: 65, 5: 67, 6: 69, 7: 71}
+# 59a 基线适配(melody 草稿折 midi)同用此表。
+C_MAJOR_BASE = {1: 60, 2: 62, 3: 64, 4: 65, 5: 67, 6: 69, 7: 71}
 
 
 @dataclass
@@ -55,7 +56,7 @@ class Token:
         if self.kind != "note":
             return None
         octave = self.dots_up - self.commas + dot_shift
-        return _C_MAJOR_BASE.get(self.degree, 60) + 12 * octave
+        return C_MAJOR_BASE.get(self.degree, 60) + 12 * octave
 
     @property
     def is_attack(self) -> bool:

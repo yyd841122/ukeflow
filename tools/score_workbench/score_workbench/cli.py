@@ -38,6 +38,12 @@
   vlm-assemble --runs-dir DIR --units a,b,c --out FILE
       工单57 候选合并 → 过筛已裁定拍段(0-36+80-108)→ 标段 → 整表候选,
       交 eval-joint 评分。
+  tab-candidate <tab.json> --out FILE
+      工单59a:50 TAB 草稿 → ukeflow.eval.candidate/1(聚列+时值持续窗
+      重算+scope 标段),落盘交 eval-joint——不训练基线的候选半边。
+  eval-melody <melody.json> --truth FILE [--out FILE]
+      工单59a:49 旋律草稿 × dump_melody_truth(参照级)逐窗 melody_score
+      (56 配对机制;authority=reference,不与 TAB 冻结闸混称)。
 """
 
 import argparse
@@ -198,6 +204,17 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="参与合并的单元名(逗号分隔)")
     p_vas.add_argument("--out", required=True, metavar="FILE",
                        help="整表候选落盘路径(ukeflow.eval.candidate/1)")
+    p_tcd = sub.add_parser("tab-candidate", help="工单59a:tab.json → 候选草稿")
+    p_tcd.add_argument("draft", metavar="TAB.json",
+                       help="recognize-tab 产物 tab.json")
+    p_tcd.add_argument("--out", required=True, metavar="FILE",
+                       help="候选落盘路径(ukeflow.eval.candidate/1,已过筛标段)")
+    p_eml = sub.add_parser("eval-melody", help="工单59a:旋律草稿逐窗跑分")
+    p_eml.add_argument("draft", metavar="MELODY.json",
+                       help="recognize 产物 melody.json")
+    p_eml.add_argument("--truth", required=True, metavar="FILE",
+                       help="dump_melody_truth 旋律真值 JSON(参照级)")
+    p_eml.add_argument("--out", metavar="FILE", help="报告落盘(缺省 stdout)")
     return parser
 
 
@@ -246,6 +263,10 @@ def main(argv=None) -> int:
             return _vlm_run(args)
         if args.command == "vlm-assemble":
             return _vlm_assemble(args)
+        if args.command == "tab-candidate":
+            return _tab_candidate(args)
+        if args.command == "eval-melody":
+            return _eval_melody(args)
         if args.command == "dolce-eval":
             return _dolce_eval(args)
         if args.command == "probe":
@@ -471,7 +492,9 @@ def _build_evalset(args) -> int:
 
 
 def _eval_joint(args) -> int:
-    path = args.evalset or str(Path(__file__).parent / DEFAULT_PATH)
+    # DEFAULT_PATH 相对包根(tools/score_workbench/,evalset/ 在彼处)
+    path = args.evalset or str(
+        Path(__file__).parent.parent / DEFAULT_PATH)
     doc = load_evalset(path)
     with open(args.candidate, encoding="utf-8") as fh:
         cand = json.load(fh)
@@ -535,6 +558,62 @@ def _vlm_run(args) -> int:
 def _vlm_assemble(args) -> int:
     units = [u.strip() for u in args.units.split(",") if u.strip()]
     vlm_poc.assemble(args.runs_dir, units, args.out)
+    return 0
+
+
+def _tab_candidate(args) -> int:
+    from .draft_candidate import scope_and_store, tab_to_candidate
+
+    with open(args.draft, encoding="utf-8") as fh:
+        tab_doc = json.load(fh)
+    cand, notes = tab_to_candidate(tab_doc)
+    merged = scope_and_store(cand, args.out)
+    skip = notes["skip"]
+    print(f"{Path(args.draft).name} → {args.out}(scope 过筛后 "
+          f"{len(merged['columns'])} 列 / {len(merged['rests'])} 休止)")
+    print(f"  跳记号: barline {skip['barline']} / slide {skip['slide']}"
+          f"(无端点)/ ellipse {skip['ellipse']};"
+          f"ties/slides 留空(50 不读,漏报照实计)")
+    if notes["tech_conflicts"]:
+        print(f"  同拍 tech 冲突 {len(notes['tech_conflicts'])} 条"
+              f"(优先级保优,详候选 warnings)")
+    return 0
+
+
+def _eval_melody(args) -> int:
+    from .draft_candidate import melody_draft_attacks, melody_window_scores
+
+    with open(args.draft, encoding="utf-8") as fh:
+        melody_doc = json.load(fh)
+    with open(args.truth, encoding="utf-8") as fh:
+        truth_doc = json.load(fh)
+    attacks, n_unknown = melody_draft_attacks(melody_doc)
+    reps = melody_window_scores(attacks, truth_doc)
+    report = {
+        "schema": "ukeflow.eval.melody_baseline/1",
+        "tool_version": __version__,
+        "authority": "reference",
+        "authority_note": "真值=dump_melody_truth(App 纯旋律,参照级;"
+                          "非 56 TAB 冻结闸,不得混称)",
+        "n_unknown_degree_slots": n_unknown,
+        "n_cand_attacks": len(attacks),
+        "windows": {k: v for k, v in reps.items()},
+    }
+    if args.out:
+        Path(args.out).write_text(
+            json.dumps(report, ensure_ascii=False, indent=1) + "\n",
+            encoding="utf-8")
+    print(f"{Path(args.draft).name} × dump_melody_truth"
+          f"(参照级,align={truth_doc['melodyAlignBeats']:g};"
+          f"草稿 {len(attacks)} 攻击 / unknown 槽 {n_unknown})")
+    for name, r in reps.items():
+        p = f"{r['precision']:.3f}" if r["precision"] is not None else "—"
+        rc = f"{r['recall']:.3f}" if r["recall"] is not None else "—"
+        print(f"  [{name}] F1={r['f1']:.4f} P={p} R={rc} "
+              f"(tp={r['tp']} fp={r['fp']} fn={r['fn']} "
+              f"τ={r['tau']} 真{r['n_truth']}/读{r['n_cand']})")
+    if args.out:
+        print(f"  报告: {args.out}")
     return 0
 
 
