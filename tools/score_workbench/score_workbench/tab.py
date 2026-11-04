@@ -885,22 +885,23 @@ def recognize_system(crop_gray, system, ocr, meter_beats=DEFAULT_METER) -> dict:
     return {"attacks": attacks, "evidence": evidence}
 
 
-def recognize_tab_pdf(pdf: str, out_dir: str, dpi: int = 300,
-                      ocr=None, header_reader=None,
-                      models_dir: str | None = None) -> dict:
-    """票面主入口:位图 PDF → split → 逐系统 TAB 识别 → tab.json。
+def recognize_tab_attacks(pdf: str, out_dir: str, dpi: int = 300,
+                          ocr=None, header_reader=None,
+                          models_dir: str | None = None,
+                          load_ocr: bool = True) -> dict:
+    """split → 逐系统 TAB 识别(到 attack 为止,不装配)。
 
-    ocr 缺省走 PP-OCR(模型目录按 resolve 默认序找,models_dir 可指定);
-    页眉复用工单49 的 read_header(调号/拍号/速度,读不出按 4/4 假定落
-    警告)。"""
+    返回 {systems, attacks, evidence, per_system, header, meter_beats}:
+    attacks/evidence 按系统序,页坐标。工单50 装配层与工单61 oracle 注入
+    (装配前换字形)共用此缝;load_ocr=False 供 oracle 路径(标签被替换,
+    OCR 不参与,纯几何确定性)。"""
     import cv2
 
     from .melody import read_header
-    from .report import sha256_file
     from .split import split_pdf
 
     layout = split_pdf(pdf, out_dir, dpi=dpi)
-    if ocr is None:
+    if ocr is None and load_ocr:
         from .paddle_ocr import DigitOCR
         ocr = DigitOCR(models_dir)
     systems = [s for pg in layout["score_pages"] for s in pg["systems"]]
@@ -935,8 +936,29 @@ def recognize_tab_pdf(pdf: str, out_dir: str, dpi: int = 300,
         })
         all_attacks.append(res["attacks"])
         all_evidence.append(res["evidence"])
+    return {"systems": systems, "attacks": all_attacks,
+            "evidence": all_evidence, "per_system": per_system,
+            "header": header, "meter_beats": meter_beats, "layout": layout}
+
+
+def recognize_tab_pdf(pdf: str, out_dir: str, dpi: int = 300,
+                      ocr=None, header_reader=None,
+                      models_dir: str | None = None) -> dict:
+    """票面主入口:位图 PDF → split → 逐系统 TAB 识别 → tab.json。
+
+    ocr 缺省走 PP-OCR(模型目录按 resolve 默认序找,models_dir 可指定);
+    页眉复用工单49 的 read_header(调号/拍号/速度,读不出按 4/4 假定落
+    警告)。"""
+    from .report import sha256_file
+
+    run = recognize_tab_attacks(pdf, out_dir, dpi=dpi, ocr=ocr,
+                                header_reader=header_reader,
+                                models_dir=models_dir)
+    systems, header, meter_beats = (run["systems"], run["header"],
+                                    run["meter_beats"])
     measures, unmapped = [], []
-    for s, attacks, evidence in zip(systems, all_attacks, all_evidence):
+    for s, attacks, evidence in zip(systems, run["attacks"],
+                                    run["evidence"]):
         spans = [{"index": m["index"], "x0": m["x0"], "x1": m["x1"]}
                  for m in s["measures"]]
         # 小节起点锚在小节网格(bar 数 × 拍号):barline 是真值,read_beats
@@ -958,7 +980,7 @@ def recognize_tab_pdf(pdf: str, out_dir: str, dpi: int = 300,
         "source": {"file": str(Path(pdf).resolve()),
                    "sha256": sha256_file(pdf), "dpi": dpi},
         "header": header,
-        "systems": per_system,
+        "systems": run["per_system"],
         "measures": measures,
         "unmapped_attacks": [{
             "x": round(a.cx, 1),

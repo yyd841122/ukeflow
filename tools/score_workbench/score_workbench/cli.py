@@ -41,6 +41,15 @@
   tab-candidate <tab.json> --out FILE
       工单59a:50 TAB 草稿 → ukeflow.eval.candidate/1(聚列+时值持续窗
       重算+scope 标段),落盘交 eval-joint——不训练基线的候选半边。
+  oracle-glyph <pdf> --out-dir DIR [--evalset FILE]
+      [--variant marks|marks+durations] [--skeleton split|repaired]
+      [--bar-map PRESET] [--dpi N]
+      工单61 m0:真值字形 oracle 注入(61 票面:冻结评测集当正确字形喂回
+      50 自动定位+节奏解码)。产物 oracle-tab*.json(同 tab.json schema
+      + oracle 对齐段),随后 tab-candidate → eval-joint 与 59a 同链。
+      marks=票面主数;marks+durations=时值亦真值的归因诊断(非主数)。
+      skeleton=split(装配吃 split 小节界,幻影界错位照罚)| repaired
+      (幻影界按映射并合的上限诊断);bar-map=注入锚的小节映射预设。
   eval-melody <melody.json> --truth FILE [--out FILE]
       工单59a:49 旋律草稿 × dump_melody_truth(参照级)逐窗 melody_score
       (56 配对机制;authority=reference,不与 TAB 冻结闸混称)。
@@ -209,6 +218,24 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="recognize-tab 产物 tab.json")
     p_tcd.add_argument("--out", required=True, metavar="FILE",
                        help="候选落盘路径(ukeflow.eval.candidate/1,已过筛标段)")
+    p_org = sub.add_parser("oracle-glyph", help="工单61 m0:真值字形注入草稿")
+    p_org.add_argument("pdf", help="曲谱 PDF 路径(位图)")
+    p_org.add_argument("--out-dir", required=True, metavar="DIR",
+                       help="产物目录:oracle-tab.json(复用/重跑 split)")
+    p_org.add_argument("--evalset", default=None, metavar="FILE",
+                       help=f"冻结评测集(缺省包内 {DEFAULT_PATH})")
+    p_org.add_argument("--variant", default="marks",
+                       choices=("marks", "marks+durations"),
+                       help="marks=票面主数;marks+durations=时值亦真值(归因)")
+    p_org.add_argument("--skeleton", default="split",
+                       choices=("split", "repaired"),
+                       help="装配骨架:split 原样(幻影界照罚);repaired=按"
+                            "映射并幻影 span 的上限诊断(非管线行为)")
+    p_org.add_argument("--bar-map", default="gs-aini57", metavar="PRESET",
+                       help="系统→真值小节映射:gs-aini57(工单57 冻结映射"
+                            "+幻影并合,缺省)| split(按 split 累计小节号)")
+    p_org.add_argument("--dpi", type=int, default=300, metavar="N",
+                       help="渲染 dpi(300-400;默认 300)")
     p_eml = sub.add_parser("eval-melody", help="工单59a:旋律草稿逐窗跑分")
     p_eml.add_argument("draft", metavar="MELODY.json",
                        help="recognize 产物 melody.json")
@@ -265,6 +292,8 @@ def main(argv=None) -> int:
             return _vlm_assemble(args)
         if args.command == "tab-candidate":
             return _tab_candidate(args)
+        if args.command == "oracle-glyph":
+            return _oracle_glyph(args)
         if args.command == "eval-melody":
             return _eval_melody(args)
         if args.command == "dolce-eval":
@@ -558,6 +587,33 @@ def _vlm_run(args) -> int:
 def _vlm_assemble(args) -> int:
     units = [u.strip() for u in args.units.split(",") if u.strip()]
     vlm_poc.assemble(args.runs_dir, units, args.out)
+    return 0
+
+
+def _oracle_glyph(args) -> int:
+    from .oracle_glyph import GS_AINI_BAR_MAP, build_oracle_tab
+
+    path = args.evalset or str(
+        Path(__file__).parent.parent / DEFAULT_PATH)
+    doc = load_evalset(path)
+    bar_map = GS_AINI_BAR_MAP if args.bar_map == "gs-aini57" else None
+    tab_doc = build_oracle_tab(args.pdf, args.out_dir, doc,
+                               variant=args.variant, dpi=args.dpi,
+                               bar_map=bar_map, skeleton=args.skeleton)
+    al = tab_doc["oracle"]["alignment"]
+    stem = "oracle-tab" + ("-durations" if args.variant != "marks" else "") \
+        + ("-repaired" if args.skeleton != "split" else "") + ".json"
+    print(f"{Path(args.pdf).name} × oracle({args.variant},"
+          f"{args.skeleton}) → {Path(args.out_dir) / stem}")
+    print(f"  对齐:配对 {al['n_pairs']} / 多余 attack {al['n_extra']} / "
+          f"漏检列 {al['n_missed']};注入记号 {al['n_injected']}"
+          f"(坏记号 {len(al['bad_marks'])})")
+    for b in al["bars"]:
+        if b["n_extra"] or b["n_missed"]:
+            print(f"    bar {b['bar']}: attack {b['n_attacks']} / 列 "
+                  f"{b['n_cols']} / 配 {b['n_pairs']}(+{b['n_extra']}extra "
+                  f"-{b['n_missed']}missed {b['missed_beats']})")
+    print("  下一步: tab-candidate <oracle-tab*.json> --out …;eval-joint …")
     return 0
 
 
