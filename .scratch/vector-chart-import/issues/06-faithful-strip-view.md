@@ -1,6 +1,6 @@
 # 06: 原样流水跟练视图(单行横带 + 播放头跟拍)
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 **Blocked by:** 05(done)
 
@@ -84,3 +84,5 @@
   干净(无 TAB/4/4 重复、谱线连续、小节号一次);logcat E/flutter=0。
 - 产物已重推并入库(3.8MB,~/ukeflow-sources/vector-pages/)。flutter
   全闸绿 + python 18/18。待用户上手跟练听感 → 翻 done。
+
+### 2026-11-07 用户上手验收通过(横带裁头+预览一致性复检 OK)→ done。
