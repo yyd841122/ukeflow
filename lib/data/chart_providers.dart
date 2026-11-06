@@ -141,6 +141,7 @@ class ReadyImportedSolo extends ImportedSoloEntry {
     required this.def,
     required this.accompaniment,
     required this.melody,
+    this.sourceHtml,
   });
 
   /// 组合定义(谱面视图/双轨混播的绑定源;id 照录识谱源)。
@@ -151,6 +152,10 @@ class ReadyImportedSolo extends ImportedSoloEntry {
 
   /// 简谱旋律层(层内本地拍位,主轴定位在 [def].melodyAlignBeats)。
   final TabChart melody;
+
+  /// 原样渲染 HTML(票05):非空 = 详情页有「原谱」入口;null = 无
+  /// (旧条目/非矢量谱页)。
+  final String? sourceHtml;
 }
 
 /// 读出管线任一环失败(源 JSON 坏损/schemaVersion 不符/校验阻塞):
@@ -192,6 +197,7 @@ ImportedSoloEntry _parseImportedSoloEntry(ImportedSoloChart row) {
       def: m.def,
       accompaniment: m.accompaniment,
       melody: m.melody,
+      sourceHtml: row.sourceHtml,
     );
   } catch (error) {
     debugPrint('UkeFlow: 导入独奏谱「${row.title}」读出校验失败 $error');

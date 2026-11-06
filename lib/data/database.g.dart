@@ -862,6 +862,17 @@ class $ImportedSoloChartsTable extends ImportedSoloCharts
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceHtmlMeta = const VerificationMeta(
+    'sourceHtml',
+  );
+  @override
+  late final GeneratedColumn<String> sourceHtml = GeneratedColumn<String>(
+    'source_html',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -872,6 +883,7 @@ class $ImportedSoloChartsTable extends ImportedSoloCharts
     createdAt,
     updatedAt,
     reviewedAt,
+    sourceHtml,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -945,6 +957,12 @@ class $ImportedSoloChartsTable extends ImportedSoloCharts
         reviewedAt.isAcceptableOrUnknown(data['reviewed_at']!, _reviewedAtMeta),
       );
     }
+    if (data.containsKey('source_html')) {
+      context.handle(
+        _sourceHtmlMeta,
+        sourceHtml.isAcceptableOrUnknown(data['source_html']!, _sourceHtmlMeta),
+      );
+    }
     return context;
   }
 
@@ -986,6 +1004,10 @@ class $ImportedSoloChartsTable extends ImportedSoloCharts
         DriftSqlType.string,
         data['${effectivePrefix}reviewed_at'],
       ),
+      sourceHtml: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_html'],
+      ),
     );
   }
 
@@ -1023,6 +1045,12 @@ class ImportedSoloChart extends DataClass
   /// 校对台全曲人工确认时刻(源 review.reviewedAt 照录,ISO 串原样
   /// 存放不转格式);null = 源未带复核状态。
   final String? reviewedAt;
+
+  /// 原样渲染 HTML(票05,ADR-0011 阅读路线):矢量谱页的整页原文包装
+  /// (alphaTab 官方 CSS + 内嵌 Bravura 字体),WebView 像素级复刻谱站
+  /// 原渲染,只读。null = 无原谱(旧条目/非矢量谱页),不显示原谱入口。
+  /// 与 sourceJson 分列:IR 真源保持纯语义,原谱是呈现层附属。
+  final String? sourceHtml;
   const ImportedSoloChart({
     required this.id,
     required this.title,
@@ -1032,6 +1060,7 @@ class ImportedSoloChart extends DataClass
     required this.createdAt,
     required this.updatedAt,
     this.reviewedAt,
+    this.sourceHtml,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1045,6 +1074,9 @@ class ImportedSoloChart extends DataClass
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || reviewedAt != null) {
       map['reviewed_at'] = Variable<String>(reviewedAt);
+    }
+    if (!nullToAbsent || sourceHtml != null) {
+      map['source_html'] = Variable<String>(sourceHtml);
     }
     return map;
   }
@@ -1061,6 +1093,9 @@ class ImportedSoloChart extends DataClass
       reviewedAt: reviewedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(reviewedAt),
+      sourceHtml: sourceHtml == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceHtml),
     );
   }
 
@@ -1078,6 +1113,7 @@ class ImportedSoloChart extends DataClass
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       reviewedAt: serializer.fromJson<String?>(json['reviewedAt']),
+      sourceHtml: serializer.fromJson<String?>(json['sourceHtml']),
     );
   }
   @override
@@ -1092,6 +1128,7 @@ class ImportedSoloChart extends DataClass
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'reviewedAt': serializer.toJson<String?>(reviewedAt),
+      'sourceHtml': serializer.toJson<String?>(sourceHtml),
     };
   }
 
@@ -1104,6 +1141,7 @@ class ImportedSoloChart extends DataClass
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<String?> reviewedAt = const Value.absent(),
+    Value<String?> sourceHtml = const Value.absent(),
   }) => ImportedSoloChart(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -1113,6 +1151,7 @@ class ImportedSoloChart extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     reviewedAt: reviewedAt.present ? reviewedAt.value : this.reviewedAt,
+    sourceHtml: sourceHtml.present ? sourceHtml.value : this.sourceHtml,
   );
   ImportedSoloChart copyWithCompanion(ImportedSoloChartsCompanion data) {
     return ImportedSoloChart(
@@ -1132,6 +1171,9 @@ class ImportedSoloChart extends DataClass
       reviewedAt: data.reviewedAt.present
           ? data.reviewedAt.value
           : this.reviewedAt,
+      sourceHtml: data.sourceHtml.present
+          ? data.sourceHtml.value
+          : this.sourceHtml,
     );
   }
 
@@ -1145,7 +1187,8 @@ class ImportedSoloChart extends DataClass
           ..write('contentSha: $contentSha, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('reviewedAt: $reviewedAt')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('sourceHtml: $sourceHtml')
           ..write(')'))
         .toString();
   }
@@ -1160,6 +1203,7 @@ class ImportedSoloChart extends DataClass
     createdAt,
     updatedAt,
     reviewedAt,
+    sourceHtml,
   );
   @override
   bool operator ==(Object other) =>
@@ -1172,7 +1216,8 @@ class ImportedSoloChart extends DataClass
           other.contentSha == this.contentSha &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.reviewedAt == this.reviewedAt);
+          other.reviewedAt == this.reviewedAt &&
+          other.sourceHtml == this.sourceHtml);
 }
 
 class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
@@ -1184,6 +1229,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<String?> reviewedAt;
+  final Value<String?> sourceHtml;
   const ImportedSoloChartsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -1193,6 +1239,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.reviewedAt = const Value.absent(),
+    this.sourceHtml = const Value.absent(),
   });
   ImportedSoloChartsCompanion.insert({
     this.id = const Value.absent(),
@@ -1203,6 +1250,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.reviewedAt = const Value.absent(),
+    this.sourceHtml = const Value.absent(),
   }) : title = Value(title),
        schemaVersion = Value(schemaVersion),
        sourceJson = Value(sourceJson),
@@ -1218,6 +1266,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<String>? reviewedAt,
+    Expression<String>? sourceHtml,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1228,6 +1277,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (sourceHtml != null) 'source_html': sourceHtml,
     });
   }
 
@@ -1240,6 +1290,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<String?>? reviewedAt,
+    Value<String?>? sourceHtml,
   }) {
     return ImportedSoloChartsCompanion(
       id: id ?? this.id,
@@ -1250,6 +1301,7 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       reviewedAt: reviewedAt ?? this.reviewedAt,
+      sourceHtml: sourceHtml ?? this.sourceHtml,
     );
   }
 
@@ -1280,6 +1332,9 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
     if (reviewedAt.present) {
       map['reviewed_at'] = Variable<String>(reviewedAt.value);
     }
+    if (sourceHtml.present) {
+      map['source_html'] = Variable<String>(sourceHtml.value);
+    }
     return map;
   }
 
@@ -1293,7 +1348,8 @@ class ImportedSoloChartsCompanion extends UpdateCompanion<ImportedSoloChart> {
           ..write('contentSha: $contentSha, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('reviewedAt: $reviewedAt')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('sourceHtml: $sourceHtml')
           ..write(')'))
         .toString();
   }
@@ -2033,6 +2089,7 @@ typedef $$ImportedSoloChartsTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<String?> reviewedAt,
+      Value<String?> sourceHtml,
     });
 typedef $$ImportedSoloChartsTableUpdateCompanionBuilder =
     ImportedSoloChartsCompanion Function({
@@ -2044,6 +2101,7 @@ typedef $$ImportedSoloChartsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<String?> reviewedAt,
+      Value<String?> sourceHtml,
     });
 
 class $$ImportedSoloChartsTableFilterComposer
@@ -2092,6 +2150,11 @@ class $$ImportedSoloChartsTableFilterComposer
 
   ColumnFilters<String> get reviewedAt => $composableBuilder(
     column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceHtml => $composableBuilder(
+    column: $table.sourceHtml,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2144,6 +2207,11 @@ class $$ImportedSoloChartsTableOrderingComposer
     column: $table.reviewedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get sourceHtml => $composableBuilder(
+    column: $table.sourceHtml,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ImportedSoloChartsTableAnnotationComposer
@@ -2184,6 +2252,11 @@ class $$ImportedSoloChartsTableAnnotationComposer
 
   GeneratedColumn<String> get reviewedAt => $composableBuilder(
     column: $table.reviewedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceHtml => $composableBuilder(
+    column: $table.sourceHtml,
     builder: (column) => column,
   );
 }
@@ -2236,6 +2309,7 @@ class $$ImportedSoloChartsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<String?> reviewedAt = const Value.absent(),
+                Value<String?> sourceHtml = const Value.absent(),
               }) => ImportedSoloChartsCompanion(
                 id: id,
                 title: title,
@@ -2245,6 +2319,7 @@ class $$ImportedSoloChartsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 reviewedAt: reviewedAt,
+                sourceHtml: sourceHtml,
               ),
           createCompanionCallback:
               ({
@@ -2256,6 +2331,7 @@ class $$ImportedSoloChartsTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<String?> reviewedAt = const Value.absent(),
+                Value<String?> sourceHtml = const Value.absent(),
               }) => ImportedSoloChartsCompanion.insert(
                 id: id,
                 title: title,
@@ -2265,6 +2341,7 @@ class $$ImportedSoloChartsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 reviewedAt: reviewedAt,
+                sourceHtml: sourceHtml,
               ),
           withReferenceMapper: (p0) => p0
               .map(

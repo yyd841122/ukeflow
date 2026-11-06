@@ -90,6 +90,12 @@ class ImportedSoloCharts extends Table {
   /// 校对台全曲人工确认时刻(源 review.reviewedAt 照录,ISO 串原样
   /// 存放不转格式);null = 源未带复核状态。
   TextColumn get reviewedAt => text().nullable()();
+
+  /// 原样渲染 HTML(票05,ADR-0011 阅读路线):矢量谱页的整页原文包装
+  /// (alphaTab 官方 CSS + 内嵌 Bravura 字体),WebView 像素级复刻谱站
+  /// 原渲染,只读。null = 无原谱(旧条目/非矢量谱页),不显示原谱入口。
+  /// 与 sourceJson 分列:IR 真源保持纯语义,原谱是呈现层附属。
+  TextColumn get sourceHtml => text().nullable()();
 }
 
 /// UkeFlow 本地数据库(drift/SQLite)。
@@ -110,14 +116,20 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'ukeflow'));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   // v1 前期 schema 只加不改:建库与升级都 createAll(生成 IF NOT EXISTS,幂等),
   // 后续工单加表只需建表 + 递增 schemaVersion,升级安装也能拿到新表;
-  // 出现破坏性变更时再替换为专门的迁移步骤。
+  // v7 起出现加列(票05 sourceHtml),加列走 addColumn 补齐(createAll
+  // 不改既有表),更破坏性变更再写专门迁移。
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
-    onUpgrade: (m, from, to) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      await m.createAll();
+      if (from < 7) {
+        await m.addColumn(importedSoloCharts, importedSoloCharts.sourceHtml);
+      }
+    },
   );
 }

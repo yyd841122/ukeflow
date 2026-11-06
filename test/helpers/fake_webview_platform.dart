@@ -1,0 +1,152 @@
+import 'package:flutter/material.dart';
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
+
+/// webview_flutter 测试桩(票06):平台视图在 widget 测试不可渲染——
+/// fake 平台让 FaithfulStripView/原样视图可 pump,并捕获 loadHtmlString
+/// 的入参供断言(横带页/整页包装是否正确组装)。JS 调用记录为列表。
+class FakeWebViewPlatform extends WebViewPlatform {
+  /// 各实例按创建序收到的 loadHtmlString 入参(测试断言用)。
+  final List<String> loadedHtml = [];
+
+  @override
+  PlatformWebViewController createPlatformWebViewController(
+    PlatformWebViewControllerCreationParams params,
+  ) {
+    final controller = _FakeController(params);
+    loadedHtml.clear();
+    controller.onLoadHtmlString = loadedHtml.add;
+    return controller;
+  }
+
+  @override
+  PlatformWebViewWidget createPlatformWebViewWidget(
+    PlatformWebViewWidgetCreationParams params,
+  ) {
+    return _FakeWidget(params);
+  }
+
+  @override
+  PlatformNavigationDelegate createPlatformNavigationDelegate(
+    PlatformNavigationDelegateCreationParams params,
+  ) {
+    return _FakeNavigationDelegate(params);
+  }
+}
+
+class _FakeNavigationDelegate extends PlatformNavigationDelegate {
+  _FakeNavigationDelegate(super.params) : super.implementation();
+
+  final List<String> navigationRequests = [];
+
+  @override
+  Future<void> setOnNavigationRequest(
+    void Function(NavigationRequest request) onNavigationRequest,
+  ) async {}
+
+  @override
+  Future<void> setOnPageStarted(void Function(String url) onPageStarted) async {}
+
+  @override
+  Future<void> setOnPageFinished(void Function(String url) onPageFinished) async {}
+
+  @override
+  Future<void> setOnUrlChange(void Function(UrlChange change) onUrlChange) async {}
+
+  @override
+  Future<void> setOnProgress(void Function(int progress) onProgress) async {}
+}
+
+class _FakeController extends PlatformWebViewController {
+  _FakeController(super.params) : super.implementation();
+
+  late final void Function(String html) onLoadHtmlString;
+
+  final List<String> javaScriptRuns = [];
+
+  @override
+  Future<void> loadHtmlString(String html, {String? baseUrl}) async {
+    onLoadHtmlString(html);
+  }
+
+  @override
+  Future<void> runJavaScript(String javaScript) async {
+    javaScriptRuns.add(javaScript);
+  }
+
+  @override
+  Future<void> setJavaScriptMode(JavaScriptMode mode) async {}
+
+  // 基类经由 setPlatformNavigationDelegate 派发;此成员非继承面。
+  Future<void> setNavigationDelegate(
+    PlatformNavigationDelegate delegate,
+  ) async {}
+
+  @override
+  Future<void> setPlatformNavigationDelegate(
+    PlatformNavigationDelegate delegate,
+  ) async {}
+
+  @override
+  Future<void> setUserAgent(String? userAgent) async {}
+
+  @override
+  Future<void> setBackgroundColor(Color color) async {}
+
+  @override
+  Future<void> addJavaScriptChannel(
+    JavaScriptChannelParams javaScriptChannelParams,
+  ) async {}
+
+  @override
+  Future<void> removeJavaScriptChannel(String name) async {}
+
+  @override
+  Future<void> setOnPlatformPermissionRequest(
+    void Function(PlatformWebViewPermissionRequest request) onPermissionRequest,
+  ) async {}
+
+  @override
+  Future<void> setOnConsoleMessage(
+    void Function(JavaScriptConsoleMessage consoleMessage) onConsoleMessage,
+  ) async {}
+
+  @override
+  Future<void> setOnScrollPositionChange(
+    void Function(ScrollPositionChange scrollPositionChange)?
+        onScrollPositionChange,
+  ) async {}
+
+  @override
+  Future<void> setOnJavaScriptAlertDialog(
+    Future<void> Function(JavaScriptAlertDialogRequest request)
+        onJavaScriptAlertDialog,
+  ) async {}
+
+  @override
+  Future<void> setOnJavaScriptConfirmDialog(
+    Future<bool> Function(JavaScriptConfirmDialogRequest request)
+        onJavaScriptConfirmDialog,
+  ) async {}
+
+  @override
+  Future<String?> currentUrl() async => null;
+
+  @override
+  Future<void> scrollTo(int x, int y) async {}
+
+  @override
+  Future<void> scrollBy(int x, int y) async {}
+}
+
+/// JSON 便利:断言 wrapper 含横带内容(播放头脚本+SVG)。
+bool containsStripContent(String html) =>
+    html.contains('updateBeat') && html.contains('<svg');
+
+class _FakeWidget extends PlatformWebViewWidget {
+  _FakeWidget(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+}

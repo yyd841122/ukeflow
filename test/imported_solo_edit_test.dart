@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,15 +14,19 @@ import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
 import 'package:ukeflow/data/imported_solo_charts_dao.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:ukeflow/features/play/score_sheet_page.dart';
 import 'package:ukeflow/features/play/tab_chart_layout.dart';
 import 'package:ukeflow/features/play/tab_chart_page.dart';
 
+import 'helpers/fake_webview_platform.dart';
 import 'helpers/score_ir_fixtures.dart';
 
 /// 工单 45 页面接线:导入谱页(谱面视图/四线谱跟练)点选音 → 微调面板
 /// → 存回 → 导入谱流推新源 → 页面重物化换源。真内存库
 /// (closeStreamsSynchronously 收口 drift 流计时器)+ FakeAudioEngine。
+/// 票05 追加:原谱视图入口(条目带 sourceHtml 才显,点入 WebView 页——
+/// 平台视图在 widget 测试不渲染,只锁入口显隐与导航)。
 void main() {
   late AppDatabase db;
   late ImportedSoloChartsDao dao;
@@ -30,6 +34,8 @@ void main() {
   late ScoreIrMaterialization materialization;
 
   setUp(() async {
+    // 平台桩全文件共享(接口不允许置 null 复位;桩无状态,跨测试安全)。
+    WebViewPlatform.instance = FakeWebViewPlatform();
     db = AppDatabase(
       DatabaseConnection(
         NativeDatabase.memory(),
@@ -45,6 +51,14 @@ void main() {
       sourceJson: jsonEncode(ir.toJson()),
       schemaVersion: scoreIrSchemaVersion,
       reviewedAt: '2026-10-26T10:00:00.000',
+      sourceHtml: '<html><head><style>@font-face{}</style></head><body>'
+          '<div id="ukeflow-strip" style="display:none">'
+          '<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="148" '
+          'viewBox="0 0 2000 148"></svg></div>'
+          '<script type="application/json" id="ukeflow-strip-meta">'
+          '{"width":2000,"height":148,'
+          '"bars":[{"seq":0,"x":0.0,"w":200.0}]}</script>'
+          '</body></html>',
     );
   });
 
@@ -78,6 +92,8 @@ void main() {
             tabChart: materialization.accompaniment,
             melodyChart: materialization.melody,
             importedSoloRowId: rowId,
+            // 微调/跟练流程锁自绘谱面;默认原样视图的切回在另一测
+            faithfulFirst: false,
           ),
         ),
       ),
@@ -175,5 +191,60 @@ void main() {
       return entry != null && entry.accompaniment.notes.first.fret == 5;
     });
     expect(find.byKey(const Key('note-tune-panel')), findsNothing);
+  });
+
+  testWidgets('原样流水默认体:切换钮出、横带页装进 WebView、拍位驱动 JS', (tester) async {
+    final platform = WebViewPlatform.instance as FakeWebViewPlatform;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          audioEngineProvider.overrideWithValue(FakeAudioEngine()),
+        ],
+        child: MaterialApp(
+          home: ScoreSheetPage(
+            def: materialization.def,
+            tabChart: materialization.accompaniment,
+            melodyChart: materialization.melody,
+            importedSoloRowId: rowId,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('toggle-score-view')), findsOneWidget);
+    // 横带 WebView 页装的是工作台植入的横带节点(单行流水)。
+    expect(platform.loadedHtml, isNotEmpty);
+    expect(containsStripContent(platform.loadedHtml.last), isTrue,
+        reason: '流水 WebView 加载横带页(css+svg+播放头脚本)');
+  });
+
+  testWidgets('原谱入口:sourceHtml 清空后无入口(旧条目不炸不显示)', (tester) async {
+    // updateSource 不动 sourceHtml 列——直更清空该列模拟旧条目。
+    await (dao.update(db.importedSoloCharts)
+          ..where((tbl) => tbl.id.equals(rowId)))
+        .write(const ImportedSoloChartsCompanion(sourceHtml: Value(null)));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          audioEngineProvider.overrideWithValue(FakeAudioEngine()),
+        ],
+        child: MaterialApp(
+          home: ScoreSheetPage(
+            def: materialization.def,
+            tabChart: materialization.accompaniment,
+            melodyChart: materialization.melody,
+            importedSoloRowId: rowId,
+            // 微调/跟练流程锁自绘谱面;默认原样视图的切回在另一测
+            faithfulFirst: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('toggle-score-view')), findsNothing);
   });
 }

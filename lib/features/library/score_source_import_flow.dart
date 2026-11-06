@@ -27,10 +27,17 @@ class ScoreSourceReady extends ScoreSourcePickOutcome {
     required this.ir,
     required this.materialization,
     required this.suggestedTitle,
+    this.sourceHtml,
   });
 
-  /// 原样源 JSON(落库存储的就是它,contentSha 现算自这份文本)。
+  /// 源 JSON(落库存储的就是它,contentSha 现算自这份文本)。矢量谱页
+  /// 产物内嵌的原样渲染 HTML 已剥离(票05):IR 真源保持纯语义,原谱
+  /// 单独走 [sourceHtml] 进独立列——列表/轻改/查重都不背 1MB 包。
   final String sourceJson;
+
+  /// 原样渲染 HTML(票05):矢量谱页产物附带的整页原文包装,落
+  /// sourceHtml 列供原谱视图;null = 源不带(纯 IR 文件)。
+  final String? sourceHtml;
 
   /// 解析出的识谱源(schemaVersion/复核状态从这里照录)。
   final ScoreIr ir;
@@ -104,7 +111,7 @@ class ScoreSourceImportFlow {
     }
     if (result == null) return const ScoreSourceCancelled();
 
-    final String sourceJson;
+    String sourceJson;
     try {
       sourceJson = utf8.decode(result.bytes);
     } on FormatException {
@@ -114,10 +121,28 @@ class ScoreSourceImportFlow {
     final check = checkScoreIrSource(sourceJson);
     if (!check.isValid) return ScoreSourceInvalid(check.errors);
 
+    // 原样渲染 HTML(票05):矢量谱页产物以可选键 sourceHtml 内嵌原谱
+    // 原文,落库前拆出(源 JSON 剥离为纯 IR 再算指纹/存行;fromJson
+    // 忽略未知键,旧 App 读新产物向前兼容)。解码失败不拦导入——纯 IR
+    // 文件没有该键,带键坏内容顶多丢原谱入口,不给导入加失败面。
+    String? sourceHtml;
+    try {
+      final map = jsonDecode(sourceJson) as Map<String, dynamic>;
+      final embedded = map.remove('sourceHtml');
+      if (embedded is String && embedded.isNotEmpty) {
+        sourceHtml = embedded;
+        sourceJson = jsonEncode(map);
+      }
+    } on Object catch (error) {
+      debugPrint('UkeFlow: 识谱源原谱 HTML 拆离失败(按纯 IR 继续导入) $error');
+    }
+
     final String? existingTitle;
     try {
       existingTitle = await findDuplicateTitle(
-        ImportedSoloChartsDao.shaOf(sourceJson),
+        ImportedSoloChartsDao.shaOf(
+          ImportedSoloChartsDao.fingerprintOf(sourceJson, sourceHtml),
+        ),
       );
     } on Object catch (error) {
       // 查重出口(生产走 drift 读)挂了不崩导入页(评审51:逃出
@@ -143,6 +168,7 @@ class ScoreSourceImportFlow {
       ir: check.ir!,
       materialization: materialization,
       suggestedTitle: suggestTitle(result.name),
+      sourceHtml: sourceHtml,
     );
   }
 

@@ -17,14 +17,18 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
 
   /// 入库(导入 UI 工单 44 的落库口;校验在解析层,此处不设防)。
   /// [schemaVersion] 是源的识谱源格式版本(照录,陈年源识别用),
-  /// [reviewedAt] 是源 review.reviewedAt 原样照录(无则 null)。
-  /// contentSha 由源 JSON 现算(内容指纹,重导入去重/改源检测的判定面),
+  /// [reviewedAt] 是源 review.reviewedAt 原样照录(无则 null),
+  /// [sourceHtml] 是原样渲染 HTML(票05,可空)。
+  /// contentSha 现算自[指纹](fingerprintOf,内容指纹,重导入去重/改源
+  /// 检测的判定面):含 sourceHtml——同一 IR 带不带原谱是不同文件
+  /// (票05 教训:剥离后同指纹会让带原谱的重导入命中旧行,原谱丢失)。
   /// createdAt/updatedAt = 落库时刻。返回自增 id。
   Future<int> add({
     required String title,
     required String sourceJson,
     required int schemaVersion,
     String? reviewedAt,
+    String? sourceHtml,
   }) {
     final now = DateTime.now();
     return into(importedSoloCharts).insert(
@@ -32,12 +36,25 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
         title: title,
         schemaVersion: schemaVersion,
         sourceJson: sourceJson,
-        contentSha: shaOf(sourceJson),
+        contentSha: shaOf(fingerprintOf(sourceJson, sourceHtml)),
         createdAt: now,
         updatedAt: now,
         reviewedAt: Value(reviewedAt),
+        sourceHtml: Value(sourceHtml),
       ),
     );
+  }
+
+  /// 内容指纹文本(票05):源 JSON + 原谱 HTML 一起参与——去重/改源
+  /// 检测的判定单位是「导入的文件」,不是剥离后的语义 IR。
+  static String fingerprintOf(String sourceJson, String? sourceHtml) =>
+      sourceHtml == null ? sourceJson : '$sourceJson\u0000$sourceHtml';
+
+  /// 彻底删除一行(票06:设置页隐藏区的真删除;与「隐藏=移出曲库可
+  /// 恢复」不同,此口不可恢复)。调用方负责同步清隐藏集,防陈年 id。
+  /// 返回实际删除行数。
+  Future<int> removeAt(int id) {
+    return (delete(importedSoloCharts)..where((row) => row.id.equals(id))).go();
   }
 
   /// 轻改存回(工单 45):源 JSON 改后整行落回——contentSha 随新源
@@ -94,8 +111,9 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
     required String sourceJson,
     required int schemaVersion,
     String? reviewedAt,
+    String? sourceHtml,
   }) {
-    final sha = shaOf(sourceJson);
+    final sha = shaOf(fingerprintOf(sourceJson, sourceHtml));
     return transaction(() async {
       final existing = await getByContentSha(sha);
       if (existing != null) {
@@ -106,6 +124,7 @@ class ImportedSoloChartsDao extends DatabaseAccessor<AppDatabase>
         sourceJson: sourceJson,
         schemaVersion: schemaVersion,
         reviewedAt: reviewedAt,
+        sourceHtml: sourceHtml,
       );
       return (id: id, existed: false);
     });

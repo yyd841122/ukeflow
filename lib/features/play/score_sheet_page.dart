@@ -10,7 +10,9 @@ import '../../core/practice/score_sheet_layout.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
 import '../../core/ui/step_slider_control.dart';
+import 'faithful_score_view.dart' show FaithfulStripView, extractFaithfulStrip, FaithfulStripData;
 import '../../data/chart_providers.dart';
+import 'faithful_score_view.dart';
 import '../../data/providers.dart';
 import 'note_tune_panel.dart';
 import 'practice_session_shell.dart';
@@ -35,6 +37,7 @@ class ScoreSheetPage extends ConsumerStatefulWidget {
     required this.tabChart,
     required this.melodyChart,
     this.importedSoloRowId,
+    this.faithfulFirst = true,
   });
 
   final ScoreSheetDef def;
@@ -44,6 +47,10 @@ class ScoreSheetPage extends ConsumerStatefulWidget {
   /// 导入独奏谱的数据库行 id(工单 45):非空 = 谱面音符可点选轻改,
   /// 改源存回后本页经导入谱流重物化换源。内置谱为 null(不可轻改)。
   final int? importedSoloRowId;
+
+  /// 有原谱 HTML 时默认先示原样视图(票05,阅读优先);false = 先示
+  /// 自绘跟练谱面(测试缝/嵌入场景)。AppBar 图标随时互切。
+  final bool faithfulFirst;
 
   @override
   ConsumerState<ScoreSheetPage> createState() => _ScoreSheetPageState();
@@ -148,6 +155,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
     final elapsedMs = (now - anchor.t0).inMicroseconds / 1000;
     final mainBeat = elapsedMs / anchor.periodMs;
+    faithfulBeat.value = mainBeat;
     if (mainBeat >= timeline.totalBeats) {
       // 曲末:循环开→接下一遍;关→回闲。
       _controller.passEnd();
@@ -183,6 +191,12 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreSheetLayout? _layoutCache;
   double? _contentWidth;
 
+  /// 流水横带的当前拍位(运行中由 poll 推送,WebView 播放头消费)。
+  final ValueNotifier<double?> faithfulBeat = ValueNotifier<double?>(null);
+
+  /// 横带/自绘切换(true = 自绘跟练全功能)。
+  bool _useSelfDrawnBand = false;
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -205,15 +219,128 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
         if (entries != null) _onImportedSoloChanged(entries);
       });
     }
+    // 原谱 HTML(票05):随条目流取,轻改不影响该列。
+    final entries0 = ref.watch(importedSoloChartsProvider).value ?? const [];
+    final row = entries0
+        .whereType<ReadyImportedSolo>()
+        .where((e) => e.id == widget.importedSoloRowId)
+        .firstOrNull;
+    final String? faithfulHtml = row?.sourceHtml;
+    final strip = (faithfulHtml != null && widget.faithfulFirst)
+        ? extractFaithfulStrip(faithfulHtml)
+        : null;
+    final useFaithfulStrip =
+        strip != null && !_useSelfDrawnBand;
     return Scaffold(
-      appBar: AppBar(title: Text(_def.title)),
+      appBar: AppBar(
+        title: Text(_def.title),
+        actions: [
+          // 原样流水(票06)与自绘跟练互切:流水 = 单行原样渲染 + 播放头
+          // 跟拍;自绘 = 点选轻改/逐拍高亮全功能。
+          if (strip != null)
+            IconButton(
+              key: const Key('toggle-score-view'),
+              tooltip: _useSelfDrawnBand ? '原样流水' : '自绘跟练',
+              icon: Icon(_useSelfDrawnBand ? Icons.music_note : Icons.style),
+              onPressed: () =>
+                  setState(() => _useSelfDrawnBand = !_useSelfDrawnBand),
+            ),
+        ],
+      ),
       body: SafeArea(
-        child: state.running ? _runningBody(state) : _idleBody(state),
+        child: state.running
+            ? (useFaithfulStrip
+                ? Column(
+                    children: [
+                      Expanded(
+                        child: FaithfulStripView(
+                          data: strip,
+                          beat: faithfulBeat,
+                        ),
+                      ),
+                      _controls(state),
+                    ],
+                  )
+                : _runningBody(state))
+            : (useFaithfulStrip
+                ? _idleFaithfulBody(state, strip)
+                : _idleBody(state)),
       ),
     );
   }
 
   // ── 空闲面板:弹前读谱 + 定速/变速 + 轨道,开始 ──────────────────
+
+  /// 原样流水空闲面板(票06):单行横带 = 弹前读谱(手动拖),下方
+  /// 既有控件原样保留。
+  Widget _idleFaithfulBody(TabSessionState state, FaithfulStripData strip) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _metaLine,
+            key: const Key('score-meta'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(height: 12),
+          EngineStatusLine(
+            ready: state.engineReady,
+            error: state.error,
+            onRetry: () => _controller.warmup(),
+          ),
+          const SizedBox(height: 16),
+          // 原样流水横带:单行小节序,缩放 0.45(视口 3-4 小节,可拖)。
+          SizedBox(
+            height: 150,
+            child: FaithfulStripView(data: strip, beat: faithfulBeat),
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<ScoreTrackMode>(
+            segments: const [
+              ButtonSegment(
+                value: ScoreTrackMode.accompaniment,
+                icon: Icon(Icons.music_note),
+                label: Text('伴奏示范'),
+              ),
+              ButtonSegment(
+                value: ScoreTrackMode.dual,
+                icon: Icon(Icons.layers),
+                label: Text('双轨混播'),
+              ),
+            ],
+            selected: {_trackMode},
+            onSelectionChanged: (selection) {
+              final mode = selection.first;
+              if (mode == _trackMode) return;
+              setState(() => _trackMode = mode);
+              // 换轨即换会话谱:BPM 重定 + 该轨拨弦音源预注入。
+              _controller.prepareFor(_chartFor(mode));
+            },
+          ),
+          const SizedBox(height: 12),
+          Text('速度', style: _sectionLabelStyle),
+          StepSliderControl(
+            value: state.bpm,
+            min: TabPracticeController.minBpm,
+            max: TabPracticeController.maxBpm,
+            onChanged: _controller.setBpm,
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            key: const Key('score-practice-start'),
+            onPressed: state.engineReady
+                ? () => _controller.start(chart: _chartFor(_trackMode))
+                : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('开始示范'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _idleBody(TabSessionState state) {
     return SingleChildScrollView(

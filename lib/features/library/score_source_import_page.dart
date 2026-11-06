@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers.dart';
+import '../play/faithful_score_view.dart';
 import '../play/score_sheet_view.dart';
 import 'score_source_import_flow.dart';
 
-/// 识谱源导入预览页(工单 44):试物化三源出谱面视图横带(ScoreStripView
-/// 静态读谱态,横向可拖)+ 命名 + 确认入库。命名纪律同自建谱:展示名
+/// 识谱源导入预览页(工单 44):预览带与打开后的谱面页同一渲染——源带
+/// 原样流水横带时用 FaithfulStripView(与 ScoreSheetPage 默认态同款,
+/// 所见即所得,消除预览/实显两套渲染的不一致);无横带的纯 IR 源回退
+/// 自绘 ScoreStripView 静态读谱态。命名 + 确认入库。命名纪律同自建谱:展示名
 /// 一律以入库名为准,读出物化时统一覆盖源内曲名(组合定义与两层谱题
 /// 同源覆盖,曲库卡片与谱面页不出现两个名字)。
 class ImportScoreSourcePage extends ConsumerStatefulWidget {
@@ -26,12 +29,20 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
   );
   String? _titleError;
 
+  /// 原样流水横带(源带标记才有):预览与实显同源同渲染。
+  late final FaithfulStripData? _strip =
+      extractFaithfulStrip(widget.ready.sourceHtml ?? '');
+
+  /// 预览是静态读谱态:恒空拍位(播放头不动,横带手动拖)。
+  final _idleBeat = ValueNotifier<double?>(null);
+
   /// 入库写入期间禁用存入钮(双击防抖,文本导入同款)。
   bool _saving = false;
 
   @override
   void dispose() {
     _title.dispose();
+    _idleBeat.dispose();
     super.dispose();
   }
 
@@ -51,6 +62,7 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
             sourceJson: widget.ready.sourceJson,
             schemaVersion: widget.ready.ir.schemaVersion,
             reviewedAt: widget.ready.ir.review?.reviewedAt,
+            sourceHtml: widget.ready.sourceHtml,
           );
     } on Object catch (error) {
       debugPrint('UkeFlow: 识谱源入库失败 $error');
@@ -86,13 +98,16 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
                 style: TextStyle(color: Theme.of(context).colorScheme.primary),
               ),
             ),
-            // 预览横带:与谱面视图页同一渲染(静态读谱态),用户手动拖。
+            // 预览横带:与打开后的谱面页同一渲染(原样流水),所见即
+            // 所得;纯 IR 源回退自绘横带(静态读谱态,手动拖)。
             Expanded(
-              child: ScoreStripView(
-                def: m.def,
-                tabChart: m.accompaniment,
-                melodyChart: m.melody,
-              ),
+              child: _strip != null
+                  ? FaithfulStripView(data: _strip, beat: _idleBeat)
+                  : ScoreStripView(
+                      def: m.def,
+                      tabChart: m.accompaniment,
+                      melodyChart: m.melody,
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

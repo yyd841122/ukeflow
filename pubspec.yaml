@@ -42,6 +42,12 @@ dev_dependencies:
   # 测试打桩 image_picker 用(平台接口缝,ImagePickerPlatform.instance);
   # 仅测试引用,不进生产依赖。版本随 image_picker 传递约束。
   image_picker_platform_interface: ^2.11.2
+  # 测试直开旧版 SQLite 文件(票05 v6→v7 迁移测试);经 drift_native
+  # 传递在依赖图内,显式钉住仅为测试引用,不进生产依赖。
+  sqlite3: ^3.5.2
+  # 测试桩引用其平台接口类(fake webview 平台,票06);经 webview_flutter
+  # 传递在依赖图内,显式钉住仅为测试引用。
+  webview_flutter_platform_interface: ^2.10.0
 
 flutter:
   uses-material-design: true

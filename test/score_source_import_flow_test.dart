@@ -38,6 +38,51 @@ void main() {
       expect(ready.materialization.melody.notes, hasLength(3));
     });
 
+    test('内嵌原样 HTML → 拆离:sourceHtml 提取,sourceJson 剥为纯 IR', () async {
+      final ir = validTinyIr().toJson();
+      final embedded = jsonEncode(ir..['sourceHtml'] = '<html>原谱</html>');
+      final outcome = await flow(
+        pick: () async => (bytes: bytesOf(embedded), name: 'x.json'),
+      ).pickAndValidate();
+
+      final ready = outcome as ScoreSourceReady;
+      expect(ready.sourceHtml, '<html>原谱</html>', reason: '原谱原文单独携带');
+      final map = jsonDecode(ready.sourceJson) as Map;
+      expect(map.containsKey('sourceHtml'), isFalse,
+          reason: 'sourceJson 剥为纯 IR(真源不背 1MB 包)');
+      expect(map['id'], 'test-tiny-solo', reason: '其余键原样保留');
+      expect(ready.ir.id, 'test-tiny-solo', reason: '解析不受剥离影响');
+    });
+
+    test('查重按文件全文算:带原谱与纯 IR 是不同文件,不带原谱重导才是重复', () async {
+      // 票05 教训:指纹若按剥离后 IR 算,带原谱的重导入会命中旧行,
+      // 原谱静默丢失——判定单位是「导入的文件」。
+      final irMap = validTinyIr().toJson();
+      // 先取纯 IR 再变异(级联赋值会就地污染 map,两个变量会指向同一份)
+      final withoutBlob = jsonEncode(irMap);
+      final withBlob = jsonEncode(irMap..['sourceHtml'] = '<html>x</html>');
+      final shas = <String>[];
+      Future<ScoreSourcePickOutcome> probe(String text) {
+        return ScoreSourceImportFlow(
+          pick: () async => (bytes: bytesOf(text), name: 'x.json'),
+          findDuplicateTitle: (sha) async {
+            shas.add(sha);
+            return null;
+          },
+        ).pickAndValidate();
+      }
+
+      await probe(withBlob);
+      final r2 = await probe(withoutBlob);
+      await probe(withBlob);
+      expect((r2 as ScoreSourceReady).sourceHtml, isNull,
+          reason: '纯 IR 文件不带原谱');
+      expect(shas, hasLength(3));
+      expect(shas[0], isNot(shas[1]),
+          reason: '带原谱 ≠ 纯 IR(原谱是指纹的一部分)');
+      expect(shas[2], shas[0], reason: '同一文件重导 = 同指纹 = 去重命中');
+    });
+
     test('无文件名/纯扩展名 → suggestedTitle null(命名回退源内曲名)', () async {
       for (final name in [null, '', '.json']) {
         final outcome = await flow(
