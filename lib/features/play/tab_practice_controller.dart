@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/audio_engine.dart';
+import '../../core/audio/beat_scheduling.dart' show beatsPerBar;
 import '../../core/audio/beat_scheduler.dart';
 import '../../core/audio/providers.dart';
 import '../../core/audio/tick_sounds.dart';
@@ -109,6 +110,13 @@ class TabPracticeController extends Notifier<TabSessionState> {
   static const maxSpeed = 1.0;
 
   EngineSound? _count;
+  EngineSound? _strong;
+  EngineSound? _weak;
+
+  /// 节拍跟练(票07):参考声 = 逐拍强弱 tick(不是逐音拨弦)。start
+  /// 参数落字段——restart/变速重建沿用;只在导入谱面页给(true),四线
+  /// 谱跟练保持逐音示范声不变。
+  bool _beatClicks = false;
   BeatScheduler? _scheduler;
   TabNoteScheduler? _noteScheduler;
   TabTimeline? _timeline;
@@ -181,8 +189,15 @@ class TabPracticeController extends Notifier<TabSessionState> {
       final engine = ref.read(audioEngineProvider);
       await engine.ensureInitialized();
       if (!ref.mounted) return; // 容器已随应用退出:状态无可落盘。
-      _count =
-          (await TickSounds.load(engine, count: true)).count;
+      final ticks = await TickSounds.load(
+        engine,
+        count: true,
+        strong: true,
+        weak: true,
+      );
+      _count = ticks.count;
+      _strong = ticks.strong;
+      _weak = ticks.weak;
       // 拨弦音源注入失败只降级(示范声静默、高亮照走),不进 error 状态。
       await _ensurePluckSounds();
       if (!ref.mounted) return;
@@ -265,9 +280,10 @@ class TabPracticeController extends Notifier<TabSessionState> {
 
   /// 开始跟练:编译时间轴,预备数拍起跑(调度 totalBeats = 预备+曲拍数,
   /// 曲末无幻拍声)+逐音示范声按曲头锚预定。未就绪或已在跑则拒绝。
-  void start({required TabChart chart}) {
+  void start({required TabChart chart, bool beatClicks = false}) {
     if (!state.engineReady || state.running) return;
     _chart = chart; // 会话参数登记(变速重编译/restart 的依据)
+    _beatClicks = beatClicks;
     _ensurePluckSounds(); // 直进(未走 prepareFor)也补注入;缓存兜底
     final timeline = compileTabTimeline(
       chart: chart,
@@ -385,7 +401,8 @@ class TabPracticeController extends Notifier<TabSessionState> {
     final chart = _chart;
     if (chart == null || !state.running || !state.engineReady) return;
     stop();
-    start(chart: chart);
+    // 参考声模式随会话沿用(票07):重开不打回逐音示范声。
+    start(chart: chart, beatClicks: _beatClicks);
   }
 
   /// 停止:取消轮询调度、停掉尚未发声的预定、时间轴清空、退出会话。
@@ -412,6 +429,7 @@ class TabPracticeController extends Notifier<TabSessionState> {
     final old = _noteScheduler;
     _noteScheduler = null;
     old?.stop();
+    if (_beatClicks) return; // 节拍跟练:无逐音示范声,拍位 tick 即参考声
     final timeline = _timeline;
     if (timeline == null) return;
     final scheduler = TabNoteScheduler(
@@ -430,8 +448,18 @@ class TabPracticeController extends Notifier<TabSessionState> {
   }
 
   /// 节拍声选音:预备拍恒用预备音源(数拍不是参考音,指弹跟练一样先
-  /// 数拍);正曲拍恒静默(逐音示范声接管)。返回 null 表示该拍静默。
-  EngineSound? _pick(int beat) => beat < prepBeats ? _count : null;
+  /// 数拍);正曲拍默认静默(逐音示范声接管);节拍跟练(票07)正曲拍
+  /// 按小节强弱响 tick。返回 null 表示该拍静默。
+  EngineSound? _pick(int beat) {
+    if (beat < prepBeats) return _count;
+    if (_beatClicks) {
+      final strong = _strong;
+      final weak = _weak;
+      if (strong == null || weak == null) return null;
+      return beat % beatsPerBar == 0 ? strong : weak;
+    }
+    return null;
+  }
 
   /// 单音定声:按音高查预注入的 KS 音源;未就绪返回 null(该音静默
   /// 越过,高亮照走——预注入失败的降级路径)。

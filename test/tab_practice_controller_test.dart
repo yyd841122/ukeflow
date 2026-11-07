@@ -46,16 +46,15 @@ void main() {
     expect(state.error, isNull);
   });
 
-  test('warmup:只注入预备拍音源(正曲拍静默,无强弱拍 tick)', () async {
+  test('warmup:注入预备拍音源与强弱拍音源(节拍跟练参考声备用)', () async {
     await controller().warmup();
     final state = container.read(tabPracticeProvider);
     expect(state.engineReady, isTrue);
     expect(engine.loadedKeys, contains('tick_count'));
-    expect(
-      engine.loadedKeys.where((k) => k == 'tick_strong' || k == 'tick_weak'),
-      isEmpty,
-      reason: '指弹跟练正曲拍无 tick,强弱拍音源不注入',
-    );
+    expect(engine.loadedKeys, contains('tick_strong'));
+    expect(engine.loadedKeys, contains('tick_weak'));
+    // 注入 ≠ 调度:默认(逐音示范)会话正曲拍仍静默,由下方
+    // 「正曲拍静默」测试走 scheduleLog 锁住。
   });
 
   test('prepareFor:取谱面 tempo 为当前 BPM(钳制),变速回原速,拨弦音源预注入', () async {
@@ -176,6 +175,72 @@ void main() {
         plucks.map((e) => e.time.inMilliseconds).toList(),
         [3700, 4450, 5575, 5950],
         reason: '逐音按事件时刻预定(0/750/1875/2250 + 曲头锚 3700)',
+      );
+    });
+  });
+
+  test('节拍跟练(票07):正曲拍响强弱 tick、无拨弦声,预备数拍照旧', () async {
+    final c = controller();
+    c.prepareFor(tabFixtureChart);
+    await c.warmup();
+    fakeAsync((async) {
+      engine.advance(const Duration(milliseconds: 700));
+      c.start(chart: tabFixtureChart, beatClicks: true);
+      for (var i = 0; i < 20; i++) {
+        engine.advance(const Duration(milliseconds: 350));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      final ticks = engine.scheduleLog
+          .where((e) => e.key.startsWith('tick_'))
+          .toList();
+      expect(
+        ticks.where((e) => e.key == 'tick_count'),
+        hasLength(4),
+        reason: '预备 4 拍照旧数拍',
+      );
+      expect(
+        ticks.where((e) => e.key == 'tick_strong'),
+        hasLength(1),
+        reason: '曲头(第 1 小节拍 1)一声强 tick',
+      );
+      expect(
+        ticks.where((e) => e.key == 'tick_weak'),
+        hasLength(3),
+        reason: '其余 3 拍弱 tick(夹具全曲 4 拍)',
+      );
+      expect(
+        engine.scheduleLog.where((e) => e.key.startsWith('pluck_')),
+        isEmpty,
+        reason: '节拍跟练无逐音拨弦声——自己弹,拍子带路',
+      );
+    });
+  });
+
+  test('节拍跟练 restart:重开后仍节拍声(参数随会话沿用)', () async {
+    final c = controller();
+    c.prepareFor(tabFixtureChart);
+    await c.warmup();
+    fakeAsync((async) {
+      engine.advance(const Duration(milliseconds: 700));
+      c.start(chart: tabFixtureChart, beatClicks: true);
+      // 第一遍走过预备进正曲(曲头强拍先响一声),再重启。
+      for (var i = 0; i < 10; i++) {
+        engine.advance(const Duration(milliseconds: 350));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      c.restart();
+      for (var i = 0; i < 18; i++) {
+        engine.advance(const Duration(milliseconds: 350));
+        async.elapse(const Duration(milliseconds: 40));
+      }
+      expect(
+        engine.scheduleLog.where((e) => e.key == 'tick_strong'),
+        hasLength(2),
+        reason: '两遍各一声曲头强 tick——restart 沿用节拍模式',
+      );
+      expect(
+        engine.scheduleLog.where((e) => e.key.startsWith('pluck_')),
+        isEmpty,
       );
     });
   });

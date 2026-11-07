@@ -224,4 +224,67 @@ void main() {
       reason: '引擎未就绪不可启',
     );
   });
+
+  testWidgets('参考声切换(票07):节拍跟练 chip 选中 → 开始钮改「开始跟练」', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+
+    expect(find.text('开始示范'), findsOneWidget, reason: '缺省 = 伴奏声示范');
+    expect(find.text('开始跟练'), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('score-beat-clicks')));
+    await tester.tap(find.byKey(const Key('score-beat-clicks')));
+    await tester.pump();
+    expect(find.text('开始跟练'), findsOneWidget,
+        reason: '节拍声 = 开始跟练(自己弹,拍子带路)');
+    expect(find.text('开始示范'), findsNothing);
+    // 关回 chip:标签回「开始示范」。
+    await tester.tap(find.byKey(const Key('score-beat-clicks')));
+    await tester.pump();
+    expect(find.text('开始示范'), findsOneWidget);
+  });
+
+  testWidgets('节拍跟练起播:预备倒计 → 正曲强弱 tick、无拨弦声、提示条在位', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('score-beat-clicks')));
+    await tester.tap(find.byKey(const Key('score-beat-clicks')));
+    await tester.pump();
+    await tapStart(tester);
+    await tester.pump();
+    expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
+
+    // 预备期提示条 = 占位;跨过预备(78BPM 4 拍 ≈ 3077ms)进正曲。
+    expect(find.textContaining('跟着拍子数'), findsOneWidget);
+    await advanceAndPump(tester, 3600);
+    expect(find.byKey(const Key('score-prep-count')), findsNothing);
+    expect(find.byKey(const Key('play-hint-bar')), findsOneWidget);
+    expect(find.textContaining('跟着拍子数'), findsNothing,
+        reason: '正曲期提示条换帧');
+    expect(find.textContaining('小节'), findsOneWidget,
+        reason: '提示条头部小节拍位行');
+
+    // 参考声 = 强弱 tick,无逐音拨弦(端到端锁 start 参数接线)。
+    final ticks = engine.scheduleLog
+        .where((e) => e.key.startsWith('tick_'))
+        .toList();
+    expect(ticks.where((e) => e.key == 'tick_count'), isNotEmpty,
+        reason: '预备数拍在响');
+    expect(engine.scheduleLog.where((e) => e.key.startsWith('pluck_')),
+        isEmpty, reason: '节拍跟练无拨弦声');
+    expect(ticks.where((e) => e.key == 'tick_strong'), isNotEmpty,
+        reason: '曲头强拍已响');
+  });
+
+  testWidgets('伴奏声示范起播:提示条照常在位(逐列推进与声源无关)', (tester) async {
+    await pumpPage(tester);
+    await tapStart(tester);
+    await tester.pump();
+    await advanceAndPump(tester, 3600);
+    expect(find.byKey(const Key('play-hint-bar')), findsOneWidget);
+    expect(find.textContaining('小节'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

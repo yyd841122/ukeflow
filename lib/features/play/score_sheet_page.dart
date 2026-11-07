@@ -15,6 +15,7 @@ import '../../data/chart_providers.dart';
 import 'faithful_score_view.dart';
 import '../../data/providers.dart';
 import 'note_tune_panel.dart';
+import 'play_hint_bar.dart';
 import 'practice_session_shell.dart';
 import 'score_ir_edit_session.dart';
 import 'score_sheet_view.dart';
@@ -95,6 +96,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   @override
   void resetVisual() {
     _visual = null;
+    _hint = null;
   }
 
   /// 轻改落库后的重物化换源(工单 45):导入谱流推送新条目,三源有实
@@ -177,7 +179,10 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
     final cursor = _layout.currentAt(mainBeat);
     if (cursor != _visual) {
-      setState(() => _visual = cursor);
+      setState(() {
+        _visual = cursor;
+        _hint = playHintAt(_layout, mainBeat);
+      });
     }
   }
 
@@ -196,6 +201,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
   /// 横带/自绘切换(true = 自绘跟练全功能)。
   bool _useSelfDrawnBand = false;
+
+  /// 参考声(票07):false = 伴奏声(逐音示范声,开始示范);true =
+  /// 节拍声(逐拍强弱 tick,开始跟练——自己弹,拍子带路)。
+  bool _beatClicks = false;
+
+  /// 弹奏提示条当前帧(当位变化时 onPoll 算出;预备期 null)。
+  PlayHintFrame? _hint;
 
   @override
   void dispose() {
@@ -258,6 +270,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
                           beat: faithfulBeat,
                         ),
                       ),
+                      PlayHintBar(frame: _hint),
                       _controls(state),
                     ],
                   )
@@ -321,7 +334,21 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             },
           ),
           const SizedBox(height: 12),
-          Text('速度', style: _sectionLabelStyle),
+          Row(
+            children: [
+              Text('速度', style: _sectionLabelStyle),
+              const Spacer(),
+              FilterChip(
+                key: const Key('score-beat-clicks'),
+                selected: _beatClicks,
+                avatar: const Icon(Icons.av_timer, size: 18),
+                label: const Text('节拍跟练'),
+                onSelected: (v) => setState(() => _beatClicks = v),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
           StepSliderControl(
             value: state.bpm,
             min: TabPracticeController.minBpm,
@@ -332,10 +359,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           FilledButton.icon(
             key: const Key('score-practice-start'),
             onPressed: state.engineReady
-                ? () => _controller.start(chart: _chartFor(_trackMode))
+                ? () => _controller.start(
+                    chart: _chartFor(_trackMode),
+                    beatClicks: _beatClicks,
+                  )
                 : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('开始示范'),
+            label: Text(_beatClicks ? '开始跟练' : '开始示范'),
           ),
         ],
       ),
@@ -393,7 +423,21 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             },
           ),
           const SizedBox(height: 12),
-          Text('速度', style: _sectionLabelStyle),
+          Row(
+            children: [
+              Text('速度', style: _sectionLabelStyle),
+              const Spacer(),
+              FilterChip(
+                key: const Key('score-beat-clicks'),
+                selected: _beatClicks,
+                avatar: const Icon(Icons.av_timer, size: 18),
+                label: const Text('节拍跟练'),
+                onSelected: (v) => setState(() => _beatClicks = v),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
           StepSliderControl(
             value: state.bpm,
             min: TabPracticeController.minBpm,
@@ -405,10 +449,13 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           FilledButton.icon(
             key: const Key('score-practice-start'),
             onPressed: state.engineReady
-                ? () => _controller.start(chart: _chartFor(_trackMode))
+                ? () => _controller.start(
+                    chart: _chartFor(_trackMode),
+                    beatClicks: _beatClicks,
+                  )
                 : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('开始示范'),
+            label: Text(_beatClicks ? '开始跟练' : '开始示范'),
           ),
         ],
       ),
@@ -534,6 +581,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
                             timeline.totalBeats),
           ),
         ),
+        PlayHintBar(frame: _hint),
         const SizedBox(height: 8),
       ],
     );

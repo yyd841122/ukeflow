@@ -165,6 +165,9 @@ class FaithfulStripView extends StatefulWidget {
 }
 
 class _FaithfulStripViewState extends State<FaithfulStripView> {
+  /// 播放头/跟滚锚:视口宽的 1/3(与 ScoreSheetLayout 同纪律)。
+  static const viewportAnchor = 1 / 3;
+
   late final WebViewController _controller;
   var _jsReady = false;
   double? _pendingBeat;
@@ -178,8 +181,6 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
         'initial-scale=1">${data.css}</head>'
         '<body style="margin:0;background:#fff">'
         '<div style="position:relative">${data.stripSvg}</div>'
-        '<div style="position:fixed;left:33%;top:0;width:2px;height:100%;'
-        'background:rgba(190,40,40,.85);pointer-events:none"></div>'
         '<script>var M=${data.metaJson};'
         'function beatX(b){var i=Math.min(M.bars.length-1,Math.floor(b/4));'
         'var bar=M.bars[i];return bar.x+(b-i*4)*(bar.w/4);}'
@@ -227,6 +228,26 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
 
   @override
   Widget build(BuildContext context) {
-    return WebViewWidget(controller: _controller);
+    // 播放头红线用 Flutter 覆盖层画(票07 机型实录):OEM WebView 对
+    // position:fixed 覆盖 div 的合成层滚动前不重绘、滚动后错位——不
+    // 依赖 WebView 内 CSS 定位。Flutter 层贴视口左 1/3,与跟滚锚同位。
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          Positioned(
+            left: constraints.maxWidth * _FaithfulStripViewState.viewportAnchor,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            child: ColoredBox(
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.45),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
