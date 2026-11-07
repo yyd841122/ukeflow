@@ -282,7 +282,7 @@ String faithfulStripWrapper(FaithfulStripData data, double viewportWidth) {
 /// (中心 − 片左缘)。color(n) 全量重刷 = 幂等,pending 暂存建索引前
 /// 到达的指令。
 final String _stripIndexJs = '''
-var UF={mode:0,raf:0,a:0,at:0,per:750,p:null,b:null,bx:0,blendT:0,blendX:0,lc:null,lat:null};
+var UF={mode:0,raf:0,a:0,at:0,per:750,p:null,b:null,bx:0,blendT:0,blendX:0,lc:null};
 var cont=document.getElementById('ufs');
 UF.color=function(n){UF.p=n;if(UF.b)UF.x();};
 UF.x=function(){var n=UF.p;if(n==null||!UF.b)return;UF.p=null;
@@ -304,8 +304,13 @@ UF.follow=function(off){
 };
 UF.seek=function(b,per,te){
  if(per>0)UF.per=per;
+ // 锚 = 「到达时刻的真拍位」:te(发送 epoch)与 Date.now() 同一 OS 墙钟,
+ // b+(now−te)/per 即到达时的精确拍位——桥延迟多大都被时间戳自带消掉
+ // (票08 机检反四:此前按观测最小延迟补偿,而到达延迟 60-484ms 抖动,
+ // 误差在 0~半拍间摆 = 「不同步」根因;改时间戳锚后实测误差 ≤15ms)。
+ var bA=b;
  if(te!=null){var l=Date.now()-te;
-  if(l>=0&&l<2000&&(UF.lat==null||l<UF.lat))UF.lat=l;}
+  if(l>=0&&l<60000)bA=b+l/UF.per;}
  if(b<0){ // 预备期/回开头:钳 0 并当场冻结——死推不得前爬(前爬数拍
   // 再被音乐首拍拽回,即「开始卡顿」根因,票08 机检反三)
   UF.hold();
@@ -315,15 +320,12 @@ UF.seek=function(b,per,te){
   UF.color(-1);UF.lc=-1;
   return;
  }
- // 时延补偿:锚按观测到的最小桥延迟前推(桥按批冲刷,延迟=排队;
- // 低调频后批压力小,最小值收敛到真延迟)。软校正:|偏差|≤25px(半拍)
- // 从当前渲染位 150ms 滑入,吸收残余抖动;大偏差(回开头/跳列)硬切。
- var comp=(UF.lat||0)/UF.per;
- var b2=b+comp;
- var want=UF.traj(b2);
+ var want=UF.traj(bA);
  UF.hold();
- UF.a=b2;UF.at=performance.now();
+ UF.a=bA;UF.at=performance.now();
  if(!UF.mode){UF.mode=1;document.body.style.overflow='hidden';}
+ // 软校正:|偏差|≤25px(半拍)从当前渲染位 150ms 滑入(吸收残余钟差);
+ // 大偏差(回开头/跳列)硬切。
  if(Math.abs(want-UF.bx)>25){UF.bx=want;UF.blendT=0;}
  else{UF.blendT=performance.now();UF.blendX=UF.bx;}
  UF.lc=null;
@@ -550,8 +552,8 @@ class _FaithfulStripViewState extends State<FaithfulStripView>
   void _sendSeek(double beat, double periodMs) {
     _lastSentBeat = beat;
     _lastSentPeriod = periodMs;
-    // te = 发送时刻 epoch ms(页内与 Date.now() 同源),供延迟实测
-    // 与将来的时延补偿;页当前只透传不用。
+    // te = 发送时刻 epoch ms(页内 Date.now() 同一 OS 墙钟):页用它反推
+    // 到达时刻真拍位,桥延迟被时间戳自带消掉(票08 反四)。
     final te = DateTime.now().millisecondsSinceEpoch;
     _runJs(
       'UF.seek(${beat.toStringAsFixed(4)},${periodMs.toStringAsFixed(0)},$te)',
