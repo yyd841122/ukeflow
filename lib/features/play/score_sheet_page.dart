@@ -202,10 +202,6 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   /// 横带/自绘切换(true = 自绘跟练全功能)。
   bool _useSelfDrawnBand = false;
 
-  /// 参考声(票07):false = 伴奏声(逐音示范声,开始示范);true =
-  /// 节拍声(逐拍强弱 tick,开始跟练——自己弹,拍子带路)。
-  bool _beatClicks = false;
-
   /// 弹奏提示条当前帧(当位变化时 onPoll 算出;预备期 null)。
   PlayHintFrame? _hint;
 
@@ -334,21 +330,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             },
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Text('速度', style: _sectionLabelStyle),
-              const Spacer(),
-              FilterChip(
-                key: const Key('score-beat-clicks'),
-                selected: _beatClicks,
-                avatar: const Icon(Icons.av_timer, size: 18),
-                label: const Text('节拍跟练'),
-                onSelected: (v) => setState(() => _beatClicks = v),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ),
+          Text('速度', style: _sectionLabelStyle),
           StepSliderControl(
             value: state.bpm,
             min: TabPracticeController.minBpm,
@@ -356,16 +338,35 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             onChanged: _controller.setBpm,
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
-            key: const Key('score-practice-start'),
-            onPressed: state.engineReady
-                ? () => _controller.start(
-                    chart: _chartFor(_trackMode),
-                    beatClicks: _beatClicks,
-                  )
-                : null,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(_beatClicks ? '开始跟练' : '开始示范'),
+          // 双钮并排(票07 用户反馈):示范试听 = 伴奏声整曲代弹(试听
+          // 编配);开始跟练 = 节拍声带路自己弹。不用来回切参考声开关。
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('score-practice-start'),
+                  onPressed: state.engineReady
+                      ? () => _controller.start(chart: _chartFor(_trackMode))
+                      : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('示范试听'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  key: const Key('score-beat-practice-start'),
+                  onPressed: state.engineReady
+                      ? () => _controller.start(
+                          chart: _chartFor(_trackMode),
+                          beatClicks: true,
+                        )
+                      : null,
+                  icon: const Icon(Icons.av_timer),
+                  label: const Text('开始跟练'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -423,21 +424,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             },
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Text('速度', style: _sectionLabelStyle),
-              const Spacer(),
-              FilterChip(
-                key: const Key('score-beat-clicks'),
-                selected: _beatClicks,
-                avatar: const Icon(Icons.av_timer, size: 18),
-                label: const Text('节拍跟练'),
-                onSelected: (v) => setState(() => _beatClicks = v),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ),
+          Text('速度', style: _sectionLabelStyle),
           StepSliderControl(
             value: state.bpm,
             min: TabPracticeController.minBpm,
@@ -446,16 +433,35 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           ),
           // 变速在运行控制行(与四线谱跟练同),空闲面板省一屏。
           const SizedBox(height: 16),
-          FilledButton.icon(
-            key: const Key('score-practice-start'),
-            onPressed: state.engineReady
-                ? () => _controller.start(
-                    chart: _chartFor(_trackMode),
-                    beatClicks: _beatClicks,
-                  )
-                : null,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(_beatClicks ? '开始跟练' : '开始示范'),
+          // 双钮并排(票07 用户反馈):示范试听 = 伴奏声整曲代弹(试听
+          // 编配);开始跟练 = 节拍声带路自己弹。不用来回切参考声开关。
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('score-practice-start'),
+                  onPressed: state.engineReady
+                      ? () => _controller.start(chart: _chartFor(_trackMode))
+                      : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('示范试听'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  key: const Key('score-beat-practice-start'),
+                  onPressed: state.engineReady
+                      ? () => _controller.start(
+                          chart: _chartFor(_trackMode),
+                          beatClicks: true,
+                        )
+                      : null,
+                  icon: const Icon(Icons.av_timer),
+                  label: const Text('开始跟练'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

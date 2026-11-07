@@ -285,7 +285,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('谱面视图 · 梁静茹 · 78 BPM · 1=E'), findsOneWidget);
     expect(find.byKey(const Key('score-strip')), findsOneWidget);
-    expect(find.text('开始示范'), findsOneWidget, reason: '会话页空闲面板');
+    // 票07 双钮并排:示范试听 + 开始跟练同屏。
+    expect(find.text('示范试听'), findsOneWidget, reason: '会话页空闲面板');
+    expect(find.text('开始跟练'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();

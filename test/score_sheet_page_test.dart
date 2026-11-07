@@ -83,7 +83,7 @@ void main() {
     expect(find.text('双轨混播'), findsOneWidget);
     final start = find.byKey(const Key('score-practice-start'));
     expect(start, findsOneWidget);
-    expect(tester.widget<FilledButton>(start).onPressed, isNotNull,
+    expect(tester.widget<ButtonStyleButton>(start).onPressed, isNotNull,
         reason: '引擎就绪后可启');
     expect(tester.takeException(), isNull);
   });
@@ -216,7 +216,7 @@ void main() {
     expect(find.byKey(const Key('warmup-retry')), findsOneWidget);
     expect(
       tester
-          .widget<FilledButton>(
+          .widget<ButtonStyleButton>(
             find.byKey(const Key('score-practice-start')),
           )
           .onPressed,
@@ -225,23 +225,16 @@ void main() {
     );
   });
 
-  testWidgets('参考声切换(票07):节拍跟练 chip 选中 → 开始钮改「开始跟练」', (
+  testWidgets('双钮并排(票07 反馈):示范试听 + 开始跟练同屏,互不顶掉', (
     tester,
   ) async {
     await pumpPage(tester);
 
-    expect(find.text('开始示范'), findsOneWidget, reason: '缺省 = 伴奏声示范');
-    expect(find.text('开始跟练'), findsNothing);
-    await tester.ensureVisible(find.byKey(const Key('score-beat-clicks')));
-    await tester.tap(find.byKey(const Key('score-beat-clicks')));
-    await tester.pump();
-    expect(find.text('开始跟练'), findsOneWidget,
-        reason: '节拍声 = 开始跟练(自己弹,拍子带路)');
-    expect(find.text('开始示范'), findsNothing);
-    // 关回 chip:标签回「开始示范」。
-    await tester.tap(find.byKey(const Key('score-beat-clicks')));
-    await tester.pump();
-    expect(find.text('开始示范'), findsOneWidget);
+    expect(find.text('示范试听'), findsOneWidget, reason: '伴奏声试听常在');
+    expect(find.text('开始跟练'), findsOneWidget, reason: '节拍声跟练常在');
+    expect(tester.widget<ButtonStyleButton>(
+      find.byKey(const Key('score-beat-practice-start')),
+    ).onPressed, isNotNull, reason: '跟练钮就绪可启');
   });
 
   testWidgets('节拍跟练起播:预备倒计 → 正曲强弱 tick、无拨弦声、提示条在位', (
@@ -249,10 +242,10 @@ void main() {
   ) async {
     await pumpPage(tester);
 
-    await tester.ensureVisible(find.byKey(const Key('score-beat-clicks')));
-    await tester.tap(find.byKey(const Key('score-beat-clicks')));
-    await tester.pump();
-    await tapStart(tester);
+    await tester.ensureVisible(
+      find.byKey(const Key('score-beat-practice-start')),
+    );
+    await tester.tap(find.byKey(const Key('score-beat-practice-start')));
     await tester.pump();
     expect(find.byKey(const Key('score-prep-count')), findsOneWidget);
 
