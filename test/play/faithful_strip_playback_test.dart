@@ -5,12 +5,13 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../helpers/fake_webview_platform.dart';
 
-/// 票08:横带跟滚/染色的逐帧驱动真值测试。
+/// 票08:横带跟滚/染色的驱动真值测试。
 ///
-/// 视图内置 ticker(vsync):拍位每帧按引擎时钟缝(clock 闭包)现算,
-/// 滚动走原生 scrollTo(平台方法),染色按列变化率经 JS 桥单发幂等
-/// 指令。测试用 fake 平台捕获两类调用,ticker 由 pump 驱动,无真实
-/// 定时器/fakeAsync(避开 OEM/fake zone 已知坑)。
+/// 视图内置 ticker 采样引擎时钟:跟滚/染色按列变化率单发 `UF.seek`
+/// (页内 rAF 逐帧 transform 平滑——OEM WebView 的原生 scrollTo 连续
+/// 目标下被限速,机检实测弃用);暂停检出后单发 `UF.hold()`;停止单发
+/// `UF.follow(0)`。测试用 fake 平台捕获 JS 指令,ticker 由 pump 驱动,
+/// 无真实定时器/fakeAsync(避开 OEM/fake zone 已知坑)。
 void main() {
   // 2 小节 × 200px(每拍 50px、每八分列 25px),♩=80 → 拍周期 750ms。
   const data = FaithfulStripData(
@@ -37,12 +38,13 @@ void main() {
       ),
     );
     // postFrame 起装载(曲头余量要视口宽,推迟到布局帧);再一帧让
-    // 装载 future/页完成回调落地(遮罩退场、染色补发挂上)。
+    // 装载 future/页完成回调落地(遮罩退场、seek 补发挂上)。
     await tester.pump();
     await tester.pump();
   }
 
-  testWidgets('装载:包装含曲头余量与列网格;遮罩退场', (tester) async {
+  testWidgets('装载:包装含曲头余量/列网格/rAF 跟滚脚本;遮罩退场',
+      (tester) async {
     WebViewPlatform.instance = FakeWebViewPlatform();
     final tl = FaithfulStripTimeline()..clock = () => null;
     await pumpStrip(tester, tl);
@@ -53,10 +55,14 @@ void main() {
     expect(html, contains('padding-right:240.0px'));
     expect(html.contains('innerWidth'), isFalse);
     expect(html, contains('cols:[0.0,25.0'));
+    expect(html, contains('will-change:transform'), reason: 'rAF transform 跟滚');
+    expect(html, contains('UF.seek'));
+    expect(html, contains('requestAnimationFrame'));
     expect(find.byType(FaithfulStripView), findsOneWidget);
   });
 
-  testWidgets('预备期:曲头 0 落线(钳 0)+ paint(-1) 全还原', (tester) async {
+  testWidgets('预备期:负拍 seek(-x) 染色还原;曲头内容 0 由页面钳到线上',
+      (tester) async {
     WebViewPlatform.instance = FakeWebViewPlatform();
     Duration? now = const Duration(milliseconds: -2250); // 预备第 3 拍
     final tl = FaithfulStripTimeline()..clock = () => now;
@@ -66,18 +72,17 @@ void main() {
     tl.anchor.value = (t0: Duration.zero, periodMs: 750);
     await tester.pump();
 
-    expect(platform.scrollCalls, ['0,0'], reason: '负拍钳 0:曲头在线上等待');
-    expect(platform.javaScriptRuns.last, 'UF.paint(-1)');
-    expect(platform.scrollCalls.length, 1, reason: '预备期内同目标去重');
+    expect(platform.javaScriptRuns.single, 'UF.seek(-3.0000,750)',
+        reason: '负拍 seek:页内钳 0(曲头 0 在线上等待)+ 染色全还原');
+    expect(platform.javaScriptRuns.length, 1, reason: '预备期内同列去重');
 
-    // 预备走完,拍 0 未到:仍钳 0,无新指令。
+    // 预备走完前时钟仍在走(未暂停):无 hold。
     now = const Duration(milliseconds: -100);
     await tester.pump();
-    expect(platform.scrollCalls.length, 1);
     expect(platform.javaScriptRuns.length, 1);
   });
 
-  testWidgets('运行:滚动按拍线性逐帧推进,染色按列变化单发', (tester) async {
+  testWidgets('运行:seek 按列变化单发;暂停检出冻结页内死推', (tester) async {
     WebViewPlatform.instance = FakeWebViewPlatform();
     Duration? now = Duration.zero;
     final tl = FaithfulStripTimeline()..clock = () => now;
@@ -87,33 +92,37 @@ void main() {
     tl.anchor.value = (t0: Duration.zero, periodMs: 750);
     await tester.pump();
 
-    // 拍 0.4:内容 x=20(每拍 50px),第 0 列染色首发。
+    // 拍 0:第 0 列首发 seek。
+    expect(platform.javaScriptRuns.single, 'UF.seek(0.0000,750)');
+
+    // 拍 0.4(300ms):仍在第 0 列,不重发。
     now = const Duration(milliseconds: 300);
     await tester.pump();
-    expect(platform.scrollCalls, contains('20,0'));
-    expect(platform.javaScriptRuns.last, 'UF.paint(0)');
+    expect(platform.javaScriptRuns.length, 1, reason: '同列去重');
 
-    // 拍 0.6:x=30,推进到第 1 列。
+    // 拍 0.6(450ms):推进到第 1 列,seek 携带精确拍位。
     now = const Duration(milliseconds: 450);
     await tester.pump();
-    expect(platform.scrollCalls.last, '30,0');
-    expect(platform.javaScriptRuns.last, 'UF.paint(1)');
+    expect(platform.javaScriptRuns.last, 'UF.seek(0.6000,750)');
 
-    // 拍 0.9:x=45 仍在第 1 列(0.75s 才换列):滚动照发,染色不发。
-    final jsCount = platform.javaScriptRuns.length;
+    // 拍 0.9(675ms):仍在第 1 列,不发。
     now = const Duration(milliseconds: 675);
     await tester.pump();
-    expect(platform.scrollCalls.last, '45,0');
-    expect(platform.javaScriptRuns.length, jsCount, reason: '同列去重');
+    expect(platform.javaScriptRuns.length, 2);
 
-    // 暂停(时钟冻结):同拍位,零下发。
-    now = const Duration(milliseconds: 675);
-    await tester.pump();
-    expect(platform.scrollCalls.length, 4);
-    expect(platform.javaScriptRuns.length, jsCount);
+    // 暂停(时钟冻结):连续 8 帧检出 → hold 单发一次,此后零下发。
+    for (var i = 0; i < 10; i++) {
+      await tester.pump();
+    }
+    expect(platform.javaScriptRuns.last, 'UF.hold()');
+    expect(
+      platform.javaScriptRuns.where((s) => s == 'UF.hold()').length,
+      1,
+      reason: '持续暂停不重复 hold',
+    );
   });
 
-  testWidgets('回到开头:锚刷新负拍 → 滚回 0 + paint(-1);停止 → 还原自停',
+  testWidgets('回到开头:锚刷新重置驱动,负拍 seek 归零;停止 follow(0) 复位',
       (tester) async {
     WebViewPlatform.instance = FakeWebViewPlatform();
     Duration? now = const Duration(seconds: 5);
@@ -124,26 +133,20 @@ void main() {
     tl.anchor.value = (t0: Duration.zero, periodMs: 750);
     now = const Duration(seconds: 3); // 曲中:拍 4(第 2 小节头)
     await tester.pump();
-    expect(platform.scrollCalls.last, '200,0');
-    expect(platform.javaScriptRuns.last, 'UF.paint(8)');
+    expect(platform.javaScriptRuns.last, 'UF.seek(4.0000,750)');
 
-    // 回到开头:锚重定(曲头负拍期)。
-    tl.anchor.value = (
-      t0: const Duration(seconds: 4),
-      periodMs: 750,
-    );
+    // 回到开头:锚重定(曲头负拍期)→ 驱动重置 → 立即重发负拍 seek。
+    tl.anchor.value = (t0: const Duration(seconds: 4), periodMs: 750);
     now = const Duration(seconds: 3);
     await tester.pump();
-    expect(platform.scrollCalls.last, '0,0', reason: '负拍钳 0 滚回曲头');
-    expect(platform.javaScriptRuns.last, 'UF.paint(-1)');
+    expect(platform.javaScriptRuns.last, 'UF.seek(-1.3333,750)');
 
-    // 停止:锚与时钟同刻归 null → ticker 自停 + 当弹列还原。
+    // 停止:锚与时钟同刻归 null → ticker 自停 + follow(0) 全复位。
     final jsCount = platform.javaScriptRuns.length;
     now = null;
     tl.anchor.value = null;
     await tester.pump();
-    await tester.pump();
-    expect(platform.javaScriptRuns.length, jsCount,
-        reason: '最后状态已是 -1(还原过),停止不重发');
+    expect(platform.javaScriptRuns.length, jsCount + 1);
+    expect(platform.javaScriptRuns.last, 'UF.follow(0)');
   });
 }

@@ -110,3 +110,34 @@
 
 **待真机验收(票面验收 1-3):** 并排手感、变色点、三检查点同步、
 logcat。装 3MB 横带页仍 ~3.4s,遮罩照旧。
+
+### 2026-11-07 机检反二:scrollTo 限速实锤 → 跟滚改 rAF transform(已装机复检过)
+
+装机机检第一轮抓到大病:**原生 scrollTo 在这台 OEM WebView 上不可用于
+连续跟滚**。带 logcat 采样实证:ticker 以正确拍位/正确墙钟速率下发绝对
+目标(~27Hz),显示却以 ~35% 速率爬行且滞后随时间增长(暂停对拍:提示
+beat 62 vs 线 beat 20);同一时段 Flutter ticker 掉到 27Hz——该路径还
+拖慢 Flutter UI 线程。第一版「ticker+原生 scrollTo」方案整体作废。
+
+**改版(装机复检全过):**
+
+- 跟滚 = **页内联 rAF 逐帧写 `translateX`**(合成器动画,亚像素):
+  实测全速率(~150 device px/s ✓ vs 旧 36),rAF 不节流;Flutter ticker
+  恢复正常。桥上只走列变化率(~2.7s 一次发)的 `UF.seek(beat,periodMs)`
+  ——页内按拍周期死推,桥丢发由下一列重锚自愈;暂停=引擎时钟停走 8 帧
+  检出 → `UF.hold()` 冻死推(实测 3s 零位移);恢复/回到开头=锚变更重置
+  驱动立即重发 seek;停止=`UF.follow(0)` 复位(transform/overflow/
+  scroll/染色,实测手动拖恢复)。
+- 同步精度:暂停对拍 **提示第18小节·拍1 ↔ 线恰在印张第18小节小节线上**
+  (旧 scrollTo 版差 25-30 拍);死推在列内线性插值,误差只剩桥延迟。
+- **染色索引弃 rect 改属性**:第一版按 getBoundingClientRect 判属主片,
+  机检抓到 OEM 盒测歪(filled=72/应 290)——改读属性(片 x/viewBox +
+  数字 text 的 x 属性,两首 census 全带 x),装机日志 `slices=51
+  assigned=542 filled=290` 与 PC Python 镜像逐数吻合。
+- 染色上屏实证:当弹列字形红 RGB(200,97,109)(与线同色逐像素一致),
+  其余全黑;小节号/和弦名/谱线不变色 ✓ 两态模型与视频一致。
+- 曲头 0 落线(预备期负拍钳 0)✓;停止回闲复位 ✓;logcat 干净 ✓;
+  flutter 1017 全绿。
+
+诊断缝追记:页内 `console.log` 经 `setOnConsoleMessage` 回传 Dart 是
+WebView 内部状态的最好观测口,两次定位(限速实锤、filled=72)都靠它。

@@ -184,11 +184,10 @@ FaithfulStripData? extractFaithfulStrip(String pageHtml) {
 typedef StripAnchor = ({Duration t0, double periodMs});
 
 /// 横带时间线:页持有(票08),轮询把会话锚推给 [anchor];视图内置
-/// ticker 按 [clock](引擎时钟缝,页装填控制器的 visualNow 原样)逐帧
-/// 驱动原生 scrollTo 与染色。ADR-0005 不破:唯一时间源仍是引擎时钟,
-/// 页把缝原样递给视图,页内无第二时间源。暂停 = 引擎时钟冻结(同一
-/// 拍位反复算出同一目标,视图侧去重后零下发);未运行 = 缝返回 null,
-/// ticker 自停。
+/// ticker 按 [clock](引擎时钟缝,页装填控制器的 visualNow 原样)按列
+/// 变化率下发 seek、页内 rAF 逐帧平滑。ADR-0005 不破:唯一时间源仍是
+/// 引擎时钟,页把缝原样递给视图,页内无第二时间源。暂停 = 引擎时钟
+/// 冻结(视图检出后冻结页内死推);未运行 = 缝返回 null,ticker 自停。
 class FaithfulStripTimeline {
   /// 当前会话锚;null = 未运行。记录等值(字段同值)不重复通知。
   final ValueNotifier<StripAnchor?> anchor = ValueNotifier<StripAnchor?>(null);
@@ -253,11 +252,18 @@ double faithfulStripBeatX(FaithfulStripData data, double beat) {
 }
 
 /// 横带页包装(纯函数,票08):曲头左余量 = 视口宽/3、曲尾右余量 =
-/// 视口宽×2/3,随装载一次性烘进 padding——scrollTo(0) 时曲头位置 0
-/// 恰落在播放头线上,流过末小节恰好触线而止(maxScroll = 横带宽)。
-/// 几何数字一律 Dart 算好注入,**禁用页面 innerWidth**(OEM 报值不可信,
-/// 曾把内容整体推出屏外成白板)。染色索引脚本同页内联:装载后建
-/// 「数字字形按 x 分列桶」索引,paint(n) 绝对状态幂等,丢发自愈。
+/// 视口宽×2/3,随装载一次性烘进 padding——曲头位置 0 恰落在播放头线
+/// 上,流过末小节恰好触线而止。几何数字一律 Dart 算好注入,**禁用页面
+/// innerWidth**(OEM 报值不可信,曾把内容整体推出屏外成白板)。
+///
+/// 跟滚引擎(票08 机型实录改版):OEM WebView 对连续 `View.scrollTo`
+/// 做动画化/限速应用——逐帧绝对目标下显示以 ~35% 速率爬行(机检实测:
+/// 指令 beat 105 vs 显示 beat 40,滞后随时间增长),且该路径拖慢
+/// Flutter UI 线程(ticker 掉到 27Hz)。故跟滚**不走滚动**:内容 div
+/// 由页内 rAF 逐帧写 `translateX`(合成器动画,亚像素平滑),拍位锚由
+/// Dart 按列变化率(~0.375s)经 JS 桥单发 `UF.seek(beat,periodMs)`
+/// 供给,页内按引擎拍周期死推,桥丢发由下一列 seek 重锚自愈。空闲态
+/// rAF 停、overflow 还原,手动拖读谱不受影响。
 String faithfulStripWrapper(FaithfulStripData data, double viewportWidth) {
   final lead = (viewportWidth / 3).toStringAsFixed(1);
   final tail = (viewportWidth * 2 / 3).toStringAsFixed(1);
@@ -268,13 +274,14 @@ String faithfulStripWrapper(FaithfulStripData data, double viewportWidth) {
       '<meta name="viewport" content="width=device-width, '
       'initial-scale=1">${data.css}</head>'
       '<body style="margin:0;background:#fff">'
-      '<div id="ufs" style="position:relative;padding-left:${lead}px;'
-      'padding-right:${tail}px">${data.stripSvg}</div>'
+      '<div id="ufs" style="position:relative;will-change:transform;'
+      'padding-left:${lead}px;padding-right:${tail}px">${data.stripSvg}</div>'
       '<script>var M={cols:[$cols]};$_stripIndexJs</script>'
       '</body></html>';
 }
 
-/// 染色索引与改色脚本(票08,随横带页内联一次;不经 JS 桥,OEM jam 面零)。
+/// 染色索引 + rAF 跟滚脚本(票08,随横带页内联一次;不经 JS 桥,OEM
+/// jam 面零——桥上只走列变化率的 seek/hold/follow 单发)。
 ///
 /// 视频帧实证(用户录屏,票08):站方播放染色只有两态——**当弹**列的
 /// 品数字形变红(与播放头线同色),其余一切(已弹/未弹/谱线/符干/
@@ -283,47 +290,82 @@ String faithfulStripWrapper(FaithfulStripData data, double viewportWidth) {
 /// 实测比值 0.85/0.69,均在界外)。索引建在字体就绪后(Bravura 晚到
 /// 会改字形度量),2.5s 兜底;横带是嵌套 svg 裁切——每片含整系统 body
 /// 副本,按「元素中心落在该片盒内」判定可见副本,strip x = 片 x +
-/// (中心 − 片左缘)。paint(n) 全量重刷 = 幂等,pending 暂存建索引前
+/// (中心 − 片左缘)。color(n) 全量重刷 = 幂等,pending 暂存建索引前
 /// 到达的指令。
 final String _stripIndexJs = '''
-var UF={p:null,b:null};
-UF.paint=function(n){UF.p=n;if(UF.b)UF.a();};
-UF.a=function(){var n=UF.p;if(n==null||!UF.b)return;UF.p=null;
+var UF={mode:0,raf:0,a:0,at:0,per:750,p:null,b:null};
+var cont=document.getElementById('ufs');
+UF.color=function(n){UF.p=n;if(UF.b)UF.x();};
+UF.x=function(){var n=UF.p;if(n==null||!UF.b)return;UF.p=null;
  var bs=UF.b;
  for(var i=0;i<bs.length;i++){var arr=bs[i];if(!arr.length)continue;
   var f=(i==n)?'$_highlightRedCss':null;
   for(var j=0;j<arr.length;j++){arr[j][0].setAttribute('fill',f!=null?f:arr[j][1]);}
  }};
+UF.seek=function(b,per){
+ if(per>0)UF.per=per;
+ UF.color(b<0?-1:Math.floor(b*2));
+ UF.a=b<0?0:b;UF.at=performance.now();
+ if(!UF.mode){UF.mode=1;document.body.style.overflow='hidden';}
+ if(!UF.raf)UF.raf=requestAnimationFrame(UF.step);
+};
+UF.hold=function(){
+ if(UF.raf){cancelAnimationFrame(UF.raf);UF.raf=0;}
+};
+UF.follow=function(off){
+ if(off)return;
+ UF.hold();UF.mode=0;
+ cont.style.transform='none';
+ document.body.style.overflow='';
+ window.scrollTo(0,0);
+ UF.color(-1);
+};
+UF.step=function(){
+ UF.raf=0;
+ if(!UF.mode)return;
+ var cb=UF.a+(performance.now()-UF.at)/UF.per;
+ var lim=(M.cols.length-1)/2;
+ if(cb>lim)cb=lim;
+ var f=cb*2,k=Math.floor(f);
+ if(k>M.cols.length-2)k=M.cols.length-2;
+ var x=M.cols[k]+(M.cols[k+1]-M.cols[k])*(f-k);
+ cont.style.transform='translateX('+(-x).toFixed(2)+'px)';
+ UF.raf=requestAnimationFrame(UF.step);
+};
 UF.build=function(){
  if(UF.b)return;
  var svg=document.querySelector('#ufs svg');if(!svg)return;
+ // 位置一律取属性(片 x/viewBox + 数字 text x)——OEM WebView 的
+ // getBoundingClientRect 曾把盒测歪(机检实录 filled=72/应 290),
+ // 属性坐标与缩放/时机无关。品数字两首全带 x 属性(census 实证)。
  var i,j,slices=[],ss=svg.querySelectorAll('svg');
  for(i=0;i<ss.length;i++){var s=ss[i];
   var vb=s.getAttribute('viewBox');if(!vb)continue;
   var vp=vb.split(' ');var lo=parseFloat(vp[0]),w=parseFloat(vp[2]);
-  var r=s.getBoundingClientRect();
-  slices.push([parseFloat(s.getAttribute('x'))||0,lo,lo+w,r.left,r.left+w]);}
- var ts=svg.querySelectorAll('text'),cand=[],mx=0;
- for(i=0;i<ts.length;i++){var t=ts[i];
-  var c=(t.textContent||'').trim();
-  if(!/^[0-9]+\$/.test(c))continue;
-  var fs=parseFloat(getComputedStyle(t).fontSize)||0;
-  if(fs>mx)mx=fs;
-  var rc=t.getBoundingClientRect();
-  cand.push([rc.left+rc.width/2,fs,t]);}
- if(mx<=0||!slices.length)return;
+  slices.push([parseFloat(s.getAttribute('x'))||0,lo,lo+w,s]);
+ }
+ var cand=[],mx=0;
+ for(i=0;i<slices.length;i++){var sl=slices[i];
+  var ts=sl[3].querySelectorAll('text');
+  for(j=0;j<ts.length;j++){var t=ts[j];
+   var c=(t.textContent||'').trim();
+   if(!/^[0-9]+\$/.test(c))continue;
+   var fs=parseFloat(getComputedStyle(t).fontSize)||0;
+   if(fs>mx)mx=fs;
+   var ax=parseFloat(t.getAttribute('x'));
+   if(isNaN(ax)||ax<sl[1]||ax>sl[2])continue;
+   cand.push([sl[0]+(ax-sl[1]),fs,t]);
+  }}
+ if(mx<=0||!cand.length)return;
  var lim=mx*0.9,cols=M.cols,bs=[];
  for(i=0;i<cols.length-1;i++)bs.push([]);
  for(i=0;i<cand.length;i++){
   if(cand[i][1]<lim)continue;
-  var cx=cand[i][0];
-  for(j=0;j<slices.length;j++){var sl=slices[j];
-   if(cx>=sl[3]&&cx<=sl[4]){
-    var sx=sl[0]+(cx-sl[3]);
-    var k=0;while(k<cols.length-2&&cols[k+1]<=sx)k++;
-    bs[k].push([cand[i][2],cand[i][2].getAttribute('fill')||'#000']);
-    break;}}}
- UF.b=bs;UF.a();
+  var sx=cand[i][0],k=0;
+  while(k<cols.length-2&&cols[k+1]<=sx)k++;
+  bs[k].push([cand[i][2],cand[i][2].getAttribute('fill')||'#000']);
+ }
+ UF.b=bs;UF.x();
 };
 if(document.fonts&&document.fonts.ready&&document.fonts.ready.then){
  document.fonts.ready.then(function(){UF.build();});
@@ -332,12 +374,12 @@ setTimeout(function(){if(!UF.b)UF.build();},2500);
 ''';
 
 /// 原样流水视图:横带单行滚动。空闲 = 静态读谱(手动拖);运行 =
-/// **ticker 逐帧驱动**(票08:vsync 同频,拍位每帧按引擎时钟现算,
-/// 去掉 16ms 轮询定时器的抖动——原生 scrollTo 平台方法不走 JS 桥,
-/// OEM jam 面)。播放头恒在视口 1/3:曲头左余量已烘进页面 padding
-/// (票08,scrollTo(0) 时曲头 0 恰在线上),滚动目标 = 弹奏位内容 x。
-/// 锚点用 Dart 视口宽的 1/3,不信页面 innerWidth(OEM 曾错报)。
-/// 播放染色同帧驱动:列变化率(~0.375s)经 JS 桥单发 UF.paint(k),
+/// **页内 rAF 逐帧 transform 跟滚**(票08 机型实录:OEM WebView 的
+/// 原生 scrollTo 连续目标下被限速 ~35%,显示永远滞后且拖慢 Flutter
+/// 线程;transform 走合成器,亚像素平滑,桥上只走列变化率的 seek)。
+/// 曲头左余量烘进页面 padding(内容 x=0 即播放头线),预备数拍期拍位
+/// 负钳 0 在线上等待。锚点用 Dart 视口宽的 1/3,不信页面 innerWidth
+/// (OEM 曾错报)。播放染色同驱动:列变化率单发 seek(内含染色),
 /// 绝对状态幂等,丢发下一列自愈。
 class FaithfulStripView extends StatefulWidget {
   const FaithfulStripView({
@@ -370,12 +412,18 @@ class _FaithfulStripViewState extends State<FaithfulStripView>
   var _pageReady = false;
   Timer? _jsArmFallback;
 
-  /// 染色驱动 + 装载完成补发标记(装载期被 OEM 丢掉的 paint 靠它自愈)。
+  /// 染色/跟滚驱动 + 装载完成补发标记(装载期被 OEM 丢掉的 seek 靠它
+  /// 自愈)。
   final StripColorDriver _color = StripColorDriver();
   var _colorsPrimed = false;
+  double? _lastSentBeat;
+  double? _lastSentPeriod;
 
-  /// 原生滚动去重缓存(暂停/等待期零下发;-1 = 未滚过)。
-  var _lastScrollX = -1;
+  /// 暂停检测:引擎时钟连续 8 帧停走 → 页面 rAF 死推冻结一次
+  /// (恢复由锚变更触发 seek,见控制器 resume 的重锚)。
+  Duration? _lastClock;
+  int _frozenFrames = 0;
+  var _held = false;
 
   /// 装载代数:换宽重装后,旧装载的 future/回调过期不置就绪。
   var _loadGen = 0;
@@ -410,18 +458,21 @@ class _FaithfulStripViewState extends State<FaithfulStripView>
     }
   }
 
-  /// 会话锚到位(开始/循环接遍):起 ticker。停止由 _onFrame 的时钟
-  /// 空转自停(anchor 与 clock 同刻变 null,见控制器 visualNow)。
+  /// 会话锚到位(开始/循环接遍/恢复重锚):起 ticker;锚变更即重置
+  /// 染色/跟滚驱动(下一帧按新锚重发 seek——回到开头/恢复立即归位,
+  /// 不等下一列)。
   void _onAnchor() {
-    if (widget.timeline?.anchor.value != null && !_ticker.isActive) {
-      _lastScrollX = -1;
-      _ticker.start();
+    final active = widget.timeline?.anchor.value != null;
+    if (active && !_ticker.isActive) _ticker.start();
+    if (active) {
+      _color.reset();
+      _held = false;
+      _frozenFrames = 0;
     }
   }
 
   /// 装载就绪(幂等;onPageFinished/装载 future/兜底定时器三方竞争):
-  /// 遮罩退场 + 补发当前染色列(装载期被 OEM 丢掉的 paint 自愈;
-  /// 原生滚动不依赖 JS,无需就绪门)。
+  /// 遮罩退场 + 补发当前 seek(装载期被 OEM 丢掉的指令自愈)。
   void _loaded() {
     if (!mounted) return;
     _jsArmFallback?.cancel();
@@ -431,8 +482,9 @@ class _FaithfulStripViewState extends State<FaithfulStripView>
     }
     if (!_colorsPrimed) {
       _colorsPrimed = true;
-      final k = _color.last;
-      if (k != null) _runJs('UF.paint($k)');
+      final beat = _lastSentBeat;
+      final period = _lastSentPeriod;
+      if (beat != null && period != null) _sendSeek(beat, period);
     }
   }
 
@@ -476,35 +528,51 @@ class _FaithfulStripViewState extends State<FaithfulStripView>
     super.dispose();
   }
 
+  void _sendSeek(double beat, double periodMs) {
+    _lastSentBeat = beat;
+    _lastSentPeriod = periodMs;
+    _runJs('UF.seek(${beat.toStringAsFixed(4)},${periodMs.toStringAsFixed(0)})');
+  }
+
   void _onFrame(Duration _) {
     final tl = widget.timeline;
     final anchor = tl?.anchor.value;
     final clock = tl?.clock;
     if (tl == null || anchor == null || clock == null) {
-      // 停止/回闲:自停 + 当弹列还原(读谱态干净)+ 位置缓存清零。
+      // 停止/回闲:自停 + 页面跟滚复位(transform 还原/溢出还原/染色
+      // 还原——单发 follow(0),丢发的代价只是空闲态停在上次位置)。
       if (_ticker.isActive) {
         _ticker.stop();
-        if (_color.last != null && _color.last != -1) _runJs('UF.paint(-1)');
+        if (_lastSentBeat != null) _runJs('UF.follow(0)');
         _color.reset();
-        _lastScrollX = -1;
+        _lastSentBeat = null;
+        _lastSentPeriod = null;
+        _held = false;
+        _frozenFrames = 0;
+        _lastClock = null;
       }
       return;
     }
     final now = clock();
-    if (now == null) return; // 暂停:引擎时钟冻结,同拍位去重后零下发。
+    if (now == null) return;
     final width = _viewWidth;
     if (width == null || widget.data.bars.isEmpty) return;
     final beat = (now - anchor.t0).inMicroseconds / (anchor.periodMs * 1000);
-    // 曲头余量已烘进页面(内容 x=0 即播放头线):目标 = 弹奏位内容 x;
-    // 预备期负拍钳 0——曲头 0 落在线上等待,首音起再流向线(票08 曲头)。
-    final x = faithfulStripBeatX(widget.data, beat).floor().clamp(0, 1 << 30);
-    if (x != _lastScrollX) {
-      _lastScrollX = x;
-      _controller.scrollTo(x, 0);
-    }
-    // 染色:列变化率(~0.375s)单发,绝对状态幂等,丢发下一列自愈。
+    // 跟滚/染色:列变化率(~0.375s)单发 seek(拍位+拍周期),页内 rAF
+    // 死推平滑;绝对状态幂等,丢发下一列重锚自愈。
     final k = _color.update(beat, widget.data.bars.length * 8);
-    if (k != null) _runJs('UF.paint($k)');
+    if (k != null) _sendSeek(beat, anchor.periodMs);
+    // 暂停检测:引擎时钟连续停走 → 冻结页内死推一次(恢复由锚变更
+    // 触发 seek 重锚,见 _onAnchor)。8 帧阈值防时钟粒度误判。
+    if (now == _lastClock && !_held) {
+      if (++_frozenFrames >= 8) {
+        _held = true;
+        _runJs('UF.hold()');
+      }
+    } else if (now != _lastClock) {
+      _frozenFrames = 0;
+    }
+    _lastClock = now;
   }
 
   @override

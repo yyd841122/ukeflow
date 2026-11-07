@@ -112,12 +112,13 @@ void main() {
       expect(html, contains(data.stripSvg));
     });
 
-    test('列边界随包装下发,染色指令绝对状态幂等', () {
+    test('列边界随包装下发,染色/跟滚指令绝对状态幂等', () {
       final html = faithfulStripWrapper(data, 360);
       expect(html, contains('var M={cols:['));
       expect(html, contains('0.0,25.0,50.0,75.0,100.0'), reason: '八分网格');
-      // paint(n) 全量重刷(幂等),丢发由下一列重发自愈。
-      expect(html, contains('UF.paint'));
+      // seek(beat,period) 全量重刷(幂等),丢发由下一列重锚自愈。
+      expect(html, contains('UF.seek'));
+      expect(html, contains('requestAnimationFrame'), reason: 'rAF 跟滚');
       expect(html, contains("setAttribute('fill'"));
       expect(html, contains('#c8616d'), reason: '原站高亮红(视频帧取样)');
       expect(html, contains('document.fonts'), reason: '索引建在字体就绪后');
