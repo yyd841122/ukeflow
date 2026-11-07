@@ -80,25 +80,21 @@ void main() {
     });
   });
 
-  group('票08 染色驱动 StripColorDriver(幂等重发自愈)', () {
-    test('列不变不下发;列推进/倒退(回到开头)照发', () {
-      final driver = StripColorDriver();
-      expect(driver.update(0.2, 16), 0); // 首发第 0 列
-      expect(driver.update(0.3, 16), isNull); // 同列去重
-      expect(driver.update(0.6, 16), 1); // 推进
-      expect(driver.update(99, 16), 15); // 越界钳末列
-      expect(driver.update(0.1, 16), 0); // 倒退照发(回到开头)
-      expect(driver.last, 0);
+  group('票08 seek 下发节拍 stripNeedsSeek(桥延迟反三:低调频)', () {
+    test('首发必发;跨 0(预备→正曲/回开头)必发', () {
+      expect(stripNeedsSeek(5, null), isTrue, reason: '首发锚');
+      expect(stripNeedsSeek(-3, null), isTrue);
+      expect(stripNeedsSeek(0.1, -3), isTrue, reason: '预备→正曲跨 0');
+      expect(stripNeedsSeek(-1, 5), isTrue, reason: '回开头跨 0');
+      expect(stripNeedsSeek(-1, -3), isFalse, reason: '预备期内不发');
     });
 
-    test('预备期 -1 全还原;空列网格不驱动;reset 清态', () {
-      final driver = StripColorDriver();
-      expect(driver.update(-3, 16), -1);
-      expect(driver.update(-1, 16), isNull); // 预备期内去重
-      expect(driver.update(0, 16), 0);
-      driver.reset();
-      expect(driver.last, isNull);
-      expect(driver.update(1, 0), isNull, reason: '空横带(坏 meta)不驱动');
+    test('每 4 拍周期校正;负拍期不周期发', () {
+      expect(stripNeedsSeek(3.9, 0), isFalse);
+      expect(stripNeedsSeek(4.0, 0), isTrue);
+      expect(stripNeedsSeek(7.9, 4), isFalse);
+      expect(stripNeedsSeek(8.0, 4), isTrue);
+      expect(stripNeedsSeek(-0.5, -3.5), isFalse, reason: '预备期无周期校正');
     });
   });
 
