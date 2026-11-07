@@ -33,8 +33,6 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
   late final FaithfulStripData? _strip =
       extractFaithfulStrip(widget.ready.sourceHtml ?? '');
 
-  /// 预览是静态读谱态:恒空拍位(播放头不动,横带手动拖)。
-  final _idleBeat = ValueNotifier<double?>(null);
 
   /// 入库写入期间禁用存入钮(双击防抖,文本导入同款)。
   bool _saving = false;
@@ -42,7 +40,6 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
   @override
   void dispose() {
     _title.dispose();
-    _idleBeat.dispose();
     super.dispose();
   }
 
@@ -102,7 +99,7 @@ class _ImportScoreSourcePageState extends ConsumerState<ImportScoreSourcePage> {
             // 所得;纯 IR 源回退自绘横带(静态读谱态,手动拖)。
             Expanded(
               child: _strip != null
-                  ? FaithfulStripView(data: _strip, beat: _idleBeat)
+                  ? FaithfulStripView(data: _strip)
                   : ScoreStripView(
                       def: m.def,
                       tabChart: m.accompaniment,

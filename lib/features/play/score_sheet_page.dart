@@ -10,7 +10,12 @@ import '../../core/practice/score_sheet_layout.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
 import '../../core/ui/step_slider_control.dart';
-import 'faithful_score_view.dart' show FaithfulStripView, extractFaithfulStrip, FaithfulStripData;
+import 'faithful_score_view.dart'
+    show
+      FaithfulStripData,
+      FaithfulStripTimeline,
+      FaithfulStripView,
+      extractFaithfulStrip;
 import '../../data/chart_providers.dart';
 import 'faithful_score_view.dart';
 import '../../data/providers.dart';
@@ -157,7 +162,10 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
 
     final elapsedMs = (now - anchor.t0).inMicroseconds / 1000;
     final mainBeat = elapsedMs / anchor.periodMs;
-    faithfulBeat.value = mainBeat;
+    // 暂停冻结拍位(null → 横带停跟),恢复后下一轮询自动续上。
+    _stripTimeline.beat.value = ref.read(tabPracticeProvider).paused
+        ? null
+        : mainBeat;
     if (mainBeat >= timeline.totalBeats) {
       // 曲末:循环开→接下一遍;关→回闲。
       _controller.passEnd();
@@ -196,8 +204,11 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreSheetLayout? _layoutCache;
   double? _contentWidth;
 
-  /// 流水横带的当前拍位(运行中由 poll 推送,WebView 播放头消费)。
-  final ValueNotifier<double?> faithfulBeat = ValueNotifier<double?>(null);
+  /// 横带时间线(票07):页轮询推主轴拍位,视图用**原生 scrollTo**
+  /// 跟滚(不走 JS 桥——OEM WebView 高频 runJavaScript 会 jam 丢调用,
+  /// rAF 闲置节流,横带冻结;平台方法无此毛病)。自绘模式/空闲时无
+  /// 横带挂载,通知器无人听,置值是空转。
+  final FaithfulStripTimeline _stripTimeline = FaithfulStripTimeline();
 
   /// 横带/自绘切换(true = 自绘跟练全功能)。
   bool _useSelfDrawnBand = false;
@@ -263,7 +274,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
                       Expanded(
                         child: FaithfulStripView(
                           data: strip,
-                          beat: faithfulBeat,
+                          timeline: _stripTimeline,
                         ),
                       ),
                       PlayHintBar(frame: _hint),
@@ -304,7 +315,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           // 原样流水横带:单行小节序,缩放 0.45(视口 3-4 小节,可拖)。
           SizedBox(
             height: 150,
-            child: FaithfulStripView(data: strip, beat: faithfulBeat),
+            child: FaithfulStripView(data: strip),
           ),
           const SizedBox(height: 12),
           SegmentedButton<ScoreTrackMode>(

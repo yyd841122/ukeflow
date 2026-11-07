@@ -6,6 +6,7 @@ import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
 import 'package:ukeflow/core/chart/score_sheet_defs.dart';
 import 'package:ukeflow/core/practice/score_sheet_layout.dart';
+import 'package:ukeflow/features/play/play_hint_bar.dart';
 import 'package:ukeflow/features/play/score_sheet_page.dart';
 import 'package:ukeflow/features/play/score_sheet_view.dart';
 
@@ -269,6 +270,64 @@ void main() {
         isEmpty, reason: '节拍跟练无拨弦声');
     expect(ticks.where((e) => e.key == 'tick_strong'), isNotEmpty,
         reason: '曲头强拍已响');
+  });
+
+  testWidgets('核实(票07 反馈):提示条翻列时刻 == 该列发声时刻(同一时钟)', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    await tapStart(tester); // 示范试听(伴奏声)
+    await tester.pump();
+
+    // 跨过预备(78BPM 4 拍 ≈ 3077ms),逐步推进引擎,记录提示条当前列
+    // 翻列的引擎时刻;同时收集全曲拨弦预定时刻。
+    await advanceAndPump(tester, 3300);
+    final flips = <double, int>{}; // 列拍 → 翻列引擎时刻(ms)
+    var lastKey = -1.0;
+    for (var i = 0; i < 700; i++) {
+      engine.advance(const Duration(milliseconds: 25));
+      await tester.pump(const Duration(milliseconds: 16));
+      final bar = tester.widget<PlayHintBar>(
+        find.byKey(const Key('play-hint-bar')),
+      );
+      final f = bar.frame;
+      if (f == null || f.current.isEmpty) continue;
+      final key = f.current.first.beat;
+      if (key != lastKey) {
+        flips[key] = engine.engineTime().inMilliseconds;
+        lastKey = key;
+      }
+    }
+
+    // 发声侧:曲头锚 = start 后预备 4 拍;拍周期 = 60000/78 ≈ 769.2ms。
+    const period = 60000.0 / 78;
+    final head = 4 * period; // 曲头 = 预备 4 拍(start 在引擎 0 时刻)
+    final plucks = engine.scheduleLog
+        .where((e) => e.key.startsWith('pluck_'))
+        .map((e) => e.time.inMilliseconds)
+        .toList();
+
+    // 逐列断言:每列翻列时刻 == 该列最早拨弦预定时刻(±一个轮询步)。
+    final layout = ScoreSheetLayout(
+      def: def,
+      tabChart: solo,
+      melodyChart: melody,
+    );
+    final colBeats = layout.tabNotes.map((n) => n.beat).toSet().toList()
+      ..sort();
+    var checked = 0;
+    for (final b in colBeats) {
+      final flip = flips[b];
+      if (flip == null) continue; // 曲末截断的列不查
+      final expected = head + b * period;
+      expect(flip, closeTo(expected, 40), reason: '列 $b 翻列时刻');
+      final colPlucks = plucks
+          .where((t) => (t - expected).abs() < period * 0.5)
+          .toList();
+      expect(colPlucks, isNotEmpty, reason: '列 $b 有同时刻拨弦声');
+      checked++;
+    }
+    expect(checked, greaterThan(10), reason: '采样覆盖足够多列');
   });
 
   testWidgets('伴奏声示范起播:提示条照常在位(逐列推进与声源无关)', (tester) async {

@@ -96,8 +96,23 @@ void main() {
         lessThan(4),
         reason: '卷弦列四弦全响,不该有空白格',
       );
-      // 下一列预亮:同一弦格不会同时出现两个品数胶囊(当列实底+预亮描边
-      // 分列不同拍,这里只锁当列品数可见)。
+      // 不预亮(票07 用户实录移除):当列四弦全响 = 恰好 4 个品数胶囊。
+      final pills = tester.widgetList(
+        find.byWidgetPredicate(
+          (w) => w is Container && w.decoration is BoxDecoration,
+        ),
+      );
+      expect(pills, hasLength(4), reason: '卷弦列四弦各一格,无预亮格');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('曲头前引导帧:首列以实底示手型(不空白)', (tester) async {
+      final lead = playHintAt(layout, 3.9)!;
+      await pumpBar(tester, lead);
+      expect(find.textContaining('小节'), findsOneWidget);
+      // 首列音(E 卷弦 4 音)以实底可见(品数取自数据)。
+      expect(find.text('${lead.next.first.fret}'), findsWidgets,
+          reason: '首列音实底可见');
       expect(tester.takeException(), isNull);
     });
 

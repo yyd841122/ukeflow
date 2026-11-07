@@ -138,9 +138,9 @@ class _FakeController extends PlatformWebViewController {
   Future<void> scrollBy(int x, int y) async {}
 }
 
-/// JSON 便利:断言 wrapper 含横带内容(播放头脚本+SVG)。
+/// JSON 便利:断言 wrapper 含横带内容(横带元信息脚本+SVG)。
 bool containsStripContent(String html) =>
-    html.contains('updateBeat') && html.contains('<svg');
+    html.contains('var M=') && html.contains('<svg');
 
 class _FakeWidget extends PlatformWebViewWidget {
   _FakeWidget(super.params) : super.implementation();

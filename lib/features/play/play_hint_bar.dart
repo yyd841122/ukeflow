@@ -6,9 +6,10 @@ import '../../core/model/tab_chart.dart';
 import '../../core/practice/score_sheet_layout.dart';
 
 /// 弹奏提示条(票07,新手跟弹):运行中常驻,随播放从曲头到曲尾逐列
-/// 推进——当列该弹的弦/品点亮,下一列描边预亮;头部给当位和弦名、
-/// 小节拍位与扫弦/卷弦记号。数据面纯函数 [playHintAt](布局 + 主轴拍位
-/// → 提示帧),页面轮询在当位变化时算一帧喂进来。
+/// 推进——只显示当列该弹的弦/品(实底点亮,**不预亮下一列**,预亮
+/// 已被用户实录否掉);头部给当位和弦名、小节拍位与扫弦/卷弦记号。
+/// 数据面纯函数 [playHintAt](布局 + 主轴拍位→提示帧),页面轮询在
+/// 当位变化时算一帧喂进来。翻列时刻与发声时刻同一时钟(核实测试)。
 ///
 /// 提示只跟伴奏层(主轴):双轨混播的旋律轨是代唱(+20 拍偏移),不是
 /// 用户该弹的东西;扫弦逐弦错峰是毫秒级发声细节,提示按列拍整列亮。
@@ -163,8 +164,10 @@ class PlayHintBar extends StatelessWidget {
                   _stringCell(
                     theme,
                     string: string,
-                    current: _noteOn(f.current, string),
-                    next: _noteOn(f.next, string),
+                    note: _noteOn(
+                      f.current.isNotEmpty ? f.current : f.next,
+                      string,
+                    ),
                   ),
               ],
             ),
@@ -197,23 +200,22 @@ class PlayHintBar extends StatelessWidget {
     );
   }
 
-  /// 弦格:弦名 + 该弦当列品数(点亮大字)/ 下一列品数(描边预亮)/
-  /// 该弦两列都无音显示弱化的「—」。空弦品 0 照显(0 = 空弦拨响)。
+  /// 弦格:弦名 + 该弦当列品数(实底点亮)/ 该弦无音显示弱化的「—」。
+  /// 空弦品 0 照显(0 = 空弦拨响)。**不预亮下一列**(票07 用户实录:
+  /// 预亮让画面每列翻两次,新手读作「提示比音乐快」;当前列与发声
+  /// 同时刻,见核实测试)。曲头前引导帧(current 空)以实底示首列。
   Widget _stringCell(
     ThemeData theme, {
     required int string,
-    required TabNote? current,
-    required TabNote? next,
+    required TabNote? note,
   }) {
     final colors = theme.colorScheme;
     final label = Text(
       '$string弦',
       style: theme.textTheme.labelMedium?.copyWith(color: colors.outline),
     );
-    String fretTextOf(TabNote note) => '${note.fret}';
     Widget body;
-    if (current != null) {
-      // 当列:实底胶囊点亮。
+    if (note != null) {
       body = Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
         decoration: BoxDecoration(
@@ -223,25 +225,7 @@ class PlayHintBar extends StatelessWidget {
         child: DefaultTextStyle.merge(
           style: TextStyle(color: colors.onPrimaryContainer),
           child: Text(
-            fretTextOf(current),
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      );
-    } else if (next != null) {
-      // 下一列:描边预亮(小一号,弱色)。
-      body = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          border: Border.all(color: colors.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: DefaultTextStyle.merge(
-          style: TextStyle(color: colors.outline),
-          child: Text(
-            fretTextOf(next),
+            '${note.fret}',
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
