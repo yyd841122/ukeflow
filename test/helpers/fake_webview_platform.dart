@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
@@ -38,6 +40,12 @@ class _FakeNavigationDelegate extends PlatformNavigationDelegate {
 
   final List<String> navigationRequests = [];
 
+  /// 装载完成回调(真平台装载即发;fake 在 loadHtmlString 后触发,
+  /// 让依赖 onPageFinished 的状态(如装载遮罩退场)可 pumpAndSettle)。
+  void Function(String url)? _pageFinished;
+
+  void firePageFinished() => _pageFinished?.call('about:blank');
+
   @override
   Future<void> setOnNavigationRequest(
     void Function(NavigationRequest request) onNavigationRequest,
@@ -47,7 +55,9 @@ class _FakeNavigationDelegate extends PlatformNavigationDelegate {
   Future<void> setOnPageStarted(void Function(String url) onPageStarted) async {}
 
   @override
-  Future<void> setOnPageFinished(void Function(String url) onPageFinished) async {}
+  Future<void> setOnPageFinished(void Function(String url) onPageFinished) async {
+    _pageFinished = onPageFinished;
+  }
 
   @override
   Future<void> setOnUrlChange(void Function(UrlChange change) onUrlChange) async {}
@@ -63,9 +73,21 @@ class _FakeController extends PlatformWebViewController {
 
   final List<String> javaScriptRuns = [];
 
+  _FakeNavigationDelegate? _delegate;
+
+  @override
+  Future<void> setPlatformNavigationDelegate(
+    PlatformNavigationDelegate delegate,
+  ) async {
+    _delegate = delegate as _FakeNavigationDelegate?;
+  }
+
   @override
   Future<void> loadHtmlString(String html, {String? baseUrl}) async {
     onLoadHtmlString(html);
+    // 真平台装载完成即回 onPageFinished(微任务级,测试可 settle)。
+    final delegate = _delegate;
+    if (delegate != null) scheduleMicrotask(delegate.firePageFinished);
   }
 
   @override
@@ -78,11 +100,6 @@ class _FakeController extends PlatformWebViewController {
 
   // 基类经由 setPlatformNavigationDelegate 派发;此成员非继承面。
   Future<void> setNavigationDelegate(
-    PlatformNavigationDelegate delegate,
-  ) async {}
-
-  @override
-  Future<void> setPlatformNavigationDelegate(
     PlatformNavigationDelegate delegate,
   ) async {}
 

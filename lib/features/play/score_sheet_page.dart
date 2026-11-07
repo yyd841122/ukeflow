@@ -210,6 +210,19 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   /// 横带挂载,通知器无人听,置值是空转。
   final FaithfulStripTimeline _stripTimeline = FaithfulStripTimeline();
 
+  /// 横带单实例复用(票07 用户实录):OEM WebView 装载 3MB 横带页要
+  /// 10s+,而空闲面板与运行面板是两个树槽——不复用的话开示范要**从零
+  /// 重装一遍**,前几个音出来时横带还是白板。GlobalKey 重挂保 State/
+  /// WebView 存活,页面只装一次,空闲读谱态直接衔接运行态。
+  final GlobalKey _stripKey = GlobalKey();
+
+  /// 横带构件(每次 build 重建配置,同一 key/state 重挂不重载)。
+  Widget _stripChild(FaithfulStripData strip) => FaithfulStripView(
+    key: _stripKey,
+    data: strip,
+    timeline: _stripTimeline,
+  );
+
   /// 横带/自绘切换(true = 自绘跟练全功能)。
   bool _useSelfDrawnBand = false;
 
@@ -271,12 +284,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
             ? (useFaithfulStrip
                 ? Column(
                     children: [
-                      Expanded(
-                        child: FaithfulStripView(
-                          data: strip,
-                          timeline: _stripTimeline,
-                        ),
-                      ),
+                      Expanded(child: _stripChild(strip)),
                       PlayHintBar(frame: _hint),
                       _controls(state),
                     ],
@@ -313,10 +321,7 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
           ),
           const SizedBox(height: 16),
           // 原样流水横带:单行小节序,缩放 0.45(视口 3-4 小节,可拖)。
-          SizedBox(
-            height: 150,
-            child: FaithfulStripView(data: strip),
-          ),
+          SizedBox(height: 150, child: _stripChild(strip)),
           const SizedBox(height: 12),
           SegmentedButton<ScoreTrackMode>(
             segments: const [

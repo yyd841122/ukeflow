@@ -210,6 +210,7 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
   late final WebViewController _controller;
   double? _viewWidth;
   var _jsReady = false;
+  var _pageReady = false;
   Timer? _jsArmFallback;
 
   @override
@@ -222,7 +223,9 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
         '<body style="margin:0;background:#fff">'
         '<div style="position:relative">${data.stripSvg}</div>'
         // 尾部余量由 JS 设(视口 2/3):曲末最后一段内容也能滚过播放头
-        // 线,不提前钳停(票07 用户实录);仅装载期一发,自愈见 _armJs。
+        // 线,不提前钳停。仅装载期一发;**不动内容位置**——左移类几何
+        // 不能用 innerWidth 算(票07 机型实录:OEM 报值不可信,曾把内容
+        // 整体推出屏外成白板)。
         '<script>var M=${data.metaJson};'
         'function arm(){document.body.style.minWidth='
         '(M.width+window.innerWidth*0.67)+"px";}'
@@ -233,17 +236,38 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) => NavigationDecision.prevent,
-          onPageFinished: (_) => _armJs(),
+          onPageFinished: (_) => _loaded(),
         ),
       )
-      ..loadHtmlString(wrapper).then((_) => _armJs());
-    // 兜底:OEM WebView 偶发 onPageFinished 迟到;missed 时尾部余量
-    // 缺失(读谱不受影响),arm 后不重试 JS——原生滚动不依赖 JS。
-    _jsArmFallback = Timer(const Duration(milliseconds: 1500), _armJs);
+      ..loadHtmlString(wrapper).then((_) => _loaded());
+    // 兜底双保险(票07 机型实录):OEM WebView 的 onPageFinished 偶发
+    // 迟到/丢失(setNavigationDelegate 异步挂载也可能赶不上首装),
+    // 装载 future 与 1.5s 定时器同样置就绪——遮罩退场、尾部余量不依赖
+    // 单一回调;原生滚动本身不依赖 JS。
+    _jsArmFallback = Timer(const Duration(milliseconds: 1500), _loaded);
     widget.timeline?.beat.addListener(_onBeat);
   }
 
-  /// 开闸(幂等;onPageFinished/装载 future/兜底定时器三方竞争)。
+  @override
+  void didUpdateWidget(covariant FaithfulStripView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 复用实例(GlobalKey 重挂)时 timeline 可能换绑:重接监听。
+    if (!identical(oldWidget.timeline, widget.timeline)) {
+      oldWidget.timeline?.beat.removeListener(_onBeat);
+      widget.timeline?.beat.addListener(_onBeat);
+    }
+  }
+
+  /// 装载就绪(幂等;onPageFinished/装载 future/兜底定时器三方竞争):
+  /// 遮罩退场 + 开闸(尾部余量脚本一发;原生滚动不依赖 JS)。
+  void _loaded() {
+    if (!mounted) return;
+    _armJs();
+    if (!_pageReady) {
+      setState(() => _pageReady = true); // 遮罩退场(触发重绘)
+    }
+  }
+
   void _armJs() {
     if (!mounted || _jsReady) return;
     _jsReady = true;
@@ -260,15 +284,18 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
 
   void _onBeat() {
     final beat = widget.timeline?.beat.value;
-    if (beat == null || _viewWidth == null || widget.data.bars.isEmpty) {
+    final width = _viewWidth;
+    if (beat == null || width == null || widget.data.bars.isEmpty) {
       return;
     }
-    final x = _beatX(beat) - _viewWidth! * viewportAnchor;
-    _controller.scrollTo(x.floor(), 0);
+    // 播放头恒在视口 1/3:滚动目标 = 弹奏位置 − 锚点(负值钳 0——曲头
+    // 前几拍谱面还在带首,已在屏上的内容不动,弹奏点从带首滑向线)。
+    final x = (_beatX(beat) - width * viewportAnchor).floor();
+    _controller.scrollTo(x < 0 ? 0 : x, 0);
   }
 
   /// 主轴拍位 → 横带内容 x(css px):小节序线性 + 小节内按拍线性
-  /// (与页面 JS 版 beatX 同式;弱起小节印张按 4 拍铺满,同一插值)。
+  /// (弱起小节印张按 4 拍铺满,同一插值)。
   double _beatX(double beat) {
     final bars = widget.data.bars;
     var i = (beat / 4).floor();
@@ -288,6 +315,19 @@ class _FaithfulStripViewState extends State<FaithfulStripView> {
         return Stack(
           children: [
             WebViewWidget(controller: _controller),
+            if (!_pageReady)
+            // 装载期遮罩(票07 机型实录:OEM WebView 装 3MB 横带页
+            // 要 10s+,期间白板像「没渲染」;明示装载中不误导新手)。
+            const ColoredBox(
+              color: Colors.white,
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+              ),
+            ),
             Positioned(
               left: constraints.maxWidth * viewportAnchor,
               top: 0,

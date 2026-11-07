@@ -77,3 +77,22 @@
 
 flutter 1004 / pytest 257 全绿;真机三检查点 + 尾部余量(空闲拖到曲末
 有 2/3 屏空白)+ logcat E/flutter=0。
+
+### 2026-11-07 用户反馈三:「第 1 个声音出来,时间线还没到弹奏点」——白板装载窗
+
+- **真因(日志实证)**:空闲面板与运行面板是两个树槽、两个独立
+  WebView——开示范要从零重装 3MB 横带页(本机 onPageFinished 距装载
+  发起 3.4s,期间的画面是白板);用户快速起播,前几个音弹在白板上,
+  读作「时间线还没到弹奏点」。此前一轮「左余量」是我的误诊(曲头前
+  2 拍钳 0 期间本曲全是休止,无声;且 OEM innerWidth 报值不可信,
+  padding 一上内容被推出屏外,全白)——已回退。
+- **修复**:横带视图 GlobalKey 单实例复用(空闲读谱 → 开示范,同一
+  WebView/State 重挂不重载,页面只装一次);装载期遮罩显式转圈(不再
+  白板误导);onPageFinished/装载 future/1.5s 定时器三路就绪(真机
+  实测 delegate 异步挂载会赶不上首装载回调,单路不可靠)。
+- 驱动保持原生 scrollTo + Dart 锚点(beatX − 视口/3,负值钳 0);
+  真机全链:装载转圈 → 内容浮现 → 第一个音(弱起拍 3)按拍流到线上
+  → 第 3/6/13 小节三检查点线位=弹奏位 → 停止回闲。logcat 干净。
+- flutter 1004 / pytest 257 全绿。附:fake 平台补 onPageFinished 模拟
+  (装载遮罩在测试可 settle);test helper containsStripContent 断言随
+  wrapper 更新。
