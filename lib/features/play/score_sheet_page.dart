@@ -90,6 +90,9 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   void initState() {
     super.initState();
     _controller = ref.read(tabPracticeProvider.notifier);
+    // 横带时间缝(票08):引擎时钟与锚原样递给视图,ticker 逐帧驱动
+    // 滚动/染色(ADR-0005:唯一时间源仍是引擎时钟)。
+    _stripTimeline.clock = _controller.visualNow;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _controller.prepareFor(_chartFor(_trackMode));
@@ -158,14 +161,14 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
     final now = _controller.visualNow();
     if (timeline == null || anchor == null || now == null) return;
 
+    // 横带锚(票08):预备期即推(负拍期曲头 0 已落在线上等待);视图
+    // ticker 按引擎时钟逐帧驱动滚动/染色,轮询只递锚,不再逐拍推位。
+    // 暂停 = 引擎时钟冻结(visualNow 停走),恢复重锚后自然续上。
+    _stripTimeline.anchor.value = anchor;
     if (advancePrep(_controller.prepStateNow()?.count)) return;
 
     final elapsedMs = (now - anchor.t0).inMicroseconds / 1000;
     final mainBeat = elapsedMs / anchor.periodMs;
-    // 暂停冻结拍位(null → 横带停跟),恢复后下一轮询自动续上。
-    _stripTimeline.beat.value = ref.read(tabPracticeProvider).paused
-        ? null
-        : mainBeat;
     if (mainBeat >= timeline.totalBeats) {
       // 曲末:循环开→接下一遍;关→回闲。
       _controller.passEnd();
@@ -204,10 +207,10 @@ class _ScoreSheetPageState extends PracticeSessionState<ScoreSheetPage> {
   ScoreSheetLayout? _layoutCache;
   double? _contentWidth;
 
-  /// 横带时间线(票07):页轮询推主轴拍位,视图用**原生 scrollTo**
-  /// 跟滚(不走 JS 桥——OEM WebView 高频 runJavaScript 会 jam 丢调用,
-  /// rAF 闲置节流,横带冻结;平台方法无此毛病)。自绘模式/空闲时无
-  /// 横带挂载,通知器无人听,置值是空转。
+  /// 横带时间线(票08):轮询递会话锚,视图内置 ticker 按引擎时钟
+  /// 逐帧驱动原生 scrollTo 与染色(不走 JS 桥高频——OEM WebView 会
+  /// jam 丢调用;染色指令只按列变化率 ~0.375s 单发,幂等自愈)。
+  /// 自绘模式/空闲时无横带挂载,置值是空转。
   final FaithfulStripTimeline _stripTimeline = FaithfulStripTimeline();
 
   /// 横带单实例复用(票07 用户实录):OEM WebView 装载 3MB 横带页要

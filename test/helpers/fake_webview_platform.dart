@@ -10,13 +10,23 @@ class FakeWebViewPlatform extends WebViewPlatform {
   /// 各实例按创建序收到的 loadHtmlString 入参(测试断言用)。
   final List<String> loadedHtml = [];
 
+  /// 按创建序的控制器实例(JS 调用/原生滚动记录在实例上,取 last)。
+  final List<FakeWebViewController> controllers = [];
+
+  /// 最新实例的 JS 调用记录(单实例场景即全部;票08 染色断言用)。
+  List<String> get javaScriptRuns => controllers.last.javaScriptRuns;
+
+  /// 最新实例的原生 scrollTo 记录(单实例场景即全部;票08 滚动断言用)。
+  List<String> get scrollCalls => controllers.last.scrollCalls;
+
   @override
   PlatformWebViewController createPlatformWebViewController(
     PlatformWebViewControllerCreationParams params,
   ) {
-    final controller = _FakeController(params);
+    final controller = FakeWebViewController(params);
     loadedHtml.clear();
     controller.onLoadHtmlString = loadedHtml.add;
+    controllers.add(controller);
     return controller;
   }
 
@@ -66,12 +76,16 @@ class _FakeNavigationDelegate extends PlatformNavigationDelegate {
   Future<void> setOnProgress(void Function(int progress) onProgress) async {}
 }
 
-class _FakeController extends PlatformWebViewController {
-  _FakeController(super.params) : super.implementation();
+/// 控制器桩:记录 runJavaScript 与 scrollTo 入参供断言。
+class FakeWebViewController extends PlatformWebViewController {
+  FakeWebViewController(super.params) : super.implementation();
 
   late final void Function(String html) onLoadHtmlString;
 
   final List<String> javaScriptRuns = [];
+
+  /// 原生 scrollTo 调用记录("x,y"),票08 滚动驱动断言用。
+  final List<String> scrollCalls = [];
 
   _FakeNavigationDelegate? _delegate;
 
@@ -149,7 +163,9 @@ class _FakeController extends PlatformWebViewController {
   Future<String?> currentUrl() async => null;
 
   @override
-  Future<void> scrollTo(int x, int y) async {}
+  Future<void> scrollTo(int x, int y) async {
+    scrollCalls.add('$x,$y');
+  }
 
   @override
   Future<void> scrollBy(int x, int y) async {}
