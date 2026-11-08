@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -106,23 +107,56 @@ void main() {
   });
 
   group('画面位置对照表(几何闸)', () {
-    test('事件锚点恰在「小节线 + 留白 + 时间×像素」处,曲末锚点=终止线',
-        () {
+    test('事件锚点恰在小节线+留白+小节内时间×斜率处,曲末锚点=终止线', () {
       final raw =
           File('assets/scores/sky-city-guistudy.json').readAsStringSync();
       final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
-      const pps = 100.0;
-      const leftGutter = 32.0;
-      final layout = FlowingLayout.fromScore(score, pixelsPerSecond: pps);
+      final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 100);
       for (final event in score.events) {
         final m = score.measures[event.measureIndex];
         final expected = layout.measureLeftX[event.measureIndex] +
-            leftGutter +
-            (event.startSeconds - m.startSeconds) * pps;
+            32.0 +
+            (event.startSeconds - m.startSeconds) *
+                layout.slopeOf(event.measureIndex);
         expect(layout.positionAt(event.startSeconds), closeTo(expected, 1e-9),
             reason: '事件 ${event.id} 锚点漂移');
       }
       expect(layout.positionAt(score.durationSeconds), layout.endX);
+    });
+
+    test('逐小节测宽:八分连排小节斜率抬到密度地板,稀疏小节保持基准', () {
+      final raw =
+          File('assets/scores/sky-city-guistudy.json').readAsStringSync();
+      final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
+      final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 52);
+      // 全曲最紧间隔 = 480 tick(相邻八分音):密度地板 = 24px/480tick
+      // ×1280tick/s = 64px/s;基准 = 52px/s。
+      var hasDense = false;
+      // ignore: unused_local_variable
+      var hasSparse = false;
+      for (final m in score.measures) {
+        final evs = score.events
+            .where((e) => e.measureIndex == m.index)
+            .map((e) => e.startTick)
+            .toList();
+        if (evs.length < 2) continue;
+        var gapMin = 1 << 30;
+        for (var i = 1; i < evs.length; i++) {
+          gapMin = math.min(gapMin, evs[i] - evs[i - 1]);
+        }
+        if (gapMin <= 480) {
+          // 密度地板斜率 = minGapPx/gapMin × 16×tempo(拍速逐小节,末段 82)。
+          final expectedSlope = 24 / gapMin * 16 * m.tempo;
+          expect(layout.slopeOf(m.index), closeTo(expectedSlope, 1e-6),
+              reason: '小节 ${m.index + 1} 密(最紧 $gapMin tick)');
+          hasDense = true;
+        } else if (gapMin >= 960) {
+          expect(layout.slopeOf(m.index), closeTo(52, 1e-6),
+              reason: '小节 ${m.index + 1} 疏(最紧 $gapMin tick)');
+          hasSparse = true;
+        }
+      }
+      expect(hasDense, isTrue, reason: '真谱应存在八分连排小节');
     });
 
     test('连续性:锚点时间严格递增(禁同刻不同位);任意采样无跳变,单步不超最陡段斜率',
@@ -197,7 +231,7 @@ void main() {
             brushType: 0,
             durationValue: 4,
             dots: 0,
-            startTick: 0,
+            startTick: (start * 1280).round(),
           );
       final score = ReferenceScore(
         title: '跨界测试',
@@ -226,7 +260,7 @@ void main() {
         durationSeconds: 6,
       );
       final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 100);
-      // 2.25→3.0s 间相机穿过 56px 留白:斜率恒定 = 100 + 56/0.75 ≈ 174.7。
+      // 2.25→3.0s 间相机穿过 56px 留白:期望斜率由布局两端位置推出。
       const h = 0.0005;
       var previous = layout.positionAt(2.25);
       var maxStep = 0.0;
@@ -236,9 +270,10 @@ void main() {
         if (step > maxStep) maxStep = step;
         previous = x;
       }
+      final crossingSlope =
+          (layout.positionAt(3.0) - layout.positionAt(2.25)) / 0.75;
       // 单步上限 = 斜率×h;旧方案在同刻锚点处一步瞬移 56px,必红。
-      const expectedSlope = 100 + 56 / 0.75;
-      expect(maxStep, lessThan(expectedSlope * h + 1e-6),
+      expect(maxStep, lessThan(crossingSlope * h + 1e-6),
           reason: '跨界出现瞬移:单步 $maxStep');
     });
 

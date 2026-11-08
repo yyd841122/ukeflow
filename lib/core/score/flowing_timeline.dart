@@ -13,6 +13,7 @@ class FlowingLayout {
   FlowingLayout._(
     this.pixelsPerSecond,
     this.measureLeftX,
+    this._slopes,
     this.endX,
     this._anchorTimes,
     this._anchorXs,
@@ -20,23 +21,44 @@ class FlowingLayout {
 
   /// 从练习时间表构建。锚点 = **每个事件起点 + 曲末**(codex 忠实方案,
   /// 2026-11-08 真机教训:不得插入小节末锚点——正拍首音与小节末锚点
-  /// 同刻不同位,画面每小节头瞬移一截)。事件 x = 小节线 + 左留白 +
-  /// 小节内时间×像素;曲末锚点 x = 末小节右缘(含右留白)。相邻锚点间
-  /// 线性内插,跨小节留白段相机加速穿过(连续、无跳变;留白只改画面
-  /// 不改声音,与移植源同一取舍)。
+  /// 同刻不同位,画面每小节头瞬移一截)。
+  ///
+  /// **逐小节测宽**(2026-11-08 用户对谱定案):小节宽度由本小节音符
+  /// 密度决定,不再等宽——本小节最紧的相邻音符间距必须 ≥ [minGapPx]
+  /// (八分音连排的小节自动加宽;否则 16px 数字 + 左伸 12px 的琶音
+  /// 波浪会压上前一个音)。小节内仍按时间线性(拍距均匀,与原谱一致),
+  /// 跨小节留白段相机连续穿过(留白只改画面不改声音)。
   factory FlowingLayout.fromScore(
     ReferenceScore score, {
     required double pixelsPerSecond,
     double leftGutter = 32,
     double rightGutter = 24,
+    double minGapPx = 24,
   }) {
     if (!(pixelsPerSecond > 0)) {
       throw ArgumentError.value(pixelsPerSecond, 'pixelsPerSecond', '必须为正');
     }
     final measureLeftX = List<double>.filled(score.measures.length, 0);
+    final slopes = List<double>.filled(score.measures.length, 0);
+    // 本小节内事件按 tick 升序的相邻间隔(和弦同刻是一个事件,不产生 0 间隔)。
+    final ticksByMeasure = <int, List<int>>{};
+    for (final e in score.events) {
+      ticksByMeasure.putIfAbsent(e.measureIndex, () => []).add(e.startTick);
+    }
+    var cursor = 0.0;
     for (final m in score.measures) {
-      measureLeftX[m.index] =
-          m.startSeconds * pixelsPerSecond + m.index * (leftGutter + rightGutter);
+      // 基准斜率 = pixelsPerSecond;密度地板 = 最紧间隔不得窄于 minGapPx。
+      final ticksPerSecond = 16.0 * m.tempo; // 960 tick/拍 × bpm/60
+      var pxPerTick = pixelsPerSecond / ticksPerSecond;
+      final ticks = ticksByMeasure[m.index] ?? const [];
+      for (var i = 1; i < ticks.length; i++) {
+        final gap = ticks[i] - ticks[i - 1];
+        if (gap > 0) pxPerTick = math.max(pxPerTick, minGapPx / gap);
+      }
+      slopes[m.index] = pxPerTick * ticksPerSecond;
+      measureLeftX[m.index] = cursor;
+      final contentTicks = m.numerator * 3840 / m.denominator;
+      cursor += leftGutter + contentTicks * pxPerTick + rightGutter;
     }
     final last = score.measures.last;
     final anchorTimes = <double>[];
@@ -46,30 +68,37 @@ class FlowingLayout {
       anchorTimes.add(e.startSeconds);
       anchorXs.add(measureLeftX[e.measureIndex] +
           leftGutter +
-          (e.startSeconds - m.startSeconds) * pixelsPerSecond);
+          (e.startSeconds - m.startSeconds) * slopes[e.measureIndex]);
     }
-    // 曲末锚点:时间 = 曲长,位置 = 末小节右缘(小节线+左留白+时长×像素
-    // +右留白)。事件按 startSeconds 升序(转换器保证),曲长 > 末事件起点,
-    // 锚点时间严格递增,positionAt 处处连续。
+    // 曲末锚点:时间 = 曲长,位置 = 末小节右缘(小节线+左留白+内容+右留
+    // 白)。事件按 startSeconds 升序(转换器保证),曲长 > 末事件起点,锚点
+    // 时间严格递增,positionAt 处处连续。
     anchorTimes.add(score.durationSeconds);
     anchorXs.add(measureLeftX[last.index] +
         leftGutter +
-        last.durationSeconds * pixelsPerSecond +
+        last.durationSeconds * slopes[last.index] +
         rightGutter);
     return FlowingLayout._(
       pixelsPerSecond,
       measureLeftX,
+      slopes,
       anchorXs.last,
       anchorTimes,
       anchorXs,
     );
   }
 
-  /// 每音乐秒的像素数。
+  /// 每音乐秒的像素数(基准值;实际斜率逐小节见 [slopeOf])。
   final double pixelsPerSecond;
 
   /// 各小节小节线(左缘)的绝对 x。
   final List<double> measureLeftX;
+
+  /// 各小节内的实际像素斜率(px/秒;密度地板会抬高低密基准)。
+  final List<double> _slopes;
+
+  /// 小节内的像素斜率(px/秒),画谱与测试共用单一来源。
+  double slopeOf(int measureIndex) => _slopes[measureIndex];
 
   /// 曲末(终止线)绝对 x。
   final double endX;

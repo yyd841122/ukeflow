@@ -634,7 +634,9 @@ class _FlowingPainter extends CustomPainter {
         3;
     final bottom = _rows.reduce((a, b) => b > a ? b : a) + 3;
     final hasHarmonic = event.notes.any((n) => n.isNaturalHarmonic);
-    final bx = x - (hasHarmonic ? 32.0 : 17.0);
+    // 波浪左伸 12(泛音 24):逐小节测宽后八分间距 24px,17px 左伸会压上
+    // 前一个音的数字(2026-11-08 用户实录「与前一个音符重合」)。
+    final bx = x - (hasHarmonic ? 24.0 : 12.0);
     final tip = mark.up ? top : bottom;
     final step = mark.up ? 6.0 : -6.0;
     final path = Path()..moveTo(bx, top);
