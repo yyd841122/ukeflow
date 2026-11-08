@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../play/flowing_score_page.dart';
 import '../rhythm/metronome_page.dart';
 import '../rhythm/rhythm_trainer_page.dart';
 import 'image_pick_flow.dart';
@@ -52,6 +53,21 @@ class LibraryPage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 24),
+        // 一手数据流水谱 MVP 入口(《天空之城》声画同步试验,工单外
+        // 临时卡;跑通后并入正式曲库结构)。
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.graphic_eq),
+            title: const Text('天空之城 · 流水谱'),
+            subtitle: const Text('一手数据试验 · 固定红线跟滚 + 示范声'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const FlowingScorePage(),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 24),
         for (final category in LibraryCategory.values)
