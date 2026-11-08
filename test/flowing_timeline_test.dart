@@ -32,10 +32,11 @@ void main() {
                 sourceString: 4,
               ),
           ],
-          chordName: null,
+          chord: null,
           brushType: 0,
           durationValue: 8,
           dots: 0,
+          startTick: 0,
         );
     return ReferenceScore(
       title: '测试谱',
@@ -191,10 +192,11 @@ void main() {
                   sourceString: 4,
                 ),
             ],
-            chordName: null,
+            chord: null,
             brushType: 0,
             durationValue: 4,
             dots: 0,
+            startTick: 0,
           );
       final score = ReferenceScore(
         title: '跨界测试',

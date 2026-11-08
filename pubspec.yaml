@@ -56,3 +56,9 @@ flutter:
     - assets/charts/
     - assets/image_charts/
     - assets/scores/sky-city-guistudy.json
+    - assets/fonts/Bravura-OFL.txt
+
+  fonts:
+    - family: Bravura
+      fonts:
+        - asset: assets/fonts/Bravura.otf

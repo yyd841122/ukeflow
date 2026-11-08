@@ -39,10 +39,11 @@ void main() {
           startSeconds: start,
           durationSeconds: dur,
           notes: notes,
-          chordName: null,
+          chord: null,
           brushType: 0,
           durationValue: 8,
           dots: 0,
+          startTick: 0,
         );
     return ReferenceScore(
       title: '调度测试谱',

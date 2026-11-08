@@ -89,6 +89,28 @@ class RefNote {
   final int sourceString;
 }
 
+/// 和弦(按法图数据,GLOSSARY「和弦」的一手数据形态)。
+class RefChord {
+  const RefChord({
+    required this.name,
+    required this.firstFret,
+    required this.strings,
+    required this.showName,
+    required this.showDiagram,
+  });
+
+  final String name;
+
+  /// 按法图左端品位数(firstFret=1 即第一品)。
+  final int firstFret;
+
+  /// DTO 弦序(下标 0 = DTO string 1 = 界面第 1 弦)的品位值,0 = 空弦,
+  /// -1 = 不弹。
+  final List<int> strings;
+  final bool showName;
+  final bool showDiagram;
+}
+
 /// 一个节拍事件：同一时刻要弹/停的一组音（或休止）。
 class RefEvent {
   const RefEvent({
@@ -98,10 +120,11 @@ class RefEvent {
     required this.startSeconds,
     required this.durationSeconds,
     required this.notes,
-    required this.chordName,
+    required this.chord,
     required this.brushType,
     required this.durationValue,
     required this.dots,
+    required this.startTick,
   });
 
   final int id;
@@ -113,8 +136,11 @@ class RefEvent {
   final double durationSeconds;
   final List<RefNote> notes;
 
-  /// 和弦名（如 Dm），无和弦标记为 null。
-  final String? chordName;
+  /// 和弦按法图(无和弦标记为 null)。
+  final RefChord? chord;
+
+  /// 和弦名 convenience(画谱标题行用)。
+  String? get chordName => chord?.name;
 
   /// DTO brushType：0 无；1/2 扫弦（下/上）；3/4 琶音（上/下）。
   final int brushType;
@@ -122,6 +148,9 @@ class RefEvent {
   /// DTO 时值分母（4=四分、8=八分…），画谱/休止符形用。
   final int durationValue;
   final int dots;
+
+  /// DTO 播放起点 tick(=displayStart,守门已断言一致);符杠按拍分组用。
+  final int startTick;
 
   bool get isRest => notes.isEmpty;
 }
@@ -406,7 +435,19 @@ RefEvent _buildEvent(
     ));
   }
   final chordId = beat['chordId'];
-  final chord = chordId is String ? chords[chordId] : null;
+  final chordRaw = chordId is String ? chords[chordId] : null;
+  final chord = chordRaw is Map
+      ? RefChord(
+          name: chordRaw['name'] is String ? chordRaw['name'] as String : '',
+          firstFret: _asInt(chordRaw['firstFret'], '曲谱数据格式无效'),
+          strings: [
+            for (final s in _list(chordRaw, 'strings', '曲谱数据格式无效'))
+              _asInt(s, '曲谱数据格式无效'),
+          ],
+          showName: chordRaw['showName'] != false,
+          showDiagram: chordRaw['showDiagram'] != false,
+        )
+      : null;
   return RefEvent(
     id: _asInt(beat['id'], '曲谱数据格式无效'),
     measureIndex: measureIndex,
@@ -414,10 +455,11 @@ RefEvent _buildEvent(
     startSeconds: measureStart + offset * 60 / tempo,
     durationSeconds: length * 60 / tempo,
     notes: notes,
-    chordName: chord is Map && chord['name'] is String ? chord['name'] as String : null,
+    chord: chord,
     brushType: brushType,
     durationValue: duration,
     dots: dots,
+    startTick: _asInt(beat['playbackStart'], '曲谱数据格式无效'),
   );
 }
 

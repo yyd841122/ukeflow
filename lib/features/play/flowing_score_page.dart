@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/score/flowing_engraving.dart';
 import '../../core/score/flowing_timeline.dart';
 import '../../core/score/reference_score.dart';
 import 'flowing/flowing_practice_controller.dart';
@@ -43,6 +44,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   FlowingLayout? _layout;
   double _layoutWidth = 0;
   _ScoreIndex? _index;
+  EngravingPlan? _plan;
 
   @override
   void dispose() {
@@ -63,14 +65,18 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   }
 
   TextPainter _textPainter(String text, Color color, double fontSize,
-      {FontWeight weight = FontWeight.w500}) {
-    final key = '$text|$color|$fontSize|$weight';
+      {FontWeight weight = FontWeight.w500, String? family}) {
+    final key = '$text|$color|$fontSize|$weight|$family';
     final cached = _textCache[key];
     if (cached != null) return cached;
     final painter = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(color: color, fontSize: fontSize, fontWeight: weight),
+        style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontWeight: weight,
+            fontFamily: family),
       ),
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
@@ -86,6 +92,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     _layoutWidth = width;
     _layout = FlowingLayout.fromScore(score, pixelsPerSecond: pps);
     _index = _ScoreIndex(score);
+    _plan = buildEngravingPlan(score);
     _textCache.clear();
   }
 
@@ -127,6 +134,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
                             score: score,
                             layout: layout,
                             index: index,
+                            plan: _plan!,
                             frame: frame,
                             cursorX: _cursorX(width),
                             width: width,
@@ -192,13 +200,23 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
                     icon: const Icon(Icons.replay),
                     tooltip: '从头',
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_format(seconds)} / ${_format(score.durationSeconds)}',
-                    style: const TextStyle(color: _glyph),
+                  const SizedBox(width: 12),
+                  // 时间与小节信息上下两行自适应(竖屏一行放不下会溢出,
+                  // 真机 2026-11-08 实录 RIGHT OVERFLOWED BY 16 PIXELS)。
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${_format(seconds)} / ${_format(score.durationSeconds)}',
+                          style: const TextStyle(color: _glyph),
+                        ),
+                        const SizedBox(height: 2),
+                        _measureInfo(score, seconds),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
-                  _measureInfo(score, seconds),
                 ],
               ),
             if (score != null && state.status != FlowingStatus.loading)
@@ -297,6 +315,7 @@ class _FlowingPainter extends CustomPainter {
     required this.score,
     required this.layout,
     required this.index,
+    required this.plan,
     required this.frame,
     required this.cursorX,
     required this.width,
@@ -306,10 +325,12 @@ class _FlowingPainter extends CustomPainter {
   final ReferenceScore score;
   final FlowingLayout layout;
   final _ScoreIndex index;
+  final EngravingPlan plan;
   final FlowingFrame frame;
   final double cursorX;
   final double width;
-  final TextPainter Function(String, Color, double, {FontWeight weight}) textPainter;
+  final TextPainter Function(String, Color, double,
+      {FontWeight weight, String? family}) textPainter;
 
   static const List<double> _rows = [124, 149, 174, 199];
   static const Color _highlightRed = Color(0xFFC8616D);
@@ -346,6 +367,7 @@ class _FlowingPainter extends CustomPainter {
 
     _paintMeasures(canvas, windowLeft, windowRight, startT, endT);
     _paintEvents(canvas, startT, endT, windowLeft, windowRight);
+    _paintBeams(canvas, windowLeft, windowRight);
     _paintTimeTicks(canvas, startT, endT);
     _paintEndBar(canvas, windowRight);
     canvas.restore();
@@ -395,19 +417,61 @@ class _FlowingPainter extends CustomPainter {
     }
   }
 
+  /// 符杠底 y 与每层间距(与移植源同款几何)。
+  static const double _stemBottomY = 241;
+  static const double _beamLevelGap = 7;
+
   void _paintEvent(Canvas canvas, RefEvent event, double x, bool isActive) {
-    if (event.chordName != null) {
-      textPainter(event.chordName!, _glyph, 13, weight: FontWeight.w600)
-          .paint(canvas, Offset(x + 4 - _textWidth(event.chordName!, 13) / 2, 28));
-    }
+    _paintChordDiagram(canvas, event, x);
     if (event.isRest) {
-      // 休止暂用短横占位(符形后补);到点同样变色。
-      final paint = Paint()
-        ..color = isActive ? _highlightRed : _mutedGlyph
-        ..strokeWidth = 3;
-      canvas.drawLine(Offset(x - 7, 170), Offset(x + 7, 170), paint);
+      // 真休止符形(Bravura 码点,flowing_engraving 单一来源);到点变色。
+      final glyph = plan.rhythmOf(event.id)?.restCodePoint ?? 0xE4E5;
+      final tp = textPainter(String.fromCharCode(glyph),
+          isActive ? _highlightRed : _mutedGlyph, 30, family: 'Bravura');
+      tp.paint(canvas, Offset(x - tp.width / 2, 170 - tp.height * 0.78));
       return;
     }
+    // 符干:全部带音事件向下延伸(延音和弦隐藏数字但仍保留符干——原谱画法)。
+    final stemTop = _rows
+            .sublist(0, 4)
+            .reduce((a, b) => b > a ? b : a) +
+        13;
+    canvas.drawLine(
+      Offset(x, stemTop),
+      Offset(x, _stemBottomY),
+      Paint()
+        ..color = _mutedGlyph
+        ..strokeWidth = 1.1,
+    );
+    // 独立符尾(未入杠的音才有)+ 附点。
+    final beamed = plan.beams.any((pair) => pair.$1 == event.id || pair.$2 == event.id);
+    final rhythm = plan.rhythmOf(event.id);
+    final flags = rhythm?.flags ?? 0;
+    if (!beamed) {
+      for (var f = 0; f < flags; f++) {
+        final path = Path()
+          ..moveTo(x, _stemBottomY - f * _beamLevelGap)
+          ..quadraticBezierTo(x + 12, _stemBottomY - f * _beamLevelGap - 2,
+              x + 13, _stemBottomY - f * _beamLevelGap - 14);
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = _mutedGlyph
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+      }
+    }
+    final dots = rhythm?.dots ?? 0;
+    for (var d = 0; d < dots; d++) {
+      canvas.drawCircle(
+        Offset(x + 9 + d * 5, 232),
+        1.8,
+        Paint()..color = _mutedGlyph,
+      );
+    }
+    // 琶音波浪/扫弦箭头(原谱记号,含延音和弦续显的 3 处)。
+    _paintBrush(canvas, event, x);
     final isTieChord = index.tieChords.contains(event.id);
     for (final note in event.notes) {
       final y = _rows[note.stringNo - 1];
@@ -453,6 +517,123 @@ class _FlowingPainter extends CustomPainter {
           }
         }
       }
+    }
+  }
+
+  /// 和弦按法图(codex drawChord 忠实移植):和弦名 + 四弦网格 +
+  /// 按位点/空弦圈 + 左端品位标注。
+  void _paintChordDiagram(Canvas canvas, RefEvent event, double x) {
+    final chord = event.chord;
+    if (chord == null) return;
+    final cx = x + 4;
+    if (chord.showName && chord.name.isNotEmpty) {
+      textPainter(chord.name, _glyph, 13, weight: FontWeight.w600)
+          .paint(canvas, Offset(cx - _textWidth(chord.name, 13) / 2, 28));
+    }
+    if (!chord.showDiagram) return;
+    final left = cx - 14;
+    const top = 45.0;
+    final gridPaint = Paint()
+      ..color = const Color(0xFF8B9683)
+      ..strokeWidth = 0.6;
+    for (var line = 0; line <= 4; line++) {
+      final y = top + line * 8;
+      if (line == 0) gridPaint.strokeWidth = 1.4;
+      canvas.drawLine(Offset(left, y), Offset(left + 28, y), gridPaint);
+      if (line == 0) gridPaint.strokeWidth = 0.6;
+    }
+    for (var string = 0; string < 4; string++) {
+      final sx = left + string * 28 / 3;
+      canvas.drawLine(Offset(sx, top), Offset(sx, top + 32), gridPaint);
+      final value = chord.strings[3 - string];
+      if (value > 0) {
+        canvas.drawCircle(
+          Offset(sx, top + (value - chord.firstFret + 0.5) * 8),
+          2.5,
+          Paint()..color = _glyph,
+        );
+      } else if (value == 0) {
+        canvas.drawCircle(
+          Offset(sx, top - 5),
+          1.6,
+          Paint()
+            ..color = const Color(0xFF6D8067)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.7,
+        );
+      }
+    }
+    if (chord.firstFret > 1) {
+      final label = '${chord.firstFret}';
+      textPainter(label, _glyph, 10)
+          .paint(canvas, Offset(left - 5 - _textWidth(label, 10), top));
+    }
+  }
+
+  /// 琶音波浪(3/4)或扫弦直箭(1/2)。波浪沿事件弦位区间 zigzag,
+  /// 箭头指向拨动方向;横向偏移按移植源规则(含泛音的事件让位 32)。
+  void _paintBrush(Canvas canvas, RefEvent event, double x) {
+    final mark = plan.brushes.where((b) => b.eventId == event.id).firstOrNull;
+    if (mark == null) return;
+    final top = _rows
+            .sublist(0, 4)
+            .reduce((a, b) => a < b ? a : b) -
+        3;
+    final bottom = _rows.reduce((a, b) => b > a ? b : a) + 3;
+    final hasHarmonic = event.notes.any((n) => n.isNaturalHarmonic);
+    final bx = x - (hasHarmonic ? 32.0 : 17.0);
+    final tip = mark.up ? top : bottom;
+    final step = mark.up ? 6.0 : -6.0;
+    final path = Path()..moveTo(bx, top);
+    if (mark.isArpeggio) {
+      var y = top.toDouble();
+      var i = 0;
+      while (y < bottom) {
+        final end = math.min(y + 8, bottom);
+        final bend = i % 2 == 1 ? 4.0 : -4.0;
+        path.cubicTo(bx + bend, y + (end - y) / 3, bx + bend,
+            y + (end - y) * 2 / 3, bx, end);
+        y += 8;
+        i++;
+      }
+    } else {
+      path.lineTo(bx, bottom);
+    }
+    path.moveTo(bx - 3, tip + step);
+    path.lineTo(bx, tip);
+    path.lineTo(bx + 3, tip + step);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _mutedGlyph
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1,
+    );
+  }
+
+  /// 符杠连横线与短钩(窗口外整组跳过;层叠几何与移植源一致)。
+  void _paintBeams(Canvas canvas, double windowLeft, double windowRight) {
+    final byId = {for (final e in score.events) e.id: e};
+    for (final segment in plan.beamSegments) {
+      final first = byId[segment.from]!;
+      final last = byId[segment.to]!;
+      if (last.startSeconds < 0 || first.startSeconds < 0) continue;
+      final x1 = layout.positionAt(first.startSeconds);
+      if (x1 < windowLeft - 40 || x1 > windowRight + 40) continue;
+      final y = _stemBottomY - (segment.level - 1) * _beamLevelGap;
+      final double x2;
+      if (segment.hook != null) {
+        x2 = x1 + (segment.hook == 'left' ? -12 : 12);
+      } else {
+        x2 = layout.positionAt(last.startSeconds);
+      }
+      canvas.drawLine(
+        Offset(x1, y),
+        Offset(x2, y),
+        Paint()
+          ..color = _mutedGlyph
+          ..strokeWidth = 1.8,
+      );
     }
   }
 
