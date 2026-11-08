@@ -85,12 +85,23 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     return painter;
   }
 
+  /// 每小节几何(2026-11-08 用户对谱实录:原尺寸小节几乎占满竖屏一屏,
+  /// 与原谱密度不符)。原谱实测:小节宽 152.7px、弦距 9.24px、原站播放
+  /// 器流速 50~62px/s;取 pps=52(流速落在原站区间)+ 留白按比例缩至
+  /// 16/12,竖屏约 2 小节/屏、横屏约 4,密度与原站一行多小节一致。
+  static const double _pixelsPerSecond = 52;
+  static const double _leftGutter = 16;
+  static const double _rightGutter = 12;
+
   void _ensureDerived(ReferenceScore score, double width) {
     if (_layout != null && _layoutWidth == width && _index != null) return;
-    // 每秒像素:窄屏放慢(codex 同款规则;横屏/宽屏 145)。
-    final pps = width < 500 ? 100.0 : 145.0;
     _layoutWidth = width;
-    _layout = FlowingLayout.fromScore(score, pixelsPerSecond: pps);
+    _layout = FlowingLayout.fromScore(
+      score,
+      pixelsPerSecond: _pixelsPerSecond,
+      leftGutter: _leftGutter,
+      rightGutter: _rightGutter,
+    );
     _index = _ScoreIndex(score);
     _plan = buildEngravingPlan(score);
     _textCache.clear();
