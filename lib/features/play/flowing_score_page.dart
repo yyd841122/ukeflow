@@ -87,11 +87,12 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
 
   /// 每小节几何(2026-11-08 用户对谱实录:原尺寸小节几乎占满竖屏一屏,
   /// 与原谱密度不符)。原谱实测:小节宽 152.7px、弦距 9.24px、原站播放
-  /// 器流速 50~62px/s;取 pps=52(流速落在原站区间)+ 留白按比例缩至
-  /// 16/12,竖屏约 2 小节/屏、横屏约 4,密度与原站一行多小节一致。
+  /// 器流速 50~62px/s;取 pps=52(流速落在原站区间),竖屏约 2 小节/屏、
+  /// 横屏约 4,密度与原站一致。留白 32/24(codex 同款):首音的琶音
+  /// 波浪在音位左 17px,留白 <17 会压上小节线(16 版真机实录)。
   static const double _pixelsPerSecond = 52;
-  static const double _leftGutter = 16;
-  static const double _rightGutter = 12;
+  static const double _leftGutter = 32;
+  static const double _rightGutter = 24;
 
   void _ensureDerived(ReferenceScore score, double width) {
     if (_layout != null && _layoutWidth == width && _index != null) return;
@@ -442,11 +443,11 @@ class _FlowingPainter extends CustomPainter {
       tp.paint(canvas, Offset(x - tp.width / 2, 170 - tp.height * 0.78));
       return;
     }
-    // 符干:全部带音事件向下延伸(延音和弦隐藏数字但仍保留符干——原谱画法)。
-    final stemTop = _rows
-            .sublist(0, 4)
-            .reduce((a, b) => b > a ? b : a) +
-        13;
+    // 符干(原谱画法,2026-11-08 实测:杆自「最高音的下一根弦线」起,
+    // 一路贯穿到弦下方的符杠,长约 4.6 个弦距;codex 的「最低弦下 13px
+    // 短桩」与原谱不符,弃)。延音和弦隐藏数字但仍保留符干。
+    final topMostString = event.notes.map((n) => n.stringNo).reduce(math.min);
+    final stemTop = _rows[math.min(topMostString, 3)] + 2;
     canvas.drawLine(
       Offset(x, stemTop),
       Offset(x, _stemBottomY),
