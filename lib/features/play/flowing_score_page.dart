@@ -498,8 +498,11 @@ class _FlowingPainter extends CustomPainter {
           ? _highlightRed
           : _glyph;
       final text = note.isNaturalHarmonic ? '<${note.fret}>' : '${note.fret}';
-      textPainter(text, color, 16, weight: FontWeight.w600)
-          .paint(canvas, Offset(x - _textWidth(text, 16) / 2, y + 6 - 8));
+      // 品位数字骑在弦线上:按文字框高度对弦线垂直居中(原谱画法——
+      // 弦线从数字正中穿过;此前按框顶定位,数字吊在线下,2026-11-08
+      // 用户实录指出)。
+      final tp = textPainter(text, color, 16, weight: FontWeight.w600);
+      tp.paint(canvas, Offset(x - tp.width / 2, y - tp.height / 2));
       if (note.hasSlideOut) {
         final target = index.slideTarget[note.id];
         if (target != null) {
