@@ -481,14 +481,23 @@ class _FlowingPainter extends CustomPainter {
       tp.paint(canvas, Offset(x - tp.width / 2, 170 - tp.height * 0.78));
       return;
     }
-    // 符干(原谱画法,2026-11-08 实测:杆自「最高音的下一根弦线」起,
-    // 一路贯穿到弦下方的符杠,长约 4.6 个弦距;codex 的「最低弦下 13px
-    // 短桩」与原谱不符,弃)。延音和弦隐藏数字但仍保留符干。
+    // 符干(原谱画法,2026-11-08 实测:杆一路贯穿到弦下方的符杠;
+    // codex 的「最低弦下 13px 短桩」与原谱不符,弃)。延音和弦隐藏
+    // 数字但仍保留符干。
+    // 和弦列(多弦数字):杆右移到数字列外缘——杆挂在和弦右侧(经典
+    // 记谱法/原谱同款),杆身不与任何数字重叠(2026-11-08 用户实录:
+    // 杆穿过 0 的字缝可见)。单音杆在自身数字下一弦起,水平不重叠。
+    final isTieChord = index.tieChords.contains(event.id);
     final topMostString = event.notes.map((n) => n.stringNo).reduce(math.min);
-    final stemTop = _rows[math.min(topMostString, 3)] + 2;
+    final stemX = x + (event.notes.length > 1 && !isTieChord
+        ? _stemClearance(event)
+        : 0.0);
+    final stemTop = event.notes.length > 1 && !isTieChord
+        ? _rows[topMostString - 1] + 2
+        : _rows[math.min(topMostString, 3)] + 2;
     canvas.drawLine(
-      Offset(x, stemTop),
-      Offset(x, _stemBottomY),
+      Offset(stemX, stemTop),
+      Offset(stemX, _stemBottomY),
       Paint()
         ..color = _mutedGlyph
         ..strokeWidth = 1.1,
@@ -522,7 +531,6 @@ class _FlowingPainter extends CustomPainter {
     }
     // 琶音波浪/扫弦箭头(原谱记号,含延音和弦续显的 3 处)。
     _paintBrush(canvas, event, x);
-    final isTieChord = index.tieChords.contains(event.id);
     for (final note in event.notes) {
       final y = _rows[note.stringNo - 1];
       if (isTieChord) {
@@ -673,14 +681,17 @@ class _FlowingPainter extends CustomPainter {
       final first = byId[segment.from]!;
       final last = byId[segment.to]!;
       if (last.startSeconds < 0 || first.startSeconds < 0) continue;
-      final x1 = layout.positionAt(first.startSeconds);
+      // 梁端点 = 各事件的符干位(和弦右缘净距),与符干同一来源。
+      final x1 = layout.positionAt(first.startSeconds) +
+          _stemClearanceFor(first);
       if (x1 < windowLeft - 40 || x1 > windowRight + 40) continue;
       final y = _stemBottomY - (segment.level - 1) * _beamLevelGap;
       final double x2;
       if (segment.hook != null) {
         x2 = x1 + (segment.hook == 'left' ? -12 : 12);
       } else {
-        x2 = layout.positionAt(last.startSeconds);
+        x2 = layout.positionAt(last.startSeconds) +
+            _stemClearanceFor(last);
       }
       canvas.drawLine(
         Offset(x1, y),
@@ -694,6 +705,23 @@ class _FlowingPainter extends CustomPainter {
 
   double _textWidth(String text, double fontSize) =>
       textPainter(text, _glyph, fontSize).width;
+
+  /// 事件的符干水平偏移(延音和弦数字已隐藏 → 0;和弦 = 净距)。
+  double _stemClearanceFor(RefEvent event) =>
+      event.notes.length > 1 && !index.tieChords.contains(event.id)
+          ? _stemClearance(event)
+          : 0.0;
+
+  /// 和弦杆的水平净距:杆挂到数字列右缘外(最宽数字半宽 + 3px),
+  /// 梁端点与符干共用同一偏移(单一来源)。
+  double _stemClearance(RefEvent event) {
+    var half = 0.0;
+    for (final note in event.notes) {
+      final text = note.isNaturalHarmonic ? '<${note.fret}>' : '${note.fret}';
+      half = math.max(half, _textWidth(text, 16) / 2);
+    }
+    return half + 3;
+  }
 
   int _firstEventAtOrAfter(double startT) {
     final events = score.events;
