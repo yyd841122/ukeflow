@@ -6,7 +6,7 @@ import 'package:ukeflow/core/audio/audio_engine.dart';
 import 'package:ukeflow/core/audio/beat_scheduler.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 
-/// 调度驱动器:40ms 轮询 + 400ms 窗口,发声全部经引擎 playClocked。
+/// 调度驱动器:40ms 轮询 + 400ms 窗口,发声全部经引擎 playScheduled。
 /// Timer 只当轮询触发器;一切时刻读引擎时钟(ADR-0005)。
 void main() {
   late FakeAudioEngine engine;
@@ -291,7 +291,7 @@ void main() {
         pickSound: (beat) => weak,
         onError: errors.add,
       );
-      // 208BPM:拍 5(@1442ms)是第 6 次 playClocked,注入失败;此刻拍 4
+      // 208BPM:拍 5(@1442ms)是第 6 次 playScheduled,注入失败;此刻拍 4
       // (@1154ms)仍在途——恢复路径若直接调 stop(),会在它的引擎调用上
       // 再抛,掩盖原错误且 onError 不达。
       scheduler.start(periodMs: 60000 / 208);
@@ -372,7 +372,7 @@ void main() {
 
 class BrokenPlayEngine extends FakeAudioEngine {
   @override
-  EngineVoice playClocked(EngineSound sound, Duration when) =>
+  EngineVoice playScheduled(EngineSound sound, Duration when) =>
       throw Exception('引擎预定失败(注入)');
 }
 
@@ -382,10 +382,10 @@ class HalfBrokenEngine extends FakeAudioEngine {
   int _playCalls = 0;
 
   @override
-  EngineVoice playClocked(EngineSound sound, Duration when) {
+  EngineVoice playScheduled(EngineSound sound, Duration when) {
     _playCalls++;
     if (_playCalls > 5) throw Exception('引擎预定失败(注入)');
-    return super.playClocked(sound, when);
+    return super.playScheduled(sound, when);
   }
 
   @override

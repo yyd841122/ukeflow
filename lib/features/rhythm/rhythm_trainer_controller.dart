@@ -68,7 +68,7 @@ final rhythmTrainerProvider =
 
 /// 节奏型训练控制器:选节奏型 + BPM 慢练 + 节拍声开关。
 ///
-/// 节拍声直接复用节拍器的 BeatScheduler→playClocked 管线(4/4 强弱拍);
+/// 节拍声直接复用节拍器的 BeatScheduler→playScheduled 管线(4/4 强弱拍);
 /// 箭头高亮不进调度——UI 轮询经 [rhythmPracticeAt] 纯函数按引擎时刻算出,
 /// 换节奏型只是换查表参数,不动时间轴。
 class RhythmTrainerController extends Notifier<RhythmTrainerState> {

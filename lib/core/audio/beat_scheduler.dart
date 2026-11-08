@@ -159,7 +159,7 @@ class BeatScheduler {
       for (final (beat, time) in due) {
         final sound = pickSound(beat);
         if (sound == null) continue;
-        _pending.add((beat: beat, voice: engine.playClocked(sound, time), time: time));
+        _pending.add((beat: beat, voice: engine.playScheduled(sound, time), time: time));
       }
       // 清理 5 秒前的旧记录,长跑不积内存(已响 voice 的 stop 是空操作)。
       const keep = Duration(seconds: 5);

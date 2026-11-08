@@ -7,7 +7,7 @@ import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/practice/tab_timeline.dart';
 import 'package:ukeflow/features/play/tab_note_scheduler.dart';
 
-/// 逐音示范声调度器(工单 13):时间轴单音事件 → 引擎 playClocked
+/// 逐音示范声调度器(工单 13):时间轴单音事件 → 引擎 playScheduled
 /// 预定拨弦。纪律与 BeatScheduler/StrumScheduler 相同:40ms 轮询 +
 /// 400ms 提前量 + 40ms 迟到容差,时刻只读引擎时钟(ADR-0005)。
 void main() {

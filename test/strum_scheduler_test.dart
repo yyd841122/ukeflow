@@ -9,7 +9,7 @@ import 'package:ukeflow/core/practice/play_timeline.dart';
 import 'package:ukeflow/features/play/strum_scheduler.dart';
 
 /// 示范扫弦声调度器(工单 10 参考音=扫弦):时间轴扫弦事件 → 引擎
-/// playClocked 预定。纪律与 BeatScheduler 相同:40ms 轮询 + 400ms
+/// playScheduled 预定。纪律与 BeatScheduler 相同:40ms 轮询 + 400ms
 /// 提前量 + 40ms 迟到容差,时刻只读引擎时钟(ADR-0005)。
 void main() {
   late FakeAudioEngine engine;
@@ -269,7 +269,7 @@ void main() {
 
 class BrokenEngine extends FakeAudioEngine {
   @override
-  EngineVoice playClocked(EngineSound sound, Duration when) =>
+  EngineVoice playScheduled(EngineSound sound, Duration when) =>
       throw Exception('引擎预定失败(注入)');
 
   EngineSound loadMemSync(String key) => FakeSound(key);

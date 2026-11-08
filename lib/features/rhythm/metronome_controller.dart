@@ -54,7 +54,7 @@ final metronomeProvider = NotifierProvider<MetronomeController, MetronomeState>(
 );
 
 /// 节拍器控制器:启停、BPM、4/4 强弱拍音源选择。
-/// 一切时刻读引擎时钟(ADR-0005);发声经 BeatScheduler → playClocked。
+/// 一切时刻读引擎时钟(ADR-0005);发声经 BeatScheduler → playScheduled。
 class MetronomeController extends Notifier<MetronomeState> {
   static const minBpm = 40;
   static const maxBpm = 208;

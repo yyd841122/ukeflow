@@ -9,7 +9,7 @@ import '../../core/practice/tab_timeline.dart';
 typedef _PendingNote = ({EngineVoice voice, Duration time});
 
 /// 逐音示范声调度器(工单 13):把 [TabTimeline] 的单音事件接到引擎
-/// playClocked——每事件预定一声拨弦,与四线谱高亮出自同一份时间轴、
+/// playScheduled——每事件预定一声拨弦,与四线谱高亮出自同一份时间轴、
 /// 同一个曲头锚,「示范声与高亮同刻」是结构保证(ADR-0005)。
 ///
 /// 调度纪律与 core/audio `BeatScheduler`、`StrumScheduler` 相同(40ms
@@ -132,7 +132,7 @@ class TabNoteScheduler {
         if (time >= from) {
           final sound = pickSound(note);
           if (sound != null) {
-            _pending.add((voice: engine.playClocked(sound, time), time: time));
+            _pending.add((voice: engine.playScheduled(sound, time), time: time));
           }
         }
         _next++;

@@ -11,7 +11,7 @@ import '../../core/practice/play_timeline.dart';
 typedef _PendingStrum = ({EngineVoice voice, Duration time});
 
 /// 示范扫弦声调度器(工单 10 参考音=扫弦):把 [PlayTimeline] 的扫弦
-/// 事件接到引擎 playClocked——每事件按弦位错峰预定一组拨弦。
+/// 事件接到引擎 playScheduled——每事件按弦位错峰预定一组拨弦。
 ///
 /// 调度纪律与 core/audio `BeatScheduler` 相同(40ms 轮询 + 400ms 提前量
 /// + 40ms 迟到容差,spike B 真机验证参数;Timer 只当轮询触发器,一切
@@ -165,7 +165,7 @@ class StrumScheduler {
     var slot = Duration.zero;
     for (final sound in order) {
       if (sound != null) {
-        _pending.add((voice: engine.playClocked(sound, time + slot), time: time + slot));
+        _pending.add((voice: engine.playScheduled(sound, time + slot), time: time + slot));
       }
       slot += _strumGap;
     }

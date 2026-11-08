@@ -728,7 +728,7 @@ void main() {
       fakeAsync((async) {
         c.start(chart: practiceFixtureChart);
         // now=740:变 0.5 速重锚后首拍 960 落在窗内,changePeriod 尾过窗
-        // 必调 playClocked(在 100 变速则首拍 1400 在窗外,错误不触发)。
+        // 必调 playScheduled(在 100 变速则首拍 1400 在窗外,错误不触发)。
         engine.advance(const Duration(milliseconds: 640));
         engine.failNow = true;
         expect(

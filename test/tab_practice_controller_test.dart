@@ -488,7 +488,7 @@ void main() {
       fakeAsync((async) {
         c.start(chart: tabFixtureChart);
         // now=740:变速重锚后首拍 960 落在窗内,changePeriod 尾过窗必调
-        // playClocked(错误才触发)。
+        // playScheduled(错误才触发)。
         engine.advance(const Duration(milliseconds: 640));
         engine.failNow = true;
         expect(() => c.setSpeed(0.5), returnsNormally);

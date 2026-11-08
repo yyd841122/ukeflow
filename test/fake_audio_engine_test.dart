@@ -26,14 +26,14 @@ void main() {
     expect(engine.engineTime(), const Duration(seconds: 5));
   });
 
-  test('loadMem 记录注入的音源键,playClocked 记录时刻与音源', () async {
+  test('loadMem 记录注入的音源键,playScheduled 记录时刻与音源', () async {
     final engine = FakeAudioEngine();
     final sound = await engine.loadMem('tick_strong', Uint8List(4));
     expect(engine.loadedKeys, ['tick_strong']);
 
     engine.advance(const Duration(milliseconds: 50));
-    engine.playClocked(sound, const Duration(milliseconds: 500));
-    engine.playClocked(sound, const Duration(milliseconds: 1000));
+    engine.playScheduled(sound, const Duration(milliseconds: 500));
+    engine.playScheduled(sound, const Duration(milliseconds: 1000));
 
     expect(
       engine.scheduleLog.map((c) => (c.key, c.time)),
@@ -47,8 +47,8 @@ void main() {
   test('stop 标记对应预定记录;每个 voice 有唯一 id', () async {
     final engine = FakeAudioEngine();
     final sound = await engine.loadMem('tick_weak', Uint8List(4));
-    final a = engine.playClocked(sound, Duration.zero) as FakeVoice;
-    final b = engine.playClocked(sound, Duration.zero) as FakeVoice;
+    final a = engine.playScheduled(sound, Duration.zero) as FakeVoice;
+    final b = engine.playScheduled(sound, Duration.zero) as FakeVoice;
     expect(a.id, isNot(b.id));
 
     engine.stop(a);

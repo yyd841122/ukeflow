@@ -394,7 +394,7 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
       }
       _unloadReplaySound();
       _replaySound = sound;
-      engine.playClocked(
+      engine.playScheduled(
         sound,
         engine.engineTime() + const Duration(milliseconds: 50),
       );

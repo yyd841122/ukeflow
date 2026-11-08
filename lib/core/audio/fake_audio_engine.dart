@@ -65,7 +65,7 @@ class FakeAudioEngine implements AudioEngine {
   }
 
   @override
-  EngineVoice playClocked(EngineSound sound, Duration when) {
+  EngineVoice playScheduled(EngineSound sound, Duration when) {
     if (failNow) throw Exception('FakeAudioEngine: 模拟运行中引擎异常');
     final voice = FakeVoice(_nextVoiceId++);
     scheduleLog.add(

@@ -56,10 +56,10 @@ class SoloudAudioEngine implements AudioEngine {
   }
 
   @override
-  EngineVoice playClocked(EngineSound sound, Duration when) {
+  EngineVoice playScheduled(EngineSound sound, Duration when) {
     // 音源对象由本引擎的 loadMem 产出;跨引擎混用是程序错误,直接炸出。
     final source = (sound as SoloudSound).source;
-    return SoloudVoice(SoLoud.instance.playClocked(source, when));
+    return SoloudVoice(SoLoud.instance.playScheduled(source, when));
   }
 
   @override

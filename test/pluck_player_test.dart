@@ -7,7 +7,7 @@ import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/pluck_player.dart';
 import 'package:ukeflow/core/model/strum_pattern.dart' show StrumDirection;
 
-/// PluckPlayer:KarplusStrong 合成 → loadMem → playClocked 的引擎接缝。
+/// PluckPlayer:KarplusStrong 合成 → loadMem → playScheduled 的引擎接缝。
 /// 一律经 AudioEngine 接口断言(FakeAudioEngine),不碰真引擎——
 /// fake_audio_engine.dart 预定的工单 04 消费方式。
 void main() {

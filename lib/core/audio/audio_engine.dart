@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
-/// 已注入引擎的音源(loadMem 产物),可反复用于 playClocked 预定。
+/// 已注入引擎的音源(loadMem 产物),可反复用于 playScheduled 预定。
 abstract interface class EngineSound {
   String get key;
 }
 
-/// 一次预定的发声实例(playClocked 产物);对象身份即是可 stop 的凭据。
+/// 一次预定的发声实例(playScheduled 产物);对象身份即是可 stop 的凭据。
 abstract interface class EngineVoice {}
 
 /// 音频引擎封装(ADR-0005 音频骨干)。
@@ -24,8 +24,13 @@ abstract interface class AudioEngine {
   /// 内存 PCM(WAV 字节)注入,返回可预定的音源。
   Future<EngineSound> loadMem(String key, Uint8List wavBytes);
 
-  /// 在引擎时刻 [when] 采样级预定发声(playClocked 语义,~2 秒窗口)。
-  EngineVoice playClocked(EngineSound sound, Duration when);
+  /// 在**绝对引擎时刻** [when] 采样级预定发声(引擎原生 playScheduled
+  /// 语义:与 [engineTime] 同一时间基、无锚点、无重锚守卫,可任意远期
+  /// 调度;过去时刻尽快播)。**禁用引擎原生 playClocked**——那是锚点
+  /// 相对语义(「相对此前 clocked 调用」),喂绝对时刻会在锚点漂移后
+  /// 整体提前/推迟出声(2026-11-08 流水谱真机实测:声音领先时间线,
+  /// 根因即此)。
+  EngineVoice playScheduled(EngineSound sound, Duration when);
 
   /// 停止一个 voice;已响完则为无害空操作。
   void stop(EngineVoice voice);

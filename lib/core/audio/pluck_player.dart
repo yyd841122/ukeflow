@@ -4,7 +4,7 @@ import 'audio_engine.dart';
 import 'karplus_strong.dart';
 import '../model/strum_pattern.dart' show StrumDirection;
 
-/// 拨弦播放器:KarplusStrong 合成 → loadMem 注入 → playClocked 发声。
+/// 拨弦播放器:KarplusStrong 合成 → loadMem 注入 → playScheduled 发声。
 /// 音源与引擎解耦(ADR-0004),按「音高×时长」缓存注入结果——
 /// 同音反复拨不重复合成/注入。和弦示范音等后续工单复用同一管线。
 class PluckPlayer {
@@ -44,7 +44,7 @@ class PluckPlayer {
   }) async {
     await engine.ensureInitialized();
     final sound = await _soundFor(freq, ms);
-    engine.playClocked(sound, engine.engineTime() + after);
+    engine.playScheduled(sound, engine.engineTime() + after);
   }
 
   /// 错峰拨响一组弦音(和弦示范音,工单 11 示范试听复用同一入口):
@@ -63,7 +63,7 @@ class PluckPlayer {
     var next = 0;
     for (final freq in freqs) {
       final sound = freq == null ? null : sounds[next++];
-      if (sound != null) engine.playClocked(sound, base + slot);
+      if (sound != null) engine.playScheduled(sound, base + slot);
       slot += strumGap;
     }
   }

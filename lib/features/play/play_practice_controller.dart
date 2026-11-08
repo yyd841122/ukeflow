@@ -125,7 +125,7 @@ final playPracticeProvider =
 /// 跟练控制器:内置弹唱谱 → 按当前 BPM+节奏型+变速编译时间轴 → 预备数拍
 /// +正曲的节拍声有界调度(+可选的示范扫弦声)。
 ///
-/// 音画同源（ADR-0005）在此接线:节拍声走 BeatScheduler→playClocked 管线,
+/// 音画同源（ADR-0005）在此接线:节拍声走 BeatScheduler→playScheduled 管线,
 /// 视觉不进调度——UI 轮询经 practiceStateAt 纯函数按 [visualNow] 算出
 /// （跟练页负责轮询）。会话结构（工单 10）:
 /// - 预备数拍 = 节拍网格的前 [prepBeats] 拍（专用音源,任何参考音模式都
