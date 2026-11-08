@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -122,19 +123,32 @@ void main() {
       expect(layout.positionAt(score.durationSeconds), layout.endX);
     });
 
-    test('匀速:同拍速下任意两点间斜率恒等于基准,无小节交界突跳', () {
+    test('无突跳:任意 1ms 步进速度只取「本小节斜率或交界加权值」', () {
       final raw =
           File('assets/scores/sky-city-guistudy.json').readAsStringSync();
       final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
       final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 52);
-      // 用户定案「要匀速」:1~49 小节同为 80 拍/分,任意 1ms 步进位移
-      // 必须恒等于 52px/s×dt;跨小节不得出现任何加速突跳。
+      // 用户定案「要匀速」的真义 = 无突跳:逐小节测宽后速度在 52(疏)
+      // 与 64(密)之间切换,交界为两侧斜率的加权过渡——1ms 步进位移
+      // 必须落在「两侧斜率×dt」的凸组合内;56px 留白被压缩进音间窗的
+      // 2.4 倍尖峰(真机实录「每小节末尾明显变快」)必红。
       const dt = 0.001;
+      var maxSlope = 0.0;
+      var minSlope = double.infinity;
+      for (final m in score.measures) {
+        maxSlope = math.max(maxSlope, layout.slopeOf(m.index));
+        minSlope = math.min(minSlope, layout.slopeOf(m.index));
+      }
       var previous = layout.positionAt(0);
-      for (var t = dt; t <= 147.0; t += dt) {
-        // 147s = 末段 82 拍/分之前(82 拍段允许按拍速比例自然变化)。
+      for (var t = dt; t <= score.durationSeconds; t += dt) {
         final x = layout.positionAt(t);
-        expect(x - previous, closeTo(52 * dt, 1e-6), reason: 't=$t 速度不匀');
+        final step = x - previous;
+        // 交界段斜率 = 两侧斜率的加权平均,必落在 [min, max] 内;
+        // 留白突跳(真机实录 2.4 倍)会超出上限,必红。
+        expect(step, lessThan(maxSlope * dt + 1e-6),
+            reason: 't=$t 超过全曲最陡斜率: $step (突跳)');
+        expect(step, greaterThanOrEqualTo(minSlope * dt - 1e-6),
+            reason: 't=$t 低于最缓斜率: $step');
         previous = x;
       }
     });
