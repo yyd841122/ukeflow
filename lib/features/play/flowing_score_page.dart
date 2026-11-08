@@ -28,8 +28,8 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     with SingleTickerProviderStateMixin {
   Ticker? _ticker;
 
-  /// 逻辑画布高(与移植源同款 280;行距/字号按此比例)。
-  static const double canvasHeight = 280;
+  /// 逻辑画布高(280 基础上 +14:符杆下伸加空隙,时间尺随之移)。
+  static const double canvasHeight = 294;
 
   /// 染色红(与票08 横带同一色值,系统内一处语义)。
   static const Color _highlightRed = Color(0xFFC8616D);
@@ -468,7 +468,7 @@ class _FlowingPainter extends CustomPainter {
   }
 
   /// 符杠底 y 与每层间距(与移植源同款几何)。
-  static const double _stemBottomY = 241;
+  static const double _stemBottomY = 253;
   static const double _beamLevelGap = 7;
 
   void _paintEvent(Canvas canvas, RefEvent event, double x, bool isActive) {
@@ -718,9 +718,9 @@ class _FlowingPainter extends CustomPainter {
       ..strokeWidth = 0.7;
     for (var t = (startT / 5).ceilToDouble() * 5; t <= endT; t += 5) {
       final x = layout.positionAt(t);
-      canvas.drawLine(Offset(x, 259), Offset(x, 264), paint);
+      canvas.drawLine(Offset(x, 271), Offset(x, 276), paint);
       final label = '${t ~/ 60}:${(t % 60).toInt().toString().padLeft(2, '0')}';
-      textPainter(label, _faintGlyph, 10).paint(canvas, Offset(x + 4, 270));
+      textPainter(label, _faintGlyph, 10).paint(canvas, Offset(x + 4, 282));
     }
   }
 
