@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -107,7 +106,7 @@ void main() {
   });
 
   group('画面位置对照表(几何闸)', () {
-    test('事件锚点恰在小节线+留白+小节内时间×斜率处,曲末锚点=终止线', () {
+    test('事件锚点恰在小节原点+小节内时间×斜率处,曲末锚点=终止线', () {
       final raw =
           File('assets/scores/sky-city-guistudy.json').readAsStringSync();
       final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
@@ -115,7 +114,6 @@ void main() {
       for (final event in score.events) {
         final m = score.measures[event.measureIndex];
         final expected = layout.measureLeftX[event.measureIndex] +
-            32.0 +
             (event.startSeconds - m.startSeconds) *
                 layout.slopeOf(event.measureIndex);
         expect(layout.positionAt(event.startSeconds), closeTo(expected, 1e-9),
@@ -124,39 +122,21 @@ void main() {
       expect(layout.positionAt(score.durationSeconds), layout.endX);
     });
 
-    test('逐小节测宽:八分连排小节斜率抬到密度地板,稀疏小节保持基准', () {
+    test('匀速:同拍速下任意两点间斜率恒等于基准,无小节交界突跳', () {
       final raw =
           File('assets/scores/sky-city-guistudy.json').readAsStringSync();
       final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
       final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 52);
-      // 全曲最紧间隔 = 480 tick(相邻八分音):密度地板 = 24px/480tick
-      // ×1280tick/s = 64px/s;基准 = 52px/s。
-      var hasDense = false;
-      // ignore: unused_local_variable
-      var hasSparse = false;
-      for (final m in score.measures) {
-        final evs = score.events
-            .where((e) => e.measureIndex == m.index)
-            .map((e) => e.startTick)
-            .toList();
-        if (evs.length < 2) continue;
-        var gapMin = 1 << 30;
-        for (var i = 1; i < evs.length; i++) {
-          gapMin = math.min(gapMin, evs[i] - evs[i - 1]);
-        }
-        if (gapMin <= 480) {
-          // 密度地板斜率 = minGapPx/gapMin × 16×tempo(拍速逐小节,末段 82)。
-          final expectedSlope = 24 / gapMin * 16 * m.tempo;
-          expect(layout.slopeOf(m.index), closeTo(expectedSlope, 1e-6),
-              reason: '小节 ${m.index + 1} 密(最紧 $gapMin tick)');
-          hasDense = true;
-        } else if (gapMin >= 960) {
-          expect(layout.slopeOf(m.index), closeTo(52, 1e-6),
-              reason: '小节 ${m.index + 1} 疏(最紧 $gapMin tick)');
-          hasSparse = true;
-        }
+      // 用户定案「要匀速」:1~49 小节同为 80 拍/分,任意 1ms 步进位移
+      // 必须恒等于 52px/s×dt;跨小节不得出现任何加速突跳。
+      const dt = 0.001;
+      var previous = layout.positionAt(0);
+      for (var t = dt; t <= 147.0; t += dt) {
+        // 147s = 末段 82 拍/分之前(82 拍段允许按拍速比例自然变化)。
+        final x = layout.positionAt(t);
+        expect(x - previous, closeTo(52 * dt, 1e-6), reason: 't=$t 速度不匀');
+        previous = x;
       }
-      expect(hasDense, isTrue, reason: '真谱应存在八分连排小节');
     });
 
     test('连续性:锚点时间严格递增(禁同刻不同位);任意采样无跳变,单步不超最陡段斜率',

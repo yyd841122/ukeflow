@@ -85,24 +85,16 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     return painter;
   }
 
-  /// 每小节几何(2026-11-08 用户对谱实录:原尺寸小节几乎占满竖屏一屏,
-  /// 与原谱密度不符)。原谱实测:小节宽 152.7px、弦距 9.24px、原站播放
-  /// 器流速 50~62px/s;取 pps=52(流速落在原站区间),竖屏约 2 小节/屏、
-  /// 横屏约 4,密度与原站一致。留白 32/24(codex 同款):首音的琶音
-  /// 波浪在音位左 17px,留白 <17 会压上小节线(16 版真机实录)。
+  /// 每小节几何(2026-11-08 用户定案「要匀速」):全曲统一斜率,小节
+  /// 零留白(原谱同构:首音画在小节线上,线本身左移 8px 让位)。原谱
+  /// 实测流速 50~62px/s,取 pps=52 落在区间内;小节宽 156,竖屏约
+  /// 2.5 小节/屏。数字 13.5px = 原谱比例,八分间距 19.5px 不重叠。
   static const double _pixelsPerSecond = 52;
-  static const double _leftGutter = 32;
-  static const double _rightGutter = 24;
 
   void _ensureDerived(ReferenceScore score, double width) {
     if (_layout != null && _layoutWidth == width && _index != null) return;
     _layoutWidth = width;
-    _layout = FlowingLayout.fromScore(
-      score,
-      pixelsPerSecond: _pixelsPerSecond,
-      leftGutter: _leftGutter,
-      rightGutter: _rightGutter,
-    );
+    _layout = FlowingLayout.fromScore(score, pixelsPerSecond: _pixelsPerSecond);
     _index = _ScoreIndex(score);
     _plan = buildEngravingPlan(score);
     _textCache.clear();
