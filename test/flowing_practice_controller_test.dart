@@ -50,6 +50,7 @@ void main() {
       artist: '',
       sourceTempo: 80,
       startingTempo: 80,
+      keySignature: 0,
       tuning1to4: [69, 64, 60, 67],
       measures: [
         for (var i = 0; i < 2; i++)

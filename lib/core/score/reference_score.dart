@@ -155,6 +155,12 @@ class RefEvent {
   bool get isRest => notes.isEmpty;
 }
 
+/// 调号 → 调名(原谱曲头「key = C 4/4」画谱用;按五度圈)。
+String keyName(int keySignature) => const {
+      0: 'C', 1: 'G', 2: 'D', 3: 'A', 4: 'E', 5: 'B', 6: 'F#', 7: 'C#',
+      -1: 'F', -2: 'Bb', -3: 'Eb', -4: 'Ab', -5: 'Db', -6: 'Gb', -7: 'Cb',
+    }[keySignature] ?? 'C';
+
 /// 转换产物：整首曲子的练习时间表。
 class ReferenceScore {
   const ReferenceScore({
@@ -162,6 +168,7 @@ class ReferenceScore {
     required this.artist,
     required this.sourceTempo,
     required this.startingTempo,
+    required this.keySignature,
     required this.tuning1to4,
     required this.measures,
     required this.events,
@@ -176,6 +183,9 @@ class ReferenceScore {
 
   /// 曲页权威起始速度（本曲 80，页面明确设置，覆盖 DTO 值）。
   final int startingTempo;
+
+  /// 调号(五度圈整数,0 = C;原谱曲头标记画谱用)。
+  final int keySignature;
   final List<int> tuning1to4;
   final List<RefMeasure> measures;
   final List<RefEvent> events;
@@ -321,11 +331,17 @@ ReferenceScore buildReferenceScore(
     final byTime = a.startSeconds.compareTo(b.startSeconds);
     return byTime != 0 ? byTime : a.voiceIndex.compareTo(b.voiceIndex);
   });
+  final firstMaster = masterBars.isNotEmpty && masterBars.first is Map
+      ? masterBars.first as Map
+      : const {};
   return ReferenceScore(
     title: source['title'] is String ? source['title'] as String : '',
     artist: source['artist'] is String ? source['artist'] as String : '',
     sourceTempo: _asInt(source['tempo'], '曲谱数据格式无效'),
     startingTempo: tempo.round(),
+    keySignature: firstMaster.containsKey('keySignature')
+        ? _asInt(firstMaster['keySignature'], '曲谱数据格式无效')
+        : 0,
     tuning1to4: tuning.cast<int>(),
     measures: measures,
     events: events,

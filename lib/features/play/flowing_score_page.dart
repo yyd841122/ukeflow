@@ -377,6 +377,7 @@ class _FlowingPainter extends CustomPainter {
     final startT = math.max(0.0, seconds - cursorX / pps - 2);
     final endT = math.min(score.durationSeconds, seconds + (width - cursorX) / pps + 2);
 
+    _paintHeaders(canvas, windowLeft, windowRight, startT, endT);
     _paintMeasures(canvas, windowLeft, windowRight, startT, endT);
     _paintEvents(canvas, startT, endT, windowLeft, windowRight);
     _paintBeams(canvas, windowLeft, windowRight);
@@ -394,6 +395,43 @@ class _FlowingPainter extends CustomPainter {
       cursorPaint,
     );
     canvas.drawCircle(Offset(cursorX, _rows.first - 10), 3, cursorPaint);
+  }
+
+  /// 谱面标记层(原谱画法,2026-11-08 全量机比补齐):段落名印在起始
+  /// 小节上方;曲头印「调 拍号」与「♩=速度」。
+  void _paintHeaders(Canvas canvas, double windowLeft, double windowRight,
+      double startT, double endT) {
+    for (final measure in score.measures) {
+      final section = measure.section;
+      if (section == null) continue;
+      if (measure.startSeconds + measure.durationSeconds < startT ||
+          measure.startSeconds > endT) {
+        continue;
+      }
+      final x = layout.measureLeftX[measure.index];
+      if (x < windowLeft - 80 || x > windowRight + 80) continue;
+      textPainter(section, _glyph, 13, weight: FontWeight.w700)
+          .paint(canvas, Offset(x + 2, 6));
+    }
+    // 曲头:key = 调 拍号、♩= 速度(印在第一小节顶行,随内容滚走)。
+    if (startT <= 0.001 && score.measures.isNotEmpty) {
+      final m0 = score.measures.first;
+      final keyTp = textPainter(
+        'key = ${keyName(score.keySignature)} ${m0.numerator}/${m0.denominator}',
+        _glyph,
+        12,
+        weight: FontWeight.w600,
+      );
+      keyTp.paint(canvas, Offset(layout.measureLeftX[0] + 2, 8));
+      // ♩= 速度紧随 key 文本(固定偏移会被窄屏右缘裁掉,真机实录)。
+      final tempoX = layout.measureLeftX[0] + 2 + keyTp.width + 10;
+      final note = textPainter('\uE1D5', _mutedGlyph, 13, family: 'Bravura');
+      // Bravura 字形基线偏移大,按实测抬高与 '= 80' 文字行对齐
+      // (真机 2026-11-08 实录:默认顶对齐音符沉底 ~15px)。
+      note.paint(canvas, Offset(tempoX, -4));
+      textPainter('= ${m0.tempo}', _mutedGlyph, 11)
+          .paint(canvas, Offset(tempoX + note.width + 1, 12));
+    }
   }
 
   void _paintMeasures(Canvas canvas, double windowLeft, double windowRight,
