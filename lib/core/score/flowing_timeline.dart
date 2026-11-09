@@ -22,14 +22,18 @@ class FlowingLayout {
   /// 从练习时间表构建。锚点 = **每个事件起点 + 曲末**(codex 忠实方案,
   /// 2026-11-08 真机教训:不得插入小节末锚点)。
   ///
-  /// **全曲匀速等宽**(2026-11-08 用户定案「照抄 codex/匀速」终版):
-  /// x = 原点 + 时间 ×每秒像素,零留白、无密度地板——小节交界只随拍速
-  /// 自然变化,无任何突跳;小节首音画在小节线上(线由画笔左移 15px
-  /// 绘制,给首音让位,原谱同款:首音就在小节线上)。数字 13.5px 配
-  /// 19.5px 八分间距 = 原谱比例(10.92/19.8),不重叠。
+  /// **照抄 codex 终版几何**(2026-11-09 用户定案「照抄 codex」):
+  /// - 每小节 = 左留白 32 + 内容(时长×每秒像素) + 右留白 24;小节线画在
+  ///   小节左缘,首音在线右 32px(留白即避让,首音永不压线);
+  /// - 全曲统一斜率(时长×每秒像素),交界仅穿过留白的自然过渡;
+  /// - 末小节右缘 = min(右缘, 末锚点+140),保尾音收束可见(照抄);
+  /// - 数字 18px(照抄 .fret 18px),纸色描边光晕 7px 遮蔽穿行的线/杆/
+  ///   波浪——codex 不做避让工程的根基。
   factory FlowingLayout.fromScore(
     ReferenceScore score, {
     required double pixelsPerSecond,
+    double leftMargin = 32,
+    double rightMargin = 24,
   }) {
     if (!(pixelsPerSecond > 0)) {
       throw ArgumentError.value(pixelsPerSecond, 'pixelsPerSecond', '必须为正');
@@ -42,7 +46,9 @@ class FlowingLayout {
       slopes[m.index] = pixelsPerSecond; // px/秒(全曲匀速)
       measureLeftX[m.index] = cursor;
       final contentTicks = m.numerator * 3840 / m.denominator;
-      cursor += contentTicks * (pixelsPerSecond / ticksPerSecond);
+      cursor += leftMargin +
+          contentTicks * (pixelsPerSecond / ticksPerSecond) +
+          rightMargin;
     }
     final last = score.measures.last;
     final anchorTimes = <double>[];
@@ -53,11 +59,19 @@ class FlowingLayout {
       anchorXs.add(measureLeftX[e.measureIndex] +
           (e.startSeconds - m.startSeconds) * slopes[e.measureIndex]);
     }
-    // 曲末锚点:时间 = 曲长,位置 = 末小节右缘。锚点时间严格递增,
-    // positionAt 全曲斜率恒定(拍速变化处按比例,连续无跳变)。
+    // codex:末小节右缘 = min(右缘, 末锚点+140),尾音收束不悬空。
+    final lastAnchorX = anchorXs.isEmpty
+        ? measureLeftX[last.index]
+        : anchorXs.last;
+    final lastRight = math.min(
+      measureLeftX[last.index] +
+          15 +
+          last.durationSeconds * slopes[last.index] +
+          15,
+      lastAnchorX + 140,
+    );
     anchorTimes.add(score.durationSeconds);
-    anchorXs.add(measureLeftX[last.index] +
-        last.durationSeconds * slopes[last.index]);
+    anchorXs.add(lastRight);
     return FlowingLayout._(
       pixelsPerSecond,
       measureLeftX,

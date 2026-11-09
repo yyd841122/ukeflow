@@ -123,32 +123,32 @@ void main() {
       expect(layout.positionAt(score.durationSeconds), layout.endX);
     });
 
-    test('无突跳:任意 1ms 步进速度只取「本小节斜率或交界加权值」', () {
+    test('无瞬移:1ms 步进位移不超相邻锚点段的最大斜率(留白过渡合法)', () {
       final raw =
           File('assets/scores/sky-city-guistudy.json').readAsStringSync();
       final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
       final layout = FlowingLayout.fromScore(score, pixelsPerSecond: 52);
-      // 用户定案「要匀速」的真义 = 无突跳:逐小节测宽后速度在 52(疏)
-      // 与 64(密)之间切换,交界为两侧斜率的加权过渡——1ms 步进位移
-      // 必须落在「两侧斜率×dt」的凸组合内;56px 留白被压缩进音间窗的
-      // 2.4 倍尖峰(真机实录「每小节末尾明显变快」)必红。
-      const dt = 0.001;
-      var maxSlope = 0.0;
-      var minSlope = double.infinity;
-      for (final m in score.measures) {
-        maxSlope = math.max(maxSlope, layout.slopeOf(m.index));
-        minSlope = math.min(minSlope, layout.slopeOf(m.index));
+      // 照抄 codex 终版:小节留白 56px 在音间窗内跨过 = 交界的自然加速
+      // (codex 本尊同款,用户接受);但**锚点插入式瞬移**(小节末锚点
+      // 事故)仍必红——瞬移段斜率会远超任何相邻锚点段斜率。
+      final anchors = layout.anchors;
+      var maxSeg = 0.0;
+      var minSeg = double.infinity;
+      for (var i = 1; i < anchors.length; i++) {
+        final dt = anchors[i].time - anchors[i - 1].time;
+        final slope = (anchors[i].x - anchors[i - 1].x) / dt;
+        maxSeg = math.max(maxSeg, slope);
+        minSeg = math.min(minSeg, slope);
       }
+      const dt = 0.001;
       var previous = layout.positionAt(0);
       for (var t = dt; t <= score.durationSeconds; t += dt) {
         final x = layout.positionAt(t);
         final step = x - previous;
-        // 交界段斜率 = 两侧斜率的加权平均,必落在 [min, max] 内;
-        // 留白突跳(真机实录 2.4 倍)会超出上限,必红。
-        expect(step, lessThan(maxSlope * dt + 1e-6),
-            reason: 't=$t 超过全曲最陡斜率: $step (突跳)');
-        expect(step, greaterThanOrEqualTo(minSlope * dt - 1e-6),
-            reason: 't=$t 低于最缓斜率: $step');
+        expect(step, lessThan(maxSeg * dt + 1e-6),
+            reason: 't=$t 瞬移:单步 $step 超最陡段 $maxSeg');
+        expect(step, greaterThanOrEqualTo(minSeg * dt - 1e-6),
+            reason: 't=$t 低于最缓段');
         previous = x;
       }
     });

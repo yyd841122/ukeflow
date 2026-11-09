@@ -62,6 +62,32 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     }
   }
 
+  /// 纸色描边光晕(数字的遮罩层,codex .fret stroke paper 同款)。
+  TextPainter _haloPainter(String text, double fontSize,
+      {FontWeight weight = FontWeight.w600}) {
+    final key = 'halo|$text|$fontSize|$weight';
+    final cached = _textCache[key];
+    if (cached != null) return cached;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: weight,
+          foreground: Paint()
+            ..color = _background
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 6
+            ..strokeJoin = StrokeJoin.round,
+        ),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _textCache[key] = painter;
+    return painter;
+  }
+
   TextPainter _textPainter(String text, Color color, double fontSize,
       {FontWeight weight = FontWeight.w500, String? family}) {
     final key = '$text|$color|$fontSize|$weight|$family';
@@ -83,15 +109,17 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     return painter;
   }
 
-  /// 每小节几何(2026-11-08 终版「照抄 codex」):全曲匀速等宽零留白,
-  /// pps=52(原站流速区间),小节线画笔左移 15px 让首音;数字 13.5px
-  /// = 原谱比例。核对方法与真值:docs/flowing-score-audit.md。
-  static const double _pixelsPerSecond = 52;
+  /// 每秒像素(codex 同款规则):窄屏 100、宽屏 145;小节留白 32/24、
+  /// 数字 18px、光晕 7px——全部照抄 codex 终版几何(2026-11-09 定案)。
+  static double pixelsPerSecondFor(double width) => width < 500 ? 100 : 145;
 
   void _ensureDerived(ReferenceScore score, double width) {
     if (_engraving != null && _layoutWidth == width) return;
     _layoutWidth = width;
-    final layout = FlowingLayout.fromScore(score, pixelsPerSecond: _pixelsPerSecond);
+    final layout = FlowingLayout.fromScore(
+      score,
+      pixelsPerSecond: pixelsPerSecondFor(width),
+    );
     _engraving = FlowingEngraving.build(
       score,
       layout: layout,
@@ -138,6 +166,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
                             cursorX: _cursorX(width),
                             width: width,
                             textPainter: _textPainter,
+                            haloPainter: _haloPainter,
                           ),
                         ),
                       ),
@@ -278,6 +307,7 @@ class _FlowingPainter extends CustomPainter {
     required this.cursorX,
     required this.width,
     required this.textPainter,
+    required this.haloPainter,
   });
 
   final FlowingEngraving engraving;
@@ -286,6 +316,7 @@ class _FlowingPainter extends CustomPainter {
   final double width;
   final TextPainter Function(String, Color, double,
       {FontWeight weight, String? family}) textPainter;
+  final TextPainter Function(String, double, {FontWeight weight}) haloPainter;
 
   static const Color _highlightRed = Color(0xFFC8616D);
   static const Color _background = Color(0xFFFAF9F4);
@@ -455,7 +486,13 @@ class _FlowingPainter extends CustomPainter {
       final color = isActive && frame.noteIds.contains(digit.noteId)
           ? _highlightRed
           : _glyph;
-      final tp = textPainter(digit.text, color, 13.5, weight: FontWeight.w600);
+      // 纸色描边光晕垫底(codex app.css .fret: stroke paper 7px,
+      // paint-order:stroke)——穿过的弦线/杆/波浪在数字周围被就地
+      // 擦掉,数字永远干净;这是 codex 不做避让工程的根基。
+      final halo = haloPainter(digit.text, 18, weight: FontWeight.w600);
+      halo.paint(canvas,
+          Offset(digit.x - halo.width / 2, digit.rowY - halo.height / 2));
+      final tp = textPainter(digit.text, color, 18, weight: FontWeight.w600);
       tp.paint(canvas,
           Offset(digit.x - tp.width / 2, digit.rowY - tp.height / 2));
     }
@@ -510,7 +547,7 @@ class _FlowingPainter extends CustomPainter {
       var i = 0;
       while (y < glyph.waveBottom) {
         final end = math.min(y + 8, glyph.waveBottom);
-        final bend = i % 2 == 1 ? 3.0 : -3.0;
+        final bend = i % 2 == 1 ? 4.0 : -4.0;
         path.cubicTo(bx + bend, y + (end - y) / 3, bx + bend,
             y + (end - y) * 2 / 3, bx, end);
         y += 8;
