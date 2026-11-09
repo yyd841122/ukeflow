@@ -83,6 +83,9 @@ class FlowingLayout {
   /// 曲末(终止线)绝对 x。
   final double endX;
 
+  /// 全曲时长(秒;排版层绘制曲终标记用)。
+  double get durationSecondsOfSong => _anchorTimes.last;
+
   final List<double> _anchorTimes;
   final List<double> _anchorXs;
 
