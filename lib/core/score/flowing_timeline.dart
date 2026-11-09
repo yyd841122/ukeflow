@@ -22,41 +22,27 @@ class FlowingLayout {
   /// 从练习时间表构建。锚点 = **每个事件起点 + 曲末**(codex 忠实方案,
   /// 2026-11-08 真机教训:不得插入小节末锚点)。
   ///
-  /// **逐小节测宽 + 全程无突跳**(2026-11-08 用户定案三角):
-  /// - 小节宽度由本小节音符密度决定——最紧相邻音符间距 ≥ [minGapPx]
-  ///   (八分连排小节自动加宽;否则数字与左伸波浪压上前一个音);
-  /// - 小节间**零留白**:留白被压缩进音间窗会在交界产生 2.4 倍速度
-  ///   突跳(真机实录「每小节末尾明显变快」的根因),零留白后交界速度
-  ///   只是 52↔64px/s 的平滑台阶;
-  /// - 小节线由画笔左移 14px 绘制(首音距线 7px 净空,不压线)。
-  /// 小节内仍按时间线性(拍距均匀,与原谱一致)。
+  /// **全曲匀速等宽**(2026-11-08 用户定案「照抄 codex/匀速」终版):
+  /// x = 原点 + 时间 ×每秒像素,零留白、无密度地板——小节交界只随拍速
+  /// 自然变化,无任何突跳;小节首音画在小节线上(线由画笔左移 15px
+  /// 绘制,给首音让位,原谱同款:首音就在小节线上)。数字 13.5px 配
+  /// 19.5px 八分间距 = 原谱比例(10.92/19.8),不重叠。
   factory FlowingLayout.fromScore(
     ReferenceScore score, {
     required double pixelsPerSecond,
-    double minGapPx = 24,
   }) {
     if (!(pixelsPerSecond > 0)) {
       throw ArgumentError.value(pixelsPerSecond, 'pixelsPerSecond', '必须为正');
     }
     final measureLeftX = List<double>.filled(score.measures.length, 0);
     final slopes = List<double>.filled(score.measures.length, 0);
-    final ticksByMeasure = <int, List<int>>{};
-    for (final e in score.events) {
-      ticksByMeasure.putIfAbsent(e.measureIndex, () => []).add(e.startTick);
-    }
     var cursor = 0.0;
     for (final m in score.measures) {
       final ticksPerSecond = 16.0 * m.tempo; // 960 tick/拍 × bpm/60
-      var pxPerTick = pixelsPerSecond / ticksPerSecond;
-      final ticks = ticksByMeasure[m.index] ?? const [];
-      for (var i = 1; i < ticks.length; i++) {
-        final gap = ticks[i] - ticks[i - 1];
-        if (gap > 0) pxPerTick = math.max(pxPerTick, minGapPx / gap);
-      }
-      slopes[m.index] = pxPerTick * ticksPerSecond;
+      slopes[m.index] = pixelsPerSecond; // px/秒(全曲匀速)
       measureLeftX[m.index] = cursor;
       final contentTicks = m.numerator * 3840 / m.denominator;
-      cursor += contentTicks * pxPerTick;
+      cursor += contentTicks * (pixelsPerSecond / ticksPerSecond);
     }
     final last = score.measures.last;
     final anchorTimes = <double>[];
@@ -68,7 +54,7 @@ class FlowingLayout {
           (e.startSeconds - m.startSeconds) * slopes[e.measureIndex]);
     }
     // 曲末锚点:时间 = 曲长,位置 = 末小节右缘。锚点时间严格递增,
-    // positionAt 处处连续(交界速度 = 两侧斜率的加权过渡,无尖峰)。
+    // positionAt 全曲斜率恒定(拍速变化处按比例,连续无跳变)。
     anchorTimes.add(score.durationSeconds);
     anchorXs.add(measureLeftX[last.index] +
         last.durationSeconds * slopes[last.index]);
