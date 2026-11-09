@@ -436,11 +436,13 @@ class _FlowingPainter extends CustomPainter {
           measure.startSeconds > endT) {
         continue;
       }
-      final x = layout.measureLeftX[measure.index];
+      // 小节线画在时间映射原点左 14px:首音数字半宽~4px → 净空10px;
+      // 小节线画在时间映射原点左 15px:首音数字右缘(-15.75)不越线。
+      final x = layout.measureLeftX[measure.index] - 15;
       if (x < windowLeft - 1 || x > windowRight + 1) continue;
       canvas.drawLine(Offset(x, _rows.first), Offset(x, _rows.last), paint);
       textPainter('${measure.index + 1}', _faintGlyph, 11)
-          .paint(canvas, Offset(x + 4, 110));
+          .paint(canvas, Offset(x + 3, 110));
     }
   }
 
@@ -628,9 +630,10 @@ class _FlowingPainter extends CustomPainter {
         3;
     final bottom = _rows.reduce((a, b) => b > a ? b : a) + 3;
     final hasHarmonic = event.notes.any((n) => n.isNaturalHarmonic);
-    // 波浪左伸 12(泛音 24):逐小节测宽后八分间距 24px,17px 左伸会压上
-    // 前一个音的数字(2026-11-08 用户实录「与前一个音符重合」)。
-    final bx = x - (hasHarmonic ? 24.0 : 12.0);
+    // 波浪收窄 ±3、左伸 9(泛音 20):波浪宽/间距 ≈0.3(原谱同量级),
+    // 左缘 = 原点-12,距小节线(原点-15)3px 净空,右缘微贴自身数字
+    // 左缘(原谱式微贴,波浪画在数字下层)。
+    final bx = x - (hasHarmonic ? 20.0 : 9.0);
     final tip = mark.up ? top : bottom;
     final step = mark.up ? 6.0 : -6.0;
     final path = Path()..moveTo(bx, top);
@@ -639,7 +642,7 @@ class _FlowingPainter extends CustomPainter {
       var i = 0;
       while (y < bottom) {
         final end = math.min(y + 8, bottom);
-        final bend = i % 2 == 1 ? 4.0 : -4.0;
+        final bend = i % 2 == 1 ? 3.0 : -3.0;
         path.cubicTo(bx + bend, y + (end - y) / 3, bx + bend,
             y + (end - y) * 2 / 3, bx, end);
         y += 8;
@@ -721,7 +724,7 @@ class _FlowingPainter extends CustomPainter {
         windowRight < layout.endX) {
       return;
     }
-    final endX = layout.endX;
+    final endX = layout.endX - 15;
     final thin = Paint()
       ..color = _mutedGlyph
       ..strokeWidth = 1;
