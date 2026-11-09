@@ -194,29 +194,44 @@ EngravingPlan buildEngravingPlan(ReferenceScore score) {
 
 /// 垂直几何:四弦行、杆底、时间尺、休止基线、画布高。
 class FlowingGeometry {
-  const FlowingGeometry();
+  /// [scale] = 可用高/基准高:竖屏放大铺满、横屏收紧(codex
+  /// scoreGeometry(scale) 方法——一个系数重排几何,字号/线宽同系数)。
+  const FlowingGeometry(this.scale)
+      : assert(scale > 0);
 
-  /// 四弦行 y(逻辑坐标)。
-  static const List<double> rows = [124, 149, 174, 199];
-
-  /// 界面弦号(1..4)的行 y。
-  static double rowY(int stringNo) => rows[(stringNo - 1).clamp(0, 3)];
-
-  /// 符杆/符杠底线(用户定案:杆下伸加空隙)。
-  static const double stemBottom = 253;
-
-  /// 符杠层距。
-  static const double beamGap = 7;
-
-  /// 时间尺刻度线/文字 y。
-  static const double timeTick = 271;
-  static const double timeLabel = 282;
-
-  /// 休止符基线 y。
-  static const double restY = 170;
+  final double scale;
 
   /// 逻辑画布高。
-  static const double height = 294;
+  double get height => 294 * scale;
+
+  /// 四弦行 y(基准 124 + i×25,× scale)。
+  double rowY(int stringNo0) =>
+      (124 + (stringNo0.clamp(0, 3)) * 25) * scale;
+
+  /// 四弦行 y 全表(× scale)。
+  List<double> get rows => [
+        for (var i = 0; i < 4; i++) (124 + i * 25) * scale,
+      ];
+
+  /// 符杆/符杠底线。
+  double get stemBottom => 253 * scale;
+
+  /// 符杠层距。
+  double get beamGap => 7 * scale;
+
+  /// 时间尺刻度线/文字 y。
+  double get timeTick => 271 * scale;
+  double get timeLabel => 282 * scale;
+
+  /// 休止符基线 y。
+  double get restY => 170 * scale;
+
+  /// 和弦按法图:网格宽/高(28×32 的 1.6 倍 × scale,codex 同比例)。
+  double get chordGridW => 28 * 1.6 * scale;
+  double get chordGridH => 32 * 1.6 * scale;
+  double get chordLeftPad => 14 * 1.6 * scale;
+  double get chordTitleY => 35 * scale;
+  double get chordTop => 53 * scale;
 }
 
 /// 一颗品位数字的字形(x = 数字中心,渲染层骑线垂直居中)。
@@ -363,6 +378,7 @@ class FlowingEngraving {
     ReferenceScore score, {
     required FlowingLayout layout,
     required EngravingPlan plan,
+    required FlowingGeometry geometry,
   }) {
     // 小节线:时间原点左 15px(首音净空);编号在线右侧、谱面上方。
     final bars = <MeasureBar>[
@@ -419,7 +435,7 @@ class FlowingEngraving {
       final x = layout.positionAt(e.startSeconds);
       final isTie = tieChords.contains(e.id);
       final rhythm = plan.rhythmOf(e.id);
-      final rowY = FlowingGeometry.rowY;
+      final rowY = geometry.rowY;
 
       final digits = <DigitGlyph>[];
       if (!isTie) {
@@ -458,12 +474,12 @@ class FlowingEngraving {
         stemTop = rowY(math.min(lowest, 3)) + 2;
       }
       final flag = (!beamed && e.notes.isNotEmpty && (rhythm?.flags ?? 0) > 0)
-          ? FlagGlyph(x, FlowingGeometry.stemBottom, rhythm?.flags ?? 0)
+          ? FlagGlyph(x, geometry.stemBottom, rhythm?.flags ?? 0)
           : null;
 
       final dots = <DotGlyph>[
         for (var d = 0; d < (rhythm?.dots ?? 0); d++)
-          DotGlyph(x + 9 + d * 5, FlowingGeometry.stemBottom - 21),
+          DotGlyph(x + 9 + d * 5, geometry.stemBottom - 21),
       ];
 
       final wave = plan.brushes.where((b) => b.eventId == e.id).firstOrNull;
@@ -472,10 +488,10 @@ class FlowingEngraving {
           : x - (e.notes.any((n) => n.isNaturalHarmonic) ? 32.0 : 17.0);
       final waveTop = e.notes.isEmpty
           ? 0.0
-          : e.notes.map((n) => rowY(n.stringNo)).reduce(math.min) - 3;
+          : e.notes.map((n) => rowY(n.stringNo)).reduce((a, b) => a < b ? a : b) - 3;
       final waveBottom = e.notes.isEmpty
           ? 0.0
-          : e.notes.map((n) => rowY(n.stringNo)).reduce(math.max) + 3;
+          : e.notes.map((n) => rowY(n.stringNo)).reduce((a, b) => a > b ? a : b) + 3;
 
       glyphs.add(EventGlyphs(
         event: e,
@@ -512,7 +528,7 @@ class FlowingEngraving {
       beamBars.add(BeamBar(
         x1,
         x2,
-        FlowingGeometry.stemBottom - (seg.level - 1) * FlowingGeometry.beamGap,
+        geometry.stemBottom - (seg.level - 1) * geometry.beamGap,
         seg.level,
       ));
     }
@@ -561,7 +577,7 @@ class FlowingEngraving {
 
     return FlowingEngraving._(
       layout: layout,
-      geometry: const FlowingGeometry(),
+      geometry: geometry,
       bars: bars,
       eventGlyphs: glyphs,
       beamBars: beamBars,

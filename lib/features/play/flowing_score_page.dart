@@ -28,9 +28,6 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     with SingleTickerProviderStateMixin {
   Ticker? _ticker;
 
-  /// 逻辑画布高(280 基础上 +14:符杆下伸加空隙,时间尺随之移)。
-  static const double canvasHeight = 294;
-
   /// 染色红(与票08 横带同一色值,系统内一处语义)。
   static const Color _highlightRed = Color(0xFFC8616D);
   static const Color _background = Color(0xFFFAF9F4);
@@ -43,6 +40,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
 
   FlowingEngraving? _engraving;
   double _layoutWidth = 0;
+  String? _heightKey;
 
   @override
   void dispose() {
@@ -113,17 +111,25 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   /// 数字 18px、光晕 7px——全部照抄 codex 终版几何(2026-11-09 定案)。
   static double pixelsPerSecondFor(double width) => width < 500 ? 100 : 145;
 
-  void _ensureDerived(ReferenceScore score, double width) {
-    if (_engraving != null && _layoutWidth == width) return;
+  void _ensureDerived(ReferenceScore score, double width, double availHeight) {
+    final heightKey = '$width|$availHeight';
+    if (_engraving != null && _layoutWidth == width && _heightKey == heightKey) {
+      return;
+    }
     _layoutWidth = width;
+    _heightKey = heightKey;
+    // codex fitScoreViewport 同款:谱面等比缩放填满可用高度
+    // (294 = 基准逻辑高),字号/线宽随 scale 同步。
+    final scale = (availHeight / 294).clamp(0.5, 2.0);
     final layout = FlowingLayout.fromScore(
       score,
-      pixelsPerSecond: pixelsPerSecondFor(width),
+      pixelsPerSecond: pixelsPerSecondFor(width) * scale,
     );
     _engraving = FlowingEngraving.build(
       score,
       layout: layout,
       plan: buildEngravingPlan(score),
+      geometry: FlowingGeometry(scale),
     );
     _textCache.clear();
   }
@@ -149,7 +155,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  _ensureDerived(score, width);
+                  _ensureDerived(score, width, constraints.maxHeight);
                   final frame = frameAt(score, _engraving!.layout, seconds, _cursorX(width));
                   // FittedBox:横屏竖排高度不足 280 时等比缩小画布,
                   // 不得溢出盖住播放条(真机 2026-11-08 实录)。
@@ -158,7 +164,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
                       fit: BoxFit.scaleDown,
                       child: SizedBox(
                         width: width,
-                        height: canvasHeight,
+                        height: _engraving!.geometry.height,
                         child: CustomPaint(
                           painter: _FlowingPainter(
                             engraving: _engraving!,
@@ -297,7 +303,6 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   }
 }
 
-/// 静态字形查取(每份谱建一次):延音和弦判别、滑音目标、音→事件归属。
 /// 流水谱渲染器:**哑渲染器**——只消费排版数据(FlowingEngraving),
 /// 逐字形作画,零几何计算。当弹态由 frame 与字形事件比对得上色。
 class _FlowingPainter extends CustomPainter {
@@ -334,8 +339,8 @@ class _FlowingPainter extends CustomPainter {
     final stringPaint = Paint()
       ..color = _stringLine
       ..strokeWidth = 0.8;
-    for (var i = 0; i < FlowingGeometry.rows.length; i++) {
-      final y = FlowingGeometry.rows[i];
+    for (var i = 0; i < engraving.geometry.rows.length; i++) {
+      final y = engraving.geometry.rows[i];
       canvas.drawLine(Offset(0, y), Offset(width, y), stringPaint);
       textPainter(const ['A', 'E', 'C', 'G'][i], _mutedGlyph, 12)
           .paint(canvas, Offset(4, y - 6));
@@ -359,19 +364,19 @@ class _FlowingPainter extends CustomPainter {
       ..color = _highlightRed
       ..strokeWidth = 1.6;
     canvas.drawLine(
-      Offset(cursorX, FlowingGeometry.rows.first - 6),
-      Offset(cursorX, FlowingGeometry.rows.last + 6),
+      Offset(cursorX, engraving.geometry.rows.first - 6),
+      Offset(cursorX, engraving.geometry.rows.last + 6),
       cursorPaint,
     );
-    canvas.drawCircle(Offset(cursorX, FlowingGeometry.rows.first - 10), 3, cursorPaint);
+    canvas.drawCircle(Offset(cursorX, engraving.geometry.rows.first - 10), 3, cursorPaint);
   }
 
   void _paintBars(Canvas canvas, double windowLeft, double windowRight) {
     for (final bar in engraving.bars) {
       if (bar.lineX < windowLeft - 1 || bar.lineX > windowRight + 1) continue;
       canvas.drawLine(
-        Offset(bar.lineX, FlowingGeometry.rows.first),
-        Offset(bar.lineX, FlowingGeometry.rows.last),
+        Offset(bar.lineX, engraving.geometry.rows.first),
+        Offset(bar.lineX, engraving.geometry.rows.last),
         Paint()
           ..color = _barLine
           ..strokeWidth = 0.8,
@@ -408,7 +413,7 @@ class _FlowingPainter extends CustomPainter {
       final tp = textPainter(glyph.restGlyph, isActive ? _highlightRed : _mutedGlyph,
           30, family: 'Bravura');
       tp.paint(canvas, Offset(glyph.restX! - tp.width / 2,
-          FlowingGeometry.restY - tp.height * 0.78));
+          engraving.geometry.restY - tp.height * 0.78));
       return;
     }
 
@@ -416,7 +421,7 @@ class _FlowingPainter extends CustomPainter {
     if (glyph.stemX != null) {
       canvas.drawLine(
         Offset(glyph.stemX!, glyph.stemTop),
-        Offset(glyph.stemX!, FlowingGeometry.stemBottom),
+        Offset(glyph.stemX!, engraving.geometry.stemBottom),
         Paint()
           ..color = _mutedGlyph
           ..strokeWidth = 1.1,
@@ -427,7 +432,7 @@ class _FlowingPainter extends CustomPainter {
     final flag = glyph.flag;
     if (flag != null) {
       for (var f = 0; f < flag.count; f++) {
-        final y = flag.y - f * FlowingGeometry.beamGap;
+        final y = flag.y - f * engraving.geometry.beamGap;
         final path = Path()
           ..moveTo(flag.x, y)
           ..quadraticBezierTo(flag.x + 12, y - 2, flag.x + 13, y - 14);
@@ -587,10 +592,10 @@ class _FlowingPainter extends CustomPainter {
       ..strokeWidth = 0.7;
     for (final tick in engraving.timeTicks) {
       if (tick.x < windowLeft - 30 || tick.x > windowRight + 30) continue;
-      canvas.drawLine(Offset(tick.x, FlowingGeometry.timeTick),
-          Offset(tick.x, FlowingGeometry.timeTick + 5), tickPaint);
+      canvas.drawLine(Offset(tick.x, engraving.geometry.timeTick),
+          Offset(tick.x, engraving.geometry.timeTick + 5), tickPaint);
       textPainter(tick.label, _faintGlyph, 10)
-          .paint(canvas, Offset(tick.x + 4, FlowingGeometry.timeLabel));
+          .paint(canvas, Offset(tick.x + 4, engraving.geometry.timeLabel));
     }
   }
 
@@ -600,15 +605,15 @@ class _FlowingPainter extends CustomPainter {
     }
     final endX = engraving.endBarX;
     canvas.drawLine(
-      Offset(endX, FlowingGeometry.rows.first),
-      Offset(endX, FlowingGeometry.rows.last),
+      Offset(endX, engraving.geometry.rows.first),
+      Offset(endX, engraving.geometry.rows.last),
       Paint()
         ..color = _mutedGlyph
         ..strokeWidth = 1,
     );
     canvas.drawLine(
-      Offset(endX + 5, FlowingGeometry.rows.first),
-      Offset(endX + 5, FlowingGeometry.rows.last),
+      Offset(endX + 5, engraving.geometry.rows.first),
+      Offset(endX + 5, engraving.geometry.rows.last),
       Paint()
         ..color = _mutedGlyph
         ..strokeWidth = 3,
