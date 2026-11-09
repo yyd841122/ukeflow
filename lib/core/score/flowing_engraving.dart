@@ -469,7 +469,7 @@ class FlowingEngraving {
       final wave = plan.brushes.where((b) => b.eventId == e.id).firstOrNull;
       final waveBx = wave == null || e.notes.isEmpty
           ? null
-          : x - (e.notes.any((n) => n.isNaturalHarmonic) ? 20.0 : 9.0);
+          : x - (e.notes.any((n) => n.isNaturalHarmonic) ? 32.0 : 17.0);
       final waveTop = e.notes.isEmpty
           ? 0.0
           : e.notes.map((n) => rowY(n.stringNo)).reduce(math.min) - 3;
