@@ -23,6 +23,8 @@ class FlowingNoteScheduler {
     required this.attacks,
     this.duration,
     this.speed = 1.0,
+    this.loopStart,
+    this.loopEnd,
     this.onFinished,
     this.onError,
     this.pollInterval = const Duration(milliseconds: 40),
@@ -44,6 +46,13 @@ class FlowingNoteScheduler {
   /// 慢放倍率(票01 三档 0.5/0.75/1.0):只缩放时刻轴——音乐时刻 m 的
   /// 攻击在引擎时刻 t0 + m/speed 响;KS 音色基频不变,节距照旧。
   final double speed;
+
+  /// AB 循环窗口(音乐秒,票02;两者齐备且 start < end 才生效)。B 独占:
+  /// 响到 B 即回 A;越 B 时刻把「绝对时刻 < 回跳点」的在途声全停(旧轮
+  /// 尾音截断,不叠上一轮余音),新轮已跨缝预定的声保留——A 点不重音
+  /// 不漏音。循环中 [duration] 曲末检查不生效(循环直到用户停)。
+  final Duration? loopStart;
+  final Duration? loopEnd;
   final void Function()? onFinished;
   final void Function(Object error)? onError;
 
@@ -58,6 +67,35 @@ class FlowingNoteScheduler {
   Duration? _t0;
   int _next = 0;
   bool _finishedFired = false;
+
+  /// 循环轮次的音乐域累计偏移(k·窗口长;纯音乐域推进——越过 B 的攻击
+  /// 即触发进下一轮,提前至多一个 lookahead 跨接缝预定,接缝零空拍;
+  /// 与视图的模回跳公式出自同一 t0,音画结构同源)。
+  Duration _passBase = Duration.zero;
+
+  /// 已做过截尾的轮次基线(每轮越 B 只截一次)。
+  Duration? _cutDoneBase;
+
+  bool get _loopActive {
+    final a = loopStart;
+    final b = loopEnd;
+    return a != null && b != null && b > a;
+  }
+
+  /// 第一个音乐时刻 ≥ [musicTime] 的攻击下标(二分)。
+  int _firstIndexFrom(Duration musicTime) {
+    var lo = 0;
+    var hi = attacks.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (attacks[mid].time < musicTime) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
 
   bool get running => _timer != null;
 
@@ -125,6 +163,8 @@ class FlowingNoteScheduler {
     _pending.clear();
     _t0 = null;
     _next = 0;
+    _passBase = Duration.zero;
+    _cutDoneBase = null;
     return pending;
   }
 
@@ -135,12 +175,27 @@ class FlowingNoteScheduler {
       final now = engine.engineTime();
       final from = now - _maxLate;
       final limit = now + _lookahead;
-      while (_next < attacks.length) {
-        final attack = attacks[_next];
-        final time = t0 + _scaled(attack.time);
+      final looping = _loopActive;
+      final a = looping ? loopStart! : null;
+      final b = looping ? loopEnd! : null;
+      while (true) {
+        // 需要进下一轮:攻击走完(循环永不走完)或越过 B。
+        var needPass = _next >= attacks.length;
+        if (!needPass && b != null && attacks[_next].time >= b) needPass = true;
+        if (needPass) {
+          if (b == null) break; // 非循环:攻击奏毕。
+          // 本轮窗口奏毕,进下一轮(纯音乐域推进,跨接缝提前预定)。
+          final first = _firstIndexFrom(a!);
+          if (first >= attacks.length || attacks[first].time >= b) {
+            break; // 窗内无攻击:无可推进项(截尾仍按时刻照做)。
+          }
+          _passBase += b - a;
+          _next = first;
+        }
+        final time = t0 + _scaled(attacks[_next].time + _passBase);
         if (time > limit) break;
         if (time >= from) {
-          final sounds = pickSound(attack.freqs);
+          final sounds = pickSound(attacks[_next].freqs);
           for (final sound in sounds) {
             if (sound == null) continue;
             _pending.add((voice: engine.playScheduled(sound, time), time: time));
@@ -148,12 +203,31 @@ class FlowingNoteScheduler {
         }
         _next++;
       }
-      final end = duration;
-      if (end != null && !_finishedFired && now >= t0 + _scaled(end)) {
-        _finishedFired = true;
-        stop(silenceRinging: false);
-        onFinished?.call();
-        return;
+      if (looping) {
+        // 越 B 截尾:上一轮的 B 绝对时刻一到,停掉绝对时刻 < 回跳点的
+        // 在途声(旧轮尾音,含刚过 B 未理的预定),新轮跨缝预定(时刻
+        // ≥ 回跳点)保留。每轮只做一次。
+        final wrapAt =
+            t0 + _scaled(b! + _passBase - (b - a!));
+        if (now >= wrapAt && _cutDoneBase != _passBase) {
+          _cutDoneBase = _passBase;
+          for (final entry in _pending) {
+            if (entry.time < wrapAt) {
+              try {
+                engine.stop(entry.voice);
+              } catch (_) {}
+            }
+          }
+          _pending.removeWhere((e) => e.time < wrapAt);
+        }
+      } else {
+        final end = duration;
+        if (end != null && !_finishedFired && now >= t0 + _scaled(end)) {
+          _finishedFired = true;
+          stop(silenceRinging: false);
+          onFinished?.call();
+          return;
+        }
       }
       // 清理 5 秒前的旧记录,长跑不积内存。
       const keep = Duration(seconds: 5);

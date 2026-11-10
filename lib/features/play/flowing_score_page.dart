@@ -269,6 +269,8 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
               ),
             if (score != null && state.status != FlowingStatus.loading)
               _speedSelector(state, controller),
+            if (score != null && state.status != FlowingStatus.loading)
+              _loopControls(state, controller),
             if (score == null && state.status == FlowingStatus.loading)
               const Padding(
                 padding: EdgeInsets.all(12),
@@ -299,6 +301,62 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
         showSelectedIcon: false,
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
         onSelectionChanged: (selection) => controller.setSpeed(selection.first),
+      ),
+    );
+  }
+
+  /// AB 循环三钮(票02:当前位设 A/设 B/清)+ 状态标签。设 A/设 B 独立
+  /// 槽位,A<B 才挂循环;播放中即挂(可听位连续)。
+  Widget _loopControls(
+    FlowingPracticeState state,
+    FlowingPracticeController controller,
+  ) {
+    final a = state.loopStart;
+    final b = state.loopEnd;
+    final loop = state.activeLoop;
+    final hint = loop != null
+        ? '循环 ${_format(loop.start)}–${_format(loop.end)}'
+        : (a == null && b == null)
+            ? '走到段头设 A、段尾设 B,反复练这段'
+            : 'A ${a == null ? '—' : _format(a)} · B ${b == null ? '—' : _format(b)} · A<B 才循环';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          TextButton(
+            key: const Key('loop-set-a'),
+            onPressed: controller.markLoopStart,
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: _glyph),
+            child: const Text('设A'),
+          ),
+          TextButton(
+            key: const Key('loop-set-b'),
+            onPressed: controller.markLoopEnd,
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: _glyph),
+            child: const Text('设B'),
+          ),
+          TextButton(
+            key: const Key('loop-clear'),
+            onPressed: (a == null && b == null) ? null : controller.clearLoop,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('清循环'),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: loop != null ? _highlightRed : _mutedGlyph,
+                  fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }

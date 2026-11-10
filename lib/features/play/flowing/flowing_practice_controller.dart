@@ -42,6 +42,8 @@ class FlowingPracticeState {
     this.positionSeconds = 0,
     this.t0,
     this.speed = 1.0,
+    this.loopStart,
+    this.loopEnd,
     this.error,
   });
 
@@ -56,7 +58,20 @@ class FlowingPracticeState {
 
   /// 慢放倍率(票01 三档 0.5/0.75/1.0):只缩放时间轴,排版几何不动。
   final double speed;
+
+  /// AB 循环选段(票02,音乐秒;独立槽位)。两端齐备且 start < end 才
+  /// 生效,见 [activeLoop];不满足时槽位保留展示但不挂循环。
+  final double? loopStart;
+  final double? loopEnd;
   final String? error;
+
+  /// 生效中的循环窗口;null = 不循环。
+  ({double start, double end})? get activeLoop {
+    final a = loopStart;
+    final b = loopEnd;
+    if (a == null || b == null || !(b > a)) return null;
+    return (start: a, end: b);
+  }
 
   FlowingPracticeState copyWith({
     FlowingStatus? status,
@@ -64,9 +79,12 @@ class FlowingPracticeState {
     double? positionSeconds,
     Duration? t0,
     double? speed,
+    double? loopStart,
+    double? loopEnd,
     String? error,
     bool clearT0 = false,
     bool clearError = false,
+    bool clearLoop = false,
   }) {
     return FlowingPracticeState(
       status: status ?? this.status,
@@ -74,6 +92,8 @@ class FlowingPracticeState {
       positionSeconds: positionSeconds ?? this.positionSeconds,
       t0: clearT0 ? null : (t0 ?? this.t0),
       speed: speed ?? this.speed,
+      loopStart: clearLoop ? null : (loopStart ?? this.loopStart),
+      loopEnd: clearLoop ? null : (loopEnd ?? this.loopEnd),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -158,17 +178,23 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
 
   /// 当前音乐秒(唯一时间源=引擎时钟;未播放时为静态位置)。慢放:
   /// 音乐秒 = speed ×(引擎时钟 − t0),视图红线推进随之降为
-  /// pixelsPerSecond × speed,排版几何不动(票01)。
+  /// pixelsPerSecond × speed,排版几何不动(票01)。循环挂上时按窗口
+  /// 模回跳(B 独占):raw ≥ A 即 mod 进 [A,B)——与调度器的纯音乐域
+  /// 推进出自同一 t0,音画同源同刻(票02)。
   double currentSeconds() {
     final t0 = state.t0;
     final score = state.score;
     if (t0 == null || score == null) return state.positionSeconds;
-    final wallSeconds =
-        (_engine.engineTime() - t0).inMicroseconds / Duration.microsecondsPerSecond;
-    final seconds = state.speed * wallSeconds;
-    if (seconds < 0) return 0;
-    if (seconds > score.durationSeconds) return score.durationSeconds;
-    return seconds;
+    final raw =
+        state.speed * (_engine.engineTime() - t0).inMicroseconds / Duration.microsecondsPerSecond;
+    final loop = state.activeLoop;
+    if (loop != null && raw >= loop.start) {
+      final span = loop.end - loop.start;
+      return loop.start + (raw - loop.start) % span;
+    }
+    if (raw < 0) return 0;
+    if (raw > score.durationSeconds) return score.durationSeconds;
+    return raw;
   }
 
   /// 播放(曲末再按 = 从头;codex 同款)。已在播放时无害幂等。
@@ -186,7 +212,13 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       state = state.copyWith(status: FlowingStatus.error, error: '琴声没有准备好：$error');
       return;
     }
-    final from = state.status == FlowingStatus.finished ? 0.0 : state.positionSeconds;
+    // 循环挂上时窗外起点吸附到 A(codex 同款:position<loop.a 或 ≥
+    // loop.b 都从 A 起跑);窗内起点(含暂停恢复)原地续跑。
+    final loop = state.activeLoop;
+    var from = state.status == FlowingStatus.finished ? 0.0 : state.positionSeconds;
+    if (loop != null && (from < loop.start || from >= loop.end)) {
+      from = loop.start;
+    }
     final speed = state.speed;
     final t0 = _engine.engineTime() -
         Duration(
@@ -271,14 +303,82 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
 
   static final Set<double> _validSpeeds = {0.5, 0.75, 1.0};
 
-  FlowingNoteScheduler _buildScheduler(ReferenceScore score, double speed) {
+  /// 设 A = 当前位(codex 选段同源;票02)。已有 B 且新 A ≥ B 时窗口
+  /// 失效(槽位保留展示,不挂循环),符合「先 A 后 B」的练琴动线。
+  void markLoopStart() => _applyLoop(currentSeconds(), state.loopEnd);
+
+  /// 设 B = 当前位。
+  void markLoopEnd() => _applyLoop(state.loopStart, currentSeconds());
+
+  /// 清除循环。
+  void clearLoop() => _applyLoop(null, null);
+
+  /// 应用循环槽位(钳制到曲长)。播放中即挂:可听位连续——新窗外且
+  /// ≥ B 按模回跳进窗(与红线公式一致),其余原地续;一律重锚
+  /// (t0 = now − pos/speed,此后 raw == 可听位)并重建调度器
+  /// (consumedUntil=now:已响不重放,被停的在途由新调度器同刻重排,
+  /// 同 setSpeed 纪律)。清除/失效时从可听位继续线性推进,无跳变。
+  void _applyLoop(double? a, double? b) {
+    final score = state.score;
+    if (score == null) return;
+    final ca = a?.clamp(0.0, score.durationSeconds);
+    final cb = b?.clamp(0.0, score.durationSeconds);
+    final clear = ca == null && cb == null;
+    if (state.status != FlowingStatus.playing || state.t0 == null) {
+      state = state.copyWith(loopStart: ca, loopEnd: cb, clearLoop: clear);
+      return;
+    }
+    var pos = currentSeconds();
+    final loop = (ca != null && cb != null && cb > ca)
+        ? (start: ca, end: cb)
+        : null;
+    if (loop != null && pos >= loop.end) {
+      pos = loop.start + (pos - loop.start) % (loop.end - loop.start);
+    }
+    final now = _engine.engineTime();
+    final old = _scheduler;
+    final t0 = now -
+        Duration(
+            microseconds: (pos / state.speed * Duration.microsecondsPerSecond)
+                .round());
+    final scheduler = _buildScheduler(score, state.speed, loop: loop);
+    old?.stop(silenceRinging: false);
+    scheduler.start(t0: t0, consumedUntil: now);
+    _scheduler = scheduler;
+    state = state.copyWith(
+      loopStart: ca,
+      loopEnd: cb,
+      clearLoop: clear,
+      t0: t0,
+      positionSeconds: pos,
+    );
+    if (kDebugMode) {
+      debugPrint('UFLOW_FLOW LOOP ${loop == null ? 'off' : '${loop.start}-${loop.end}'} '
+          'pos=${pos.toStringAsFixed(3)} engMs=${now.inMilliseconds}');
+    }
+  }
+
+  /// [loop] 显式给定时优先(挂循环瞬间 state 还没换新值,见 _applyLoop);
+  /// 缺省读当前 state。
+  FlowingNoteScheduler _buildScheduler(
+    ReferenceScore score,
+    double speed, {
+    ({double start, double end})? loop,
+  }) {
     final pluck = ref.read(pluckPlayerProvider);
     final controller = this;
+    final effectiveLoop = loop ?? state.activeLoop;
     return FlowingNoteScheduler(
       engine: _engine,
       attacks: _attacks,
       duration: Duration(milliseconds: (score.durationSeconds * 1000).round()),
       speed: speed,
+      loopStart: effectiveLoop == null
+          ? null
+          : Duration(milliseconds: (effectiveLoop.start * 1000).round()),
+      loopEnd: effectiveLoop == null
+          ? null
+          : Duration(milliseconds: (effectiveLoop.end * 1000).round()),
       pickSound: (freqs) => [for (final f in freqs) pluck.loadedSound(f)],
       onFinished: () {
         if (_disposed) return;

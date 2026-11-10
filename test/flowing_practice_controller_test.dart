@@ -355,4 +355,151 @@ void main() {
     expect(() => controller().setSpeed(0.9), throwsArgumentError);
     expect(state().speed, 1.0);
   });
+
+  /// 循环测试脚手架:窗 [0, 2.2](全窗含攻击 0.5/1.0/2.0),静止态用
+  /// seek 定位标记(标记读静态位),播放锚 t0=0。
+  Future<void> pumpLoopWindow() async {
+    await pumpLoad();
+    controller().seek(0);
+    controller().markLoopStart();
+    controller().seek(2.2);
+    controller().markLoopEnd();
+    expect(state().activeLoop!.start, 0);
+    expect(state().activeLoop!.end, closeTo(2.2, 1e-9));
+    controller().seek(0);
+    engine.now = Duration.zero;
+    await controller().play();
+  }
+
+  /// 步进推进:每步 350ms(< lookahead 400ms,相邻窗重叠),攻击绝不
+  /// 被迟到容差跳过。
+  Future<void> pumpSteps(int steps) async {
+    for (var i = 0; i < steps; i++) {
+      engine.advance(const Duration(milliseconds: 350));
+      await pumpPolls(rounds: 1);
+    }
+  }
+
+  test('循环:越 B 无缝回 A——下轮攻击跨缝预定,旧轮尾音在回跳点截停', () async {
+    await pumpLoopWindow();
+    await pumpSteps(7); // now=2.45s:越 wrap 2.2,第二轮 0.5@2.7 已进窗。
+    // 第一轮:0.5/1.0/2.0 各一声;第二轮 0.5 → 2.2+0.5 = 2.7 跨缝预定。
+    final at2700 = engine.scheduleLog
+        .where((c) => c.time == const Duration(milliseconds: 2700))
+        .toList();
+    expect(at2700.length, 1, reason: '第二轮首攻跨缝预定');
+    // 旧轮 2.0s 的声在回跳点截停(不叠上一轮余音);第二轮 2.7s 声保留。
+    final playedAt2000 =
+        engine.scheduleLog.where((c) => c.time == const Duration(seconds: 2));
+    expect(playedAt2000, isNotEmpty);
+    expect(playedAt2000.every((c) => c.stopped), isTrue, reason: '旧轮尾音截停');
+    expect(at2700.single.stopped, isFalse, reason: '新轮 A 点声保留');
+    // 第二轮 1.0 → 3.2 未进窗,不预定。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.time == const Duration(milliseconds: 3200)),
+      isEmpty,
+    );
+    // 视图红线模回跳:raw=2.45 → 2.45 % 2.2 = 0.25。
+    expect(controller().currentSeconds(), closeTo(0.25, 1e-6));
+  });
+
+  test('循环:三轮推进无漏无重,窗内攻击每轮恰预定一次', () async {
+    await pumpLoopWindow();
+    await pumpSteps(16); // now=5.6s:近三整轮。
+    // 攻击 m∈{0.5,1.0,2.0} 第 k 轮绝对时刻 = 2.2k + m;≤ now+lookahead
+    // (6.0) 的都该预定且恰一次。
+    final expected = <int>[];
+    for (final m in const [500, 1000, 2000]) {
+      for (var k = 0; k < 3; k++) {
+        final t = 2200 * k + m;
+        if (t <= 6000) expected.add(t);
+      }
+    }
+    // 期望 = (绝对时刻 → 声数):2.0s 攻击是双音和弦,一轮两声。
+    final expectedVoices = <int, int>{};
+    for (final m in const [500, 1000, 2000]) {
+      final voices = m == 2000 ? 2 : 1;
+      for (var k = 0; k < 3; k++) {
+        final t = 2200 * k + m;
+        if (t <= 6000) expectedVoices[t] = voices;
+      }
+    }
+    expect(expectedVoices.length, 8);
+    final counts = <int, int>{};
+    for (final call in engine.scheduleLog) {
+      counts[call.time.inMilliseconds] =
+          (counts[call.time.inMilliseconds] ?? 0) + 1;
+    }
+    expect(engine.scheduleLog.length, 10,
+        reason: '循环模式窗外(曲末段)攻击绝不预定');
+    for (final entry in expectedVoices.entries) {
+      expect(counts[entry.key] ?? 0, entry.value,
+          reason: '攻击@${entry.key} 应恰 ${entry.value} 声,实际 ${counts[entry.key] ?? 0}');
+    }
+  });
+
+  test('循环中暂停恢复:位置冻结窗内,恢复不重放已消费攻击', () async {
+    await pumpLoopWindow();
+    engine.advance(const Duration(milliseconds: 700));
+    await pumpPolls(); // 1.0 攻击进窗预定;0.5 已越容差跳过。
+    controller().pause();
+    expect(state().positionSeconds, closeTo(0.7, 1e-6));
+    expect(state().status, FlowingStatus.paused);
+    engine.advance(const Duration(milliseconds: 300));
+    await controller().play(); // 从 0.7 续,重锚 t0 = now − 0.7。
+    await pumpPolls();
+    final seen = <String, int>{};
+    for (final call in engine.scheduleLog) {
+      final tag = '${call.key}@${call.time}';
+      seen[tag] = (seen[tag] ?? 0) + 1;
+    }
+    for (final entry in seen.entries) {
+      expect(entry.value, 1, reason: '循环恢复重放:${entry.key}');
+    }
+  });
+
+  test('播放中挂循环:位置恰在 B 上按模回跳进窗,重锚无跳变', () async {
+    await pumpLoad();
+    await controller().play(); // t0=0 原速。
+    engine.advance(const Duration(seconds: 3));
+    await pumpPolls();
+    controller().markLoopStart(); // A=3.0(当前位)。
+    engine.advance(const Duration(milliseconds: 500));
+    await pumpPolls();
+    controller().markLoopEnd(); // B=3.5,当前位恰在 B → 回跳 A=3.0。
+    expect(state().activeLoop!.start, closeTo(3.0, 1e-9));
+    expect(state().activeLoop!.end, closeTo(3.5, 1e-9));
+    // 重锚后可听位 = 3.0 + (3.5−3.0)%0.5 = 3.0,位置连续无跳变。
+    expect(controller().currentSeconds(), closeTo(3.0, 1e-6));
+    engine.advance(const Duration(milliseconds: 400));
+    await pumpPolls();
+    // 窗 [3.0,3.5] 内无攻击:无声预定、无重复、曲末不触发。
+    expect(state().status, FlowingStatus.playing);
+    final seen = <String, int>{};
+    for (final call in engine.scheduleLog) {
+      final tag = '${call.key}@${call.time}';
+      seen[tag] = (seen[tag] ?? 0) + 1;
+    }
+    for (final entry in seen.entries) {
+      expect(entry.value, 1, reason: '挂循环重放:${entry.key}');
+    }
+  });
+
+  test('清循环:从可听位继续线性推进无跳变;再播窗外起点不吸附', () async {
+    await pumpLoopWindow();
+    await pumpSteps(8); // now=2.8,已回跳:可听位 = 2.8 % 2.2 = 0.6。
+    expect(controller().currentSeconds(), closeTo(0.6, 1e-6));
+    controller().clearLoop();
+    expect(state().activeLoop, isNull);
+    expect(controller().currentSeconds(), closeTo(0.6, 1e-6),
+        reason: '清除重锚,可听位连续');
+    controller().pause();
+    controller().seek(4.0);
+    await controller().play();
+    engine.advance(const Duration(milliseconds: 200));
+    await pumpPolls();
+    expect(controller().currentSeconds(), closeTo(4.2, 1e-6),
+        reason: '无循环时窗外起点不吸附');
+  });
 }
