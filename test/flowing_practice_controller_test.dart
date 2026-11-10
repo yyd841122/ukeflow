@@ -255,4 +255,104 @@ void main() {
     expect(state().status, FlowingStatus.finished);
     expect(state().positionSeconds, 6);
   });
+
+  test('慢放:0.5 倍攻击时刻翻倍,音高键不变(KS 节距照旧)', () async {
+    await pumpLoad();
+    controller().setSpeed(0.5);
+    expect(state().speed, 0.5);
+    engine.now = const Duration(seconds: 1);
+    await controller().play(); // t0 = 1s(从 0 起)。
+    // 推进 0.7s → 窗 [1.26, 2.1):慢放时刻 2.0s 进窗;若速度被无视,
+    // 原速时刻 1.5s 会同窗预定——其缺席即缩放生效之证。
+    engine.advance(const Duration(milliseconds: 700));
+    await pumpPolls();
+    // 音乐 0.5s 的攻击 → 引擎 t0+1.0s = 2.0s 响。
+    final at2000 = engine.scheduleLog
+        .where((c) => c.time == const Duration(milliseconds: 2000))
+        .toList();
+    expect(at2000.length, 1);
+    expect(at2000.single.key, contains('440'), reason: '音高键与原速完全一致');
+    // 原速时刻(t0+0.5s=1.5s)绝无预定——时刻轴确实整体缩放。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.time == const Duration(milliseconds: 1500)),
+      isEmpty,
+    );
+  });
+
+  test('慢放:曲末按速度推迟到引擎 12s,finished 音乐位置仍是曲长', () async {
+    await pumpLoad();
+    controller().setSpeed(0.5);
+    await controller().play();
+    engine.advance(const Duration(seconds: 7));
+    await pumpPolls();
+    expect(state().status, FlowingStatus.playing, reason: '引擎 7s 音乐才 3.5s');
+    expect(controller().currentSeconds(), closeTo(3.5, 1e-6));
+    engine.advance(const Duration(seconds: 6));
+    await pumpPolls(rounds: 2);
+    expect(state().status, FlowingStatus.finished);
+    expect(state().positionSeconds, 6);
+  });
+
+  test('变速即切:位置连续无突跳,推进斜率确为新速度', () async {
+    await pumpLoad();
+    engine.now = const Duration(seconds: 1);
+    await controller().play(); // t0=1s 原速。
+    engine.advance(const Duration(milliseconds: 800));
+    await pumpPolls(); // 攻击@0.5(引擎 1.5s)已响。
+    final musicBefore = controller().currentSeconds();
+    controller().setSpeed(0.75);
+    // 重锚后当前音乐秒逐微秒连续,positionSeconds 冻结在同一处。
+    expect(controller().currentSeconds(), closeTo(musicBefore, 1e-6));
+    expect(state().positionSeconds, closeTo(musicBefore, 1e-6));
+    // 引擎推进 1s,音乐只走 0.75s。
+    engine.advance(const Duration(seconds: 1));
+    expect(controller().currentSeconds(), closeTo(musicBefore + 0.75, 1e-6));
+  });
+
+  test('变速即切:已响攻击不重放,任何 (音源,时刻) 至多预定一次', () async {
+    await pumpLoad();
+    engine.now = const Duration(seconds: 1);
+    await controller().play();
+    engine.advance(const Duration(milliseconds: 800));
+    await pumpPolls();
+    controller().setSpeed(0.75);
+    engine.advance(const Duration(milliseconds: 400));
+    await pumpPolls();
+    final seen = <String, int>{};
+    for (final call in engine.scheduleLog) {
+      final tag = '${call.key}@${call.time}';
+      seen[tag] = (seen[tag] ?? 0) + 1;
+    }
+    for (final entry in seen.entries) {
+      expect(entry.value, 1, reason: '变速重放:${entry.key}');
+    }
+    // 新锚下未消费攻击照常预定:音乐 1.0s → 引擎 733333μs+1333333μs
+    // = 2066666μs(0.75 缩放的精确舍入值)。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.time == const Duration(microseconds: 2066666)),
+      isNotEmpty,
+    );
+  });
+
+  test('静止切速只换倍率,再播按新速度锚定', () async {
+    await pumpLoad();
+    controller().seek(2.0);
+    controller().setSpeed(0.75);
+    expect(state().speed, 0.75);
+    engine.now = const Duration(seconds: 5);
+    await controller().play(); // t0 = 5 − 2/0.75。
+    await pumpPolls();
+    // 双音和弦@音乐 2.0s → 引擎 t0+2.6667 = 恰好 5.0s,首过即进窗。
+    final at5000 = engine.scheduleLog
+        .where((c) => c.time == const Duration(seconds: 5))
+        .toList();
+    expect(at5000.length, 2, reason: '和弦两声同刻');
+  });
+
+  test('速度白名单:非法值抛 ArgumentError,状态不变', () {
+    expect(() => controller().setSpeed(0.9), throwsArgumentError);
+    expect(state().speed, 1.0);
+  });
 }

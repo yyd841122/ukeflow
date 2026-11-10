@@ -41,6 +41,7 @@ class FlowingPracticeState {
     this.score,
     this.positionSeconds = 0,
     this.t0,
+    this.speed = 1.0,
     this.error,
   });
 
@@ -52,6 +53,9 @@ class FlowingPracticeState {
 
   /// 播放中的时间轴原点引擎时刻;null = 不在播放。
   final Duration? t0;
+
+  /// 慢放倍率(票01 三档 0.5/0.75/1.0):只缩放时间轴,排版几何不动。
+  final double speed;
   final String? error;
 
   FlowingPracticeState copyWith({
@@ -59,6 +63,7 @@ class FlowingPracticeState {
     ReferenceScore? score,
     double? positionSeconds,
     Duration? t0,
+    double? speed,
     String? error,
     bool clearT0 = false,
     bool clearError = false,
@@ -68,6 +73,7 @@ class FlowingPracticeState {
       score: score ?? this.score,
       positionSeconds: positionSeconds ?? this.positionSeconds,
       t0: clearT0 ? null : (t0 ?? this.t0),
+      speed: speed ?? this.speed,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -150,13 +156,16 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     return attacks;
   }
 
-  /// 当前音乐秒(唯一时间源=引擎时钟;未播放时为静态位置)。
+  /// 当前音乐秒(唯一时间源=引擎时钟;未播放时为静态位置)。慢放:
+  /// 音乐秒 = speed ×(引擎时钟 − t0),视图红线推进随之降为
+  /// pixelsPerSecond × speed,排版几何不动(票01)。
   double currentSeconds() {
     final t0 = state.t0;
     final score = state.score;
     if (t0 == null || score == null) return state.positionSeconds;
-    final seconds =
+    final wallSeconds =
         (_engine.engineTime() - t0).inMicroseconds / Duration.microsecondsPerSecond;
+    final seconds = state.speed * wallSeconds;
     if (seconds < 0) return 0;
     if (seconds > score.durationSeconds) return score.durationSeconds;
     return seconds;
@@ -178,9 +187,12 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       return;
     }
     final from = state.status == FlowingStatus.finished ? 0.0 : state.positionSeconds;
+    final speed = state.speed;
     final t0 = _engine.engineTime() -
-        Duration(milliseconds: (from * 1000).round());
-    final scheduler = _buildScheduler(score);
+        Duration(
+            microseconds:
+                (from / speed * Duration.microsecondsPerSecond).round());
+    final scheduler = _buildScheduler(score, speed);
     scheduler.start(t0: t0);
     _scheduler = scheduler;
     _startTelemetry();
@@ -221,13 +233,52 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     );
   }
 
-  FlowingNoteScheduler _buildScheduler(ReferenceScore score) {
+  /// 速度切换(票01 三档 0.5/0.75/1.0;codex transport.setSpeed 同款)。
+  /// 播放中即切:取当前音乐秒按新速度重锚(t0 = now − pos/newSpeed),
+  /// 位置连续无突跳,红线只是斜率瞬时变缓;调度器重建——已响攻击经
+  /// consumedUntil=now 全部越过不重放,旧在途未响预定停弃(其绝对时刻
+  /// 已随速度改变),正在响的尾音不截停自然衰减(与暂停立静不同:
+  /// 变速不该听得见)。
+  void setSpeed(double value) {
+    if (!_validSpeeds.contains(value)) {
+      throw ArgumentError.value(value, 'speed', '只支持 0.5/0.75/1.0');
+    }
+    if (value == state.speed) return;
+    if (state.status != FlowingStatus.playing || state.score == null) {
+      // 静止态只换倍率:下次 play() 按新速度锚定。
+      state = state.copyWith(speed: value);
+      if (kDebugMode) debugPrint('UFLOW_FLOW SPEED $value (静止,待播生效)');
+      return;
+    }
+    final position = currentSeconds();
+    final now = _engine.engineTime();
+    final old = _scheduler;
+    final t0 = now -
+        Duration(
+            microseconds:
+                (position / value * Duration.microsecondsPerSecond).round());
+    final scheduler = _buildScheduler(state.score!, value);
+    old?.stop(silenceRinging: false);
+    scheduler.start(t0: t0, consumedUntil: now);
+    _scheduler = scheduler;
+    state = state.copyWith(speed: value, t0: t0, positionSeconds: position);
+    if (kDebugMode) {
+      debugPrint(
+          'UFLOW_FLOW SPEED $value pos=${position.toStringAsFixed(3)} '
+          'engMs=${now.inMilliseconds}');
+    }
+  }
+
+  static final Set<double> _validSpeeds = {0.5, 0.75, 1.0};
+
+  FlowingNoteScheduler _buildScheduler(ReferenceScore score, double speed) {
     final pluck = ref.read(pluckPlayerProvider);
     final controller = this;
     return FlowingNoteScheduler(
       engine: _engine,
       attacks: _attacks,
       duration: Duration(milliseconds: (score.durationSeconds * 1000).round()),
+      speed: speed,
       pickSound: (freqs) => [for (final f in freqs) pluck.loadedSound(f)],
       onFinished: () {
         if (_disposed) return;
@@ -276,7 +327,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       _telemetryLastWallMs = wallMs;
       final musicSec = currentSeconds();
       debugPrint(
-        'UFLOW_FLOW t music=${musicSec.toStringAsFixed(3)} '
+        'UFLOW_FLOW t speed=${state.speed} music=${musicSec.toStringAsFixed(3)} '
         'engMs=$engMs wallMs=$wallMs pace=${(dWall == 0 ? 0 : dEng / dWall).toStringAsFixed(3)} '
         'consumed=${scheduler.consumedCount}/${scheduler.total} '
         'pending=${scheduler.pendingCount}',

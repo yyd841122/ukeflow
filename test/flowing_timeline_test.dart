@@ -153,6 +153,41 @@ void main() {
       }
     });
 
+    test('慢放扫描闸:0.5 倍墙钟步进无瞬移,整曲墙钟时长翻倍(票01)', () {
+      final raw =
+          File('assets/scores/sky-city-guistudy.json').readAsStringSync();
+      final score = buildReferenceScore(jsonDecode(raw), pageTempoBpm: 80);
+      const pps = 100.0;
+      final layout = FlowingLayout.fromScore(score, pixelsPerSecond: pps);
+      // 最陡锚点段斜率(与上面 1ms 闸同源)。
+      var maxSeg = 0.0;
+      for (var i = 1; i < layout.anchors.length; i++) {
+        final a = layout.anchors[i - 1];
+        final b = layout.anchors[i];
+        maxSeg = math.max(maxSeg, (b.x - a.x) / (b.time - a.time));
+      }
+      // 慢放只缩时间轴:排版几何不动,墙钟 16ms 一帧、音乐走 8ms,
+      // 每帧位移不超「最陡段 × speed」——现有扫描闸按新斜率复跑。
+      const speed = 0.5;
+      const wallDt = 0.016;
+      var previous = layout.positionAt(0);
+      var wall = 0.0;
+      while (wall < score.durationSeconds / speed) {
+        wall += wallDt;
+        final t = math.min(wall * speed, score.durationSeconds);
+        final x = layout.positionAt(t);
+        expect(x - previous, lessThan(maxSeg * wallDt * speed + 1e-6),
+            reason: '墙钟 $wall 瞬移:${x - previous} 超 ${maxSeg * wallDt * speed}');
+        previous = x;
+      }
+      expect(previous, layout.endX, reason: '半速走完全程,终点照达');
+      // 红线墙钟推进速率 ≤ 最陡段 × speed(窗口若跨小节留白,交界
+      // 有意加速,codex 同款接受项——上限用与逐帧闸同源的最陡段)。
+      final rate = (layout.positionAt(31 * speed) - layout.positionAt(29 * speed)) / 2;
+      expect(rate, greaterThan(0));
+      expect(rate, lessThan(maxSeg * speed + 1e-6));
+    });
+
     test('连续性:锚点时间严格递增(禁同刻不同位);任意采样无跳变,单步不超最陡段斜率',
         () {
       final raw =

@@ -22,6 +22,7 @@ class FlowingNoteScheduler {
     required this.pickSound,
     required this.attacks,
     this.duration,
+    this.speed = 1.0,
     this.onFinished,
     this.onError,
     this.pollInterval = const Duration(milliseconds: 40),
@@ -37,8 +38,12 @@ class FlowingNoteScheduler {
   /// 休止无攻击、延音尾音剔除、和弦并发一组)。
   final List<FlowingAttack> attacks;
 
-  /// 曲末时刻(相对时间轴原点);到达后触发一次 [onFinished]。
+  /// 曲末时刻(相对时间轴原点的**音乐秒**);到达后触发一次 [onFinished]。
   final Duration? duration;
+
+  /// 慢放倍率(票01 三档 0.5/0.75/1.0):只缩放时刻轴——音乐时刻 m 的
+  /// 攻击在引擎时刻 t0 + m/speed 响;KS 音色基频不变,节距照旧。
+  final double speed;
   final void Function()? onFinished;
   final void Function(Object error)? onError;
 
@@ -55,6 +60,11 @@ class FlowingNoteScheduler {
   bool _finishedFired = false;
 
   bool get running => _timer != null;
+
+  /// 音乐时长 → 引擎时长(慢放 = 除以速度;速度 1 时零开销直通)。
+  Duration _scaled(Duration musicTime) => speed == 1.0
+      ? musicTime
+      : Duration(microseconds: (musicTime.inMicroseconds / speed).round());
 
   /// 锚点(时间轴原点的引擎时刻);未启动为 null。视图按
   /// 「(引擎时刻 − t0)」读当前音乐秒——视觉不进调度(ADR-0005)。
@@ -78,7 +88,7 @@ class FlowingNoteScheduler {
     _finishedFired = false;
     final now = engine.engineTime();
     while (_next < attacks.length) {
-      final time = t0 + attacks[_next].time;
+      final time = t0 + _scaled(attacks[_next].time);
       if (time < now - _maxLate ||
           (consumedUntil != null && time <= consumedUntil)) {
         _next++;
@@ -127,7 +137,7 @@ class FlowingNoteScheduler {
       final limit = now + _lookahead;
       while (_next < attacks.length) {
         final attack = attacks[_next];
-        final time = t0 + attack.time;
+        final time = t0 + _scaled(attack.time);
         if (time > limit) break;
         if (time >= from) {
           final sounds = pickSound(attack.freqs);
@@ -139,7 +149,7 @@ class FlowingNoteScheduler {
         _next++;
       }
       final end = duration;
-      if (end != null && !_finishedFired && now >= t0 + end) {
+      if (end != null && !_finishedFired && now >= t0 + _scaled(end)) {
         _finishedFired = true;
         stop(silenceRinging: false);
         onFinished?.call();

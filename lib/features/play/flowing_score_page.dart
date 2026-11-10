@@ -25,7 +25,7 @@ class FlowingScorePage extends ConsumerStatefulWidget {
 }
 
 class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Ticker? _ticker;
 
   /// 染色红(与票08 横带同一色值,系统内一处语义)。
@@ -58,6 +58,10 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
       setState(() {});
     }
   }
+  // 复数 TickerProviderStateMixin(2026-11-10 真机教训):Single 变体在
+  // 「暂停清 ticker → 同页再播」时 createTicker 二次抛错红屏——我们
+  // dispose 后只置空自持字段,mixin 内部引用仍在;同一页内
+  // play→停→再播(曲末再练一遍、变速前暂停)是常规路径,必须用复数。
 
   /// 纸色描边光晕(数字的遮罩层,codex .fret stroke paper 同款)。
   TextPainter _haloPainter(String text, double fontSize,
@@ -263,6 +267,8 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
                   onChanged: (value) => controller.seek(value),
                 ),
               ),
+            if (score != null && state.status != FlowingStatus.loading)
+              _speedSelector(state, controller),
             if (score == null && state.status == FlowingStatus.loading)
               const Padding(
                 padding: EdgeInsets.all(12),
@@ -270,6 +276,29 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 速度三档(票01;codex 同款 0.5/0.75/1.0,措辞照抄「原速」)。
+  /// 播放中切速即生效(控制器重锚,无突跳);紧凑排,不挤竖屏。
+  Widget _speedSelector(
+    FlowingPracticeState state,
+    FlowingPracticeController controller,
+  ) {
+    return SizedBox(
+      height: 40,
+      child: SegmentedButton<double>(
+        segments: const [
+          ButtonSegment(value: 0.5, label: Text('0.5倍', key: Key('speed-05'))),
+          ButtonSegment(
+              value: 0.75, label: Text('0.75倍', key: Key('speed-075'))),
+          ButtonSegment(value: 1.0, label: Text('原速', key: Key('speed-10'))),
+        ],
+        selected: {state.speed},
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        onSelectionChanged: (selection) => controller.setSpeed(selection.first),
       ),
     );
   }
