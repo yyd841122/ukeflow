@@ -32,8 +32,8 @@ class FlowingLayout {
   factory FlowingLayout.fromScore(
     ReferenceScore score, {
     required double pixelsPerSecond,
-    double leftMargin = 32,
-    double rightMargin = 24,
+    double leftMargin = 10,
+    double rightMargin = 10,
   }) {
     if (!(pixelsPerSecond > 0)) {
       throw ArgumentError.value(pixelsPerSecond, 'pixelsPerSecond', '必须为正');
