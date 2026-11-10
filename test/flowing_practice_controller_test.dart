@@ -87,6 +87,10 @@ void main() {
     // 销毁重建,状态与调度全断。
     container.listen(flowingPracticeProvider, (_, _) {});
     addTearDown(container.dispose);
+    // 旧用例默认关数拍(票03 专测自行开启):起播预备会延迟翻播放状态。
+    container
+        .read(flowingPracticeProvider.notifier)
+        .setCountOptions(countInEnabled: false);
   });
 
   FlowingPracticeController controller() =>
@@ -501,5 +505,119 @@ void main() {
     await pumpPolls();
     expect(controller().currentSeconds(), closeTo(4.2, 1e-6),
         reason: '无循环时窗外起点不吸附');
+  });
+
+  test('数四下:起播先预备,曲谱位置冻结不推进,数完自动起播', () async {
+    await pumpLoad();
+    controller().setCountOptions(countInEnabled: true);
+    engine.now = const Duration(seconds: 1);
+    await controller().play();
+    expect(state().status, FlowingStatus.counting);
+    expect(state().positionSeconds, 0);
+    expect(controller().currentSeconds(), 0, reason: '预备期红线冻结');
+    // 4 记预备 tick:首拍 1.12s(now+120ms lead),拍长 750ms(80bpm)。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.contains('tick'))
+          .map((c) => c.time)
+          .toList(),
+      [
+        const Duration(milliseconds: 1120),
+        const Duration(milliseconds: 1870),
+        const Duration(milliseconds: 2620),
+        const Duration(milliseconds: 3370),
+      ],
+    );
+    // 倒计数:预备第 0.9s 处应在第 2 拍。
+    engine.advance(const Duration(milliseconds: 900));
+    expect(controller().countBeatNow(), 2);
+    // 预备期位置不动(不推进红线、不计入时长)。
+    await pumpPolls();
+    expect(state().status, FlowingStatus.counting);
+    expect(controller().currentSeconds(), 0);
+    // 数完(引擎钟过 countEnd=4.12s)自动起播,t0 锚在起点。
+    engine.advance(const Duration(seconds: 4));
+    await pumpPolls();
+    expect(state().status, FlowingStatus.playing);
+    expect(state().t0, isNotNull);
+    expect(controller().currentSeconds(), closeTo(0, 1e-6));
+    expect(controller().countBeatNow(), isNull);
+  });
+
+  test('数四下:拍长随慢放缩放(0.5 倍 tick 间距翻倍)', () async {
+    await pumpLoad();
+    controller().setCountOptions(countInEnabled: true);
+    controller().setSpeed(0.5);
+    engine.now = const Duration(seconds: 1);
+    await controller().play();
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.contains('tick'))
+          .map((c) => c.time.inMilliseconds)
+          .toList(),
+      [1120, 2620, 4120, 5620],
+      reason: '拍长 750ms/0.5 = 1500ms',
+    );
+    expect(state().status, FlowingStatus.counting);
+  });
+
+  test('暂停续播不重数;seek 换段与曲末重开重数', () async {
+    await pumpLoad();
+    controller().setCountOptions(countInEnabled: true);
+    engine.now = Duration.zero;
+    await controller().play();
+    engine.advance(const Duration(seconds: 5));
+    await pumpPolls();
+    expect(state().status, FlowingStatus.playing);
+    controller().pause();
+    final ticksBefore =
+        engine.scheduleLog.where((c) => c.key.contains('tick')).length;
+    await controller().play(); // 暂停续播:不重数(codex 同款)。
+    expect(state().status, FlowingStatus.playing);
+    expect(engine.scheduleLog.where((c) => c.key.contains('tick')).length,
+        ticksBefore);
+    controller().pause();
+    controller().seek(1.0);
+    await controller().play(); // 换段:重数。
+    expect(state().status, FlowingStatus.counting);
+    engine.advance(const Duration(seconds: 4));
+    await pumpPolls();
+    expect(state().status, FlowingStatus.playing);
+  });
+
+  test('数拍开关关掉:直接起播无预备 tick', () async {
+    await pumpLoad(); // setUp 默认关数拍。
+    await controller().play();
+    expect(state().status, FlowingStatus.playing);
+    expect(engine.scheduleLog.where((c) => c.key.contains('tick')), isEmpty);
+  });
+
+  test('循环每轮数四下:回跳 4 记 tick,下一轮后移 gap,红线 gap 段定在 A', () async {
+    await pumpLoopWindow(); // 窗 [0, 2.2]。
+    controller().setCountOptions(countPerLoop: true);
+    await controller().play(); // countIn 关,直接播。
+    await pumpSteps(7); // now=2.45,过 wrap 2.2(wrap 在 2.1 轮询提前触发)。
+    // 4 记轮间 tick @ wrap 2.2 + j×750ms。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.contains('tick'))
+          .map((c) => c.time.inMilliseconds)
+          .toList(),
+      [2200, 2950, 3700, 4450],
+    );
+    // 视图:gap 段(曲谱时间不动)红线定在 A=0;倒计数第 1 拍。
+    expect(controller().currentSeconds(), closeTo(0, 1e-6));
+    expect(controller().countBeatNow(), 1);
+    // 继续推进过 gap:下一轮 0.5 → 2.2 + 3.0(gap=4拍) + 0.5 = 5.7s,
+    // now=5.6 进 lookahead 窗预定;红线重新起走(A + 0.4)。
+    await pumpSteps(9); // now=5.6。
+    expect(
+      engine.scheduleLog.where((c) =>
+          c.time == const Duration(milliseconds: 5700) &&
+          !c.key.contains('tick')),
+      isNotEmpty,
+    );
+    expect(controller().currentSeconds(), closeTo(0.4, 1e-6));
+    expect(controller().countBeatNow(), isNull, reason: 'gap 段已过,回到正曲段');
   });
 }

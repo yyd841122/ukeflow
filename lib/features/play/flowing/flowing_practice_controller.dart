@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/audio/audio_engine.dart';
 import '../../../core/audio/providers.dart';
+import '../../../core/audio/tick_sounds.dart';
 import '../../../core/score/flowing_timeline.dart';
 import '../../../core/score/reference_score.dart';
 import 'flowing_note_scheduler.dart';
@@ -21,6 +22,9 @@ enum FlowingStatus {
 
   /// 就绪,等待播放。
   ready,
+
+  /// 预备数拍中(票03:四下计数音,曲谱位置定住不推进;数完自动起播)。
+  counting,
 
   /// 播放中(视觉当前秒由视图按 t0+引擎时钟逐帧读,见 [t0])。
   playing,
@@ -44,6 +48,10 @@ class FlowingPracticeState {
     this.speed = 1.0,
     this.loopStart,
     this.loopEnd,
+    this.countInEnabled = true,
+    this.countPerLoop = false,
+    this.countStart,
+    this.countBeatDur,
     this.error,
   });
 
@@ -63,6 +71,19 @@ class FlowingPracticeState {
   /// 生效,见 [activeLoop];不满足时槽位保留展示但不挂循环。
   final double? loopStart;
   final double? loopEnd;
+
+  /// 数四下(票03):起播/换段前预备数拍(codex 同款两开关;暂停续播
+  /// 不重数)。
+  final bool countInEnabled;
+
+  /// 循环每轮也数四下(仅挂循环时生效)。
+  final bool countPerLoop;
+
+  /// 预备数拍的首拍引擎时刻(仅 counting 状态非空;视图倒计数用)。
+  final Duration? countStart;
+
+  /// 数拍节拍时长(音乐域 60/tempo;视图按 speed 缩放显示倒计数)。
+  final Duration? countBeatDur;
   final String? error;
 
   /// 生效中的循环窗口;null = 不循环。
@@ -81,10 +102,15 @@ class FlowingPracticeState {
     double? speed,
     double? loopStart,
     double? loopEnd,
+    bool? countInEnabled,
+    bool? countPerLoop,
+    Duration? countStart,
+    Duration? countBeatDur,
     String? error,
     bool clearT0 = false,
     bool clearError = false,
     bool clearLoop = false,
+    bool clearCount = false,
   }) {
     return FlowingPracticeState(
       status: status ?? this.status,
@@ -94,6 +120,10 @@ class FlowingPracticeState {
       speed: speed ?? this.speed,
       loopStart: clearLoop ? null : (loopStart ?? this.loopStart),
       loopEnd: clearLoop ? null : (loopEnd ?? this.loopEnd),
+      countInEnabled: countInEnabled ?? this.countInEnabled,
+      countPerLoop: countPerLoop ?? this.countPerLoop,
+      countStart: clearCount ? null : (countStart ?? this.countStart),
+      countBeatDur: clearCount ? null : (countBeatDur ?? this.countBeatDur),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -111,6 +141,18 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   List<FlowingAttack> _attacks = const [];
   bool _disposed = false;
 
+  /// 数拍 tick 音源(独立预备音色,装载失败降级为不数直接播)。
+  EngineSound? _countSound;
+
+  /// 预备数拍的引擎钟轮询(票03:Timer 只当触发器,数完时刻读引擎钟,
+  /// 与调度器同纪律;测试可手动推进引擎钟立即翻状态)。
+  Timer? _countPoll;
+  Duration? _countEnd;
+  double? _countFrom;
+
+  /// 暂停续播不重数(codex 同款:暂停→播放直续;seek/曲末重开重数)。
+  bool _resumeWithoutCount = false;
+
   /// 真机诊断遥测(仅 debug 构建编译进来;ADR-0005 不破:墙钟只进日志,
   /// 不进任何同步逻辑——codex SCORE_TELEMETRY 同款办法,量「时钟 vs
   /// 真实时间推进比例」「调度进度」)。
@@ -124,6 +166,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     // 页面关闭(监听清空 → provider 销毁)即停声清场。
     ref.onDispose(() {
       _disposed = true;
+      _cancelCount();
       _disposeScheduler();
     });
     Future(() => _load());
@@ -142,11 +185,20 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       await pluck.preloadSounds({
         for (final a in _attacks) ...a.freqs,
       });
+      // 数拍音源(票03;失败不阻断装载——降级为不数直接播)。
+      try {
+        final ticks = await TickSounds.load(_engine, count: true);
+        _countSound = ticks.count;
+      } catch (_) {
+        _countSound = null;
+      }
       if (_disposed) return;
       state = FlowingPracticeState(
         status: FlowingStatus.ready,
         score: score,
         positionSeconds: 0,
+        countInEnabled: state.countInEnabled,
+        countPerLoop: state.countPerLoop,
       );
     } catch (error) {
       if (_disposed) return;
@@ -179,8 +231,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   /// 当前音乐秒(唯一时间源=引擎时钟;未播放时为静态位置)。慢放:
   /// 音乐秒 = speed ×(引擎时钟 − t0),视图红线推进随之降为
   /// pixelsPerSecond × speed,排版几何不动(票01)。循环挂上时按窗口
-  /// 模回跳(B 独占):raw ≥ A 即 mod 进 [A,B)——与调度器的纯音乐域
-  /// 推进出自同一 t0,音画同源同刻(票02)。
+  /// 模回跳(B 独占):raw ≥ A 即 mod 进「窗长 + 数拍 gap」的周期——
+  /// gap 段(每轮数四下)红线定在 A,与调度器轮次推进同源同刻
+  /// (票02/03)。
   double currentSeconds() {
     final t0 = state.t0;
     final score = state.score;
@@ -190,18 +243,47 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     final loop = state.activeLoop;
     if (loop != null && raw >= loop.start) {
       final span = loop.end - loop.start;
-      return loop.start + (raw - loop.start) % span;
+      final gap = _loopGapSeconds(loop);
+      final r = (raw - loop.start) % (span + gap);
+      // r ∈ [0, span) 为正曲段;r ∈ [span, span+gap) 为轮间数拍段
+      //(占真实时刻不占曲谱时间),红线定在 A。
+      return r < span ? loop.start + r : loop.start;
     }
     if (raw < 0) return 0;
     if (raw > score.durationSeconds) return score.durationSeconds;
     return raw;
   }
 
+  /// 循环轮间数拍 gap(音乐秒;与调度器 _gapMusic 同源:tempo 取 A 处
+  /// 小节拍速)。未挂循环或未开每轮数拍 = 0。
+  double _loopGapSeconds(({double start, double end}) loop) {
+    if (!state.countPerLoop) return 0;
+    final beat = _beatDurAt(loop.start);
+    return beat.inMicroseconds * 4 / Duration.microsecondsPerSecond;
+  }
+
+  /// 音乐时刻处的节拍时长(该小节拍速;60/tempo,音乐域)。
+  Duration _beatDurAt(double musicTime) {
+    final score = state.score;
+    var tempo = score?.startingTempo ?? 80;
+    if (score != null) {
+      final index = measureIndexAt(score, musicTime);
+      if (index >= 0 && index < score.measures.length) {
+        tempo = score.measures[index].tempo;
+      }
+    }
+    return Duration(microseconds: (60000000 / tempo).round());
+  }
+
   /// 播放(曲末再按 = 从头;codex 同款)。已在播放时无害幂等。
+  /// 数四下(票03):起播/换段(seek 后、曲末重开)先四下预备拍
+  /// (独立预备钟:占真实时刻不占曲谱时间,红线定在起点),数完自动
+  /// 起播;暂停续播不重数(codex 同款)。可开关。
   Future<void> play() async {
     final score = state.score;
     if (score == null ||
         state.status == FlowingStatus.playing ||
+        state.status == FlowingStatus.counting ||
         state.status == FlowingStatus.loading ||
         state.status == FlowingStatus.error) {
       return;
@@ -212,13 +294,97 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       state = state.copyWith(status: FlowingStatus.error, error: '琴声没有准备好：$error');
       return;
     }
-    // 循环挂上时窗外起点吸附到 A(codex 同款:position<loop.a 或 ≥
-    // loop.b 都从 A 起跑);窗内起点(含暂停恢复)原地续跑。
     final loop = state.activeLoop;
     var from = state.status == FlowingStatus.finished ? 0.0 : state.positionSeconds;
     if (loop != null && (from < loop.start || from >= loop.end)) {
       from = loop.start;
     }
+    final resumeWithoutCount = _resumeWithoutCount;
+    _resumeWithoutCount = false;
+    if (state.countInEnabled && !resumeWithoutCount && _countSound != null) {
+      _beginCount(from);
+      return;
+    }
+    _startPlaybackAt(from);
+  }
+
+  /// 预备数拍(票03):4 记 tick 在引擎时刻 now+lead、+1 拍、+2 拍、
+  /// +3 拍(playScheduled 绝对时刻,慢放同步变慢);曲谱时钟不动
+  /// (t0 不设,positionSeconds 冻结在起点)。数完时刻由引擎钟轮询判定
+  /// (Timer 只当触发器,ADR-0005),到点自动起播。
+  void _beginCount(double from) {
+    final speed = state.speed;
+    final beat = _beatDurAt(from);
+    final now = _engine.engineTime();
+    final lead = const Duration(milliseconds: 120);
+    final countStart = now + lead;
+    _countVoices.clear();
+    final sound = _countSound;
+    for (var j = 0; j < 4 && sound != null; j++) {
+      final at =
+          countStart + Duration(microseconds: (beat.inMicroseconds * j / speed).round());
+      try {
+        _countVoices.add(_engine.playScheduled(sound, at));
+      } catch (_) {}
+    }
+    _countEnd = countStart +
+        Duration(microseconds: (beat.inMicroseconds * 4 / speed).round());
+    _countFrom = from;
+    _countPoll?.cancel();
+    _countPoll = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      final end = _countEnd;
+      if (end == null || _disposed) return;
+      try {
+        if (_engine.engineTime() < end) return;
+      } catch (_) {
+        return;
+      }
+      _finishCount();
+    });
+    state = state.copyWith(
+      status: FlowingStatus.counting,
+      positionSeconds: from,
+      countStart: countStart,
+      countBeatDur: beat,
+      clearT0: true,
+      clearError: true,
+    );
+    if (kDebugMode) {
+      debugPrint('UFLOW_FLOW COUNT start=${countStart.inMilliseconds} '
+          'beat=${beat.inMilliseconds} from=${from.toStringAsFixed(3)}');
+    }
+  }
+
+  final _countVoices = <EngineVoice>[];
+
+  /// 数完(或中止)预备拍:停轮询与在途 tick。
+  void _cancelCount({bool keepVoices = false}) {
+    _countPoll?.cancel();
+    _countPoll = null;
+    _countEnd = null;
+    _countFrom = null;
+    if (!keepVoices) {
+      for (final voice in _countVoices) {
+        try {
+          _engine.stop(voice);
+        } catch (_) {}
+      }
+    }
+    _countVoices.clear();
+  }
+
+  /// 数完自动起播(引擎钟到点;轮询触发)。
+  void _finishCount() {
+    final from = _countFrom;
+    _cancelCount(keepVoices: true); // 最后一拍自然衰减,不打断。
+    if (from == null || _disposed) return;
+    _startPlaybackAt(from);
+  }
+
+  /// 起播公共路径:锚 t0、建调度器、翻 playing。
+  void _startPlaybackAt(double from) {
+    final score = state.score;
+    if (score == null) return;
     final speed = state.speed;
     final t0 = _engine.engineTime() -
         Duration(
@@ -232,15 +398,28 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       status: FlowingStatus.playing,
       t0: t0,
       positionSeconds: from,
+      clearCount: true,
       clearError: true,
     );
   }
 
-  /// 暂停:立静(含尾音)、冻结位置、等待再播。
+  /// 暂停:立静(含尾音)、冻结位置、等待再拍。数拍中暂停 = 中止预备,
+  /// 续播不重数(codex 同款)。
   void pause() {
+    if (state.status == FlowingStatus.counting) {
+      _cancelCount();
+      _resumeWithoutCount = true;
+      state = state.copyWith(
+        status: FlowingStatus.paused,
+        clearT0: true,
+        clearCount: true,
+      );
+      return;
+    }
     if (state.status != FlowingStatus.playing) return;
     final position = currentSeconds();
     _disposeScheduler();
+    _resumeWithoutCount = true;
     state = state.copyWith(
       status:
           position >= (state.score?.durationSeconds ?? 0) ? FlowingStatus.finished : FlowingStatus.paused,
@@ -249,18 +428,23 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     );
   }
 
-  /// 跳转:停声清旧、更新位置、**保持暂停**(codex 方法)。
+  /// 跳转:停声清旧、更新位置、**保持暂停**(codex 方法)。换段重数
+  /// (codex 同款:位置变了就重新预备)。数拍中跳转 = 中止预备。
   void seek(double seconds) {
     final score = state.score;
     if (score == null) return;
     var position = seconds;
     if (position < 0) position = 0;
     if (position > score.durationSeconds) position = score.durationSeconds;
+    if (state.status == FlowingStatus.counting) _cancelCount();
     _disposeScheduler();
+    _resumeWithoutCount = false;
     state = state.copyWith(
-      status: position >= score.durationSeconds ? FlowingStatus.finished : FlowingStatus.paused,
+      status:
+          position >= (state.score?.durationSeconds ?? 0) ? FlowingStatus.finished : FlowingStatus.paused,
       positionSeconds: position,
       clearT0: true,
+      clearCount: true,
       clearError: true,
     );
   }
@@ -302,6 +486,74 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   }
 
   static final Set<double> _validSpeeds = {0.5, 0.75, 1.0};
+
+  /// 数拍开关(票03 两开关,codex 同款:起播数 / 循环每轮数)。
+  /// countPerLoop 播放中挂循环即切——gap 进出必须调度器与视图模公式
+  /// 同步换挡,重锚+重建调度器(同 _applyLoop 纪律,可听位连续);
+  /// countInEnabled 只影响下次起播,状态直改。
+  void setCountOptions({bool? countInEnabled, bool? countPerLoop}) {
+    final perLoopChanged =
+        countPerLoop != null && countPerLoop != state.countPerLoop;
+    state = state.copyWith(
+      countInEnabled: countInEnabled,
+      countPerLoop: countPerLoop,
+    );
+    if (!perLoopChanged ||
+        state.status != FlowingStatus.playing ||
+        state.t0 == null ||
+        state.activeLoop == null) {
+      return;
+    }
+    final position = currentSeconds();
+    final now = _engine.engineTime();
+    final old = _scheduler;
+    final t0 = now -
+        Duration(
+            microseconds:
+                (position / state.speed * Duration.microsecondsPerSecond)
+                    .round());
+    final scheduler = _buildScheduler(state.score!, state.speed);
+    old?.stop(silenceRinging: false);
+    scheduler.start(t0: t0, consumedUntil: now);
+    _scheduler = scheduler;
+    state = state.copyWith(t0: t0, positionSeconds: position);
+  }
+
+  /// 预备数拍当前拍号(1..4);不在数拍段返回 null(状态行倒计数用)。
+  /// 起播预备由 countStart/拍长推;循环轮间数拍由模公式 gap 段推。
+  int? countBeatNow() {
+    if (state.status == FlowingStatus.counting) {
+      final start = state.countStart;
+      final beat = state.countBeatDur;
+      if (start == null || beat == null) return null;
+      int elapsedUs;
+      try {
+        elapsedUs = (_engine.engineTime() - start).inMicroseconds;
+      } catch (_) {
+        return null;
+      }
+      final beatUs = (beat.inMicroseconds / state.speed).round();
+      final n = 1 + (elapsedUs <= 0 ? 0 : elapsedUs ~/ beatUs);
+      return n.clamp(1, 4);
+    }
+    if (state.status == FlowingStatus.playing && state.t0 != null) {
+      final loop = state.activeLoop;
+      if (loop == null || !state.countPerLoop) return null;
+      final span = loop.end - loop.start;
+      final gap = _loopGapSeconds(loop);
+      if (gap <= 0) return null;
+      final raw = state.speed *
+          (_engine.engineTime() - state.t0!).inMicroseconds /
+          Duration.microsecondsPerSecond;
+      if (raw < loop.start) return null;
+      final r = (raw - loop.start) % (span + gap);
+      if (r < span) return null;
+      final beatSec = _beatDurAt(loop.start).inMicroseconds / 1e6;
+      final n = 1 + ((r - span) / beatSec).floor();
+      return n.clamp(1, 4);
+    }
+    return null;
+  }
 
   /// 设 A = 当前位(codex 选段同源;票02)。已有 B 且新 A ≥ B 时窗口
   /// 失效(槽位保留展示,不挂循环),符合「先 A 后 B」的练琴动线。
@@ -368,6 +620,8 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     final pluck = ref.read(pluckPlayerProvider);
     final controller = this;
     final effectiveLoop = loop ?? state.activeLoop;
+    final loopCount =
+        state.countPerLoop && effectiveLoop != null;
     return FlowingNoteScheduler(
       engine: _engine,
       attacks: _attacks,
@@ -379,6 +633,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       loopEnd: effectiveLoop == null
           ? null
           : Duration(milliseconds: (effectiveLoop.end * 1000).round()),
+      countPerLoop: loopCount,
+      beatDur: loopCount ? _beatDurAt(effectiveLoop.start) : null,
+      pickCountSound: () => _countSound,
       pickSound: (freqs) => [for (final f in freqs) pluck.loadedSound(f)],
       onFinished: () {
         if (_disposed) return;

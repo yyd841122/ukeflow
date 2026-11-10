@@ -25,6 +25,9 @@ class FlowingNoteScheduler {
     this.speed = 1.0,
     this.loopStart,
     this.loopEnd,
+    this.countPerLoop = false,
+    this.beatDur,
+    this.pickCountSound,
     this.onFinished,
     this.onError,
     this.pollInterval = const Duration(milliseconds: 40),
@@ -53,6 +56,22 @@ class FlowingNoteScheduler {
   /// 不漏音。循环中 [duration] 曲末检查不生效(循环直到用户停)。
   final Duration? loopStart;
   final Duration? loopEnd;
+
+  /// 循环每轮数四下(票03):每轮回跳后插 4 记数拍 tick(独立预备钟,
+  /// 占真实时刻但不占曲谱时间——红线在 A 定住),下一轮整体后移一个
+  /// gap(4 拍)。tick 与示范声同用 playScheduled 绝对时刻。
+  final bool countPerLoop;
+
+  /// 数拍节拍时长(音乐域 60/tempo;慢放由 [speed] 缩放)。null = 无数拍。
+  final Duration? beatDur;
+
+  /// 数拍音源查取(独立 tick 音色,非 KS 示范声);null/返回 null = 静默。
+  final EngineSound? Function()? pickCountSound;
+
+  /// 循环轮间音乐域 gap(countPerLoop 时的 4 拍;轮次推进与视图模回跳
+  /// 公式的 cycle = 窗长 + gap 必须同源一致)。
+  Duration get _gapMusic =>
+      countPerLoop && beatDur != null ? beatDur! * 4 : Duration.zero;
   final void Function()? onFinished;
   final void Function(Object error)? onError;
 
@@ -189,8 +208,25 @@ class FlowingNoteScheduler {
           if (first >= attacks.length || attacks[first].time >= b) {
             break; // 窗内无攻击:无可推进项(截尾仍按时刻照做)。
           }
-          _passBase += b - a;
+          // 回跳点(本轮 B 的绝对时刻)= 下一轮数拍的起拍。
+          final wrapAt = t0 + _scaled(b + _passBase);
+          _passBase += (b - a) + _gapMusic;
           _next = first;
+          // 数四下(票03):回跳后 4 记 tick,下一轮示范声整体后移一个
+          // gap。tick 预定可远超 lookahead(playScheduled 绝对时刻,幂等
+          // 停机由 _pending 收口);已过容差的跳过。
+          if (_gapMusic > Duration.zero && pickCountSound != null) {
+            final tickSound = pickCountSound!();
+            if (tickSound != null) {
+              for (var j = 0; j < 4; j++) {
+                final at = wrapAt + _scaled(beatDur! * j);
+                if (at < now - _maxLate) continue;
+                _pending.add(
+                  (voice: engine.playScheduled(tickSound, at), time: at),
+                );
+              }
+            }
+          }
         }
         final time = t0 + _scaled(attacks[_next].time + _passBase);
         if (time > limit) break;
@@ -206,9 +242,10 @@ class FlowingNoteScheduler {
       if (looping) {
         // 越 B 截尾:上一轮的 B 绝对时刻一到,停掉绝对时刻 < 回跳点的
         // 在途声(旧轮尾音,含刚过 B 未理的预定),新轮跨缝预定(时刻
-        // ≥ 回跳点)保留。每轮只做一次。
+        // ≥ 回跳点,含数拍 tick)保留。每轮只做一次。上一轮 base =
+        // 新 base − 窗长 − gap(gap 为 0 即票02 原式)。
         final wrapAt =
-            t0 + _scaled(b! + _passBase - (b - a!));
+            t0 + _scaled(b! + _passBase - (b - a!) - _gapMusic);
         if (now >= wrapAt && _cutDoneBase != _passBase) {
           _cutDoneBase = _passBase;
           for (final entry in _pending) {

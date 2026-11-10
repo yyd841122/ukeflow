@@ -48,7 +48,8 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   }
 
   void _syncTicker(FlowingStatus status) {
-    final shouldRun = status == FlowingStatus.playing;
+    final shouldRun =
+        status == FlowingStatus.playing || status == FlowingStatus.counting;
     if (shouldRun && _ticker == null) {
       _ticker = createTicker((_) => setState(() {}))..start();
     } else if (!shouldRun && _ticker != null) {
@@ -147,7 +148,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
       backgroundColor: _background,
       body: Column(
         children: [
-          _statusLine(state),
+          _statusLine(state, controller),
           if (score != null)
             Expanded(
               child: LayoutBuilder(
@@ -190,9 +191,25 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
 
   double _cursorX(double width) => math.min(width - 90, width < 500 ? 252.0 : 320.0);
 
-  Widget _statusLine(FlowingPracticeState state) {
+  Widget _statusLine(
+    FlowingPracticeState state,
+    FlowingPracticeController controller,
+  ) {
+    final beat = controller.countBeatNow();
+    if (beat != null) {
+      final counting = state.status == FlowingStatus.counting;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Text(
+          counting ? '预备 $beat · 数完就开播' : '预备 $beat · 数完回段头',
+          style: const TextStyle(
+              color: _highlightRed, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
     final message = switch (state.status) {
       FlowingStatus.loading => '正在读取一手曲谱…',
+      FlowingStatus.counting => '预备…',
       FlowingStatus.ready => '准备好了，点播放跟着红线弹',
       FlowingStatus.playing => '看红线，提前准备下一个音',
       FlowingStatus.paused => '已暂停，准备好后再播放',
@@ -321,14 +338,19 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
             : 'A ${a == null ? '—' : _format(a)} · B ${b == null ? '—' : _format(b)} · A<B 才循环';
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
           TextButton(
             key: const Key('loop-set-a'),
             onPressed: controller.markLoopStart,
             style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                foregroundColor: _glyph),
+                foregroundColor: _glyph,
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
             child: const Text('设A'),
           ),
           TextButton(
@@ -336,27 +358,81 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
             onPressed: controller.markLoopEnd,
             style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                foregroundColor: _glyph),
+                foregroundColor: _glyph,
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
             child: const Text('设B'),
           ),
           TextButton(
             key: const Key('loop-clear'),
             onPressed: (a == null && b == null) ? null : controller.clearLoop,
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
             child: const Text('清循环'),
           ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              hint,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  color: loop != null ? _highlightRed : _mutedGlyph,
-                  fontSize: 12),
-            ),
+          _countToggle(
+            key: const Key('count-toggle'),
+            label: '数四下',
+            active: state.countInEnabled,
+            onPressed: () =>
+                controller.setCountOptions(countInEnabled: !state.countInEnabled),
           ),
+          if (loop != null)
+            _countToggle(
+              key: const Key('count-loop-toggle'),
+              label: '每轮数',
+              active: state.countPerLoop,
+              onPressed: () =>
+                  controller.setCountOptions(countPerLoop: !state.countPerLoop),
+            ),
         ],
+      ),
+      // 提示独立一行(2026-11-10 真机:开关全出现时单行挤爆 15px,
+      // Expanded 都救不了语义宽度——拆行后任何设备无横向压力)。
+      const SizedBox(height: 2),
+      Padding(
+        padding: const EdgeInsets.only(left: 12, right: 12),
+        child: SizedBox(
+          width: double.infinity,
+          child: Text(
+            hint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                color: loop != null ? _highlightRed : _mutedGlyph,
+                fontSize: 12),
+          ),
+        ),
+      ),
+    ],
+      ),
+    );
+  }
+
+  /// 数拍开关钮(票03):勾选态描红,紧凑排不挤行。
+  Widget _countToggle({
+    required Key key,
+    required String label,
+    required bool active,
+    required VoidCallback onPressed,
+  }) {
+    return TextButton.icon(
+      key: key,
+      onPressed: onPressed,
+      icon: Icon(
+        active ? Icons.check_box : Icons.check_box_outline_blank,
+        size: 18,
+        color: active ? _highlightRed : _mutedGlyph,
+      ),
+      label: Text(label),
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: active ? _highlightRed : _mutedGlyph,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
