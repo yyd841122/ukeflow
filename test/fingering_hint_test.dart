@@ -113,6 +113,29 @@ void main() {
       expect(beyond.next, isNull);
     });
 
+    test('翻卡恰在事件起点:窗内稳定不闪,边界±ε 才翻', () {
+      final score = miniScore(); // e2 @1.0-1.5(空弦+泛音)。
+      final before = fingeringHintsAt(score, 0.999).current;
+      final at = fingeringHintsAt(score, 1.0).current;
+      final mid = fingeringHintsAt(score, 1.25).current;
+      final end = fingeringHintsAt(score, 1.5).current;
+      expect(before.notes.map((n) => n.summary), ['1弦 3 品'], reason: '起点前=上一事件');
+      expect(at.notes.map((n) => n.summary), ['1弦 空弦', '2弦 <5> 品'],
+          reason: '起点即翻');
+      expect(mid.notes.map((n) => n.summary), ['1弦 空弦', '2弦 <5> 品'],
+          reason: '窗中段稳定');
+      expect(end.notes.map((n) => n.summary), ['1弦 空弦', '2弦 <5> 品'],
+          reason: '窗尾仍持有(到下一事件起点才翻)');
+    });
+
+    test('提示只随音乐秒走:同一秒结果恒等(慢放/循环由 currentSeconds 换算)', () {
+      final score = miniScore();
+      final a = fingeringHintsAt(score, 1.2);
+      final b = fingeringHintsAt(score, 1.2);
+      expect(a.current.summary, b.current.summary);
+      expect(a.next!.summary, b.next!.summary);
+    });
+
     test('tieChords 注入(缓存路径)与缺省一致', () {
       final score = miniScore();
       final ties = tieChordIds(score);
