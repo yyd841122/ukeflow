@@ -91,6 +91,15 @@ int _groupTicks(RefMeasure measure) =>
 int _restCodePoint(RefEvent event) =>
     0xE4E3 + (math.log(event.durationValue) / math.ln2).round();
 
+/// 整组延音事件 id 集:全部音符都是延音尾音(此事件无新按法)。画面
+/// 不画数字,按法提示卡(票05)同源显示「无法提示」——两处共用本判定
+/// (单一来源,测试锁定)。
+Set<int> tieChordIds(ReferenceScore score) => {
+      for (final e in score.events)
+        if (e.notes.isNotEmpty && e.notes.every((n) => n.isTieDestination))
+          e.id,
+    };
+
 /// 从练习时间表推导整曲排版要素。规则与移植源逐条对应,真值闸:
 /// 《天空之城》= 115 组符杠、88 处琶音/扫弦、9 个独立符尾。
 EngravingPlan buildEngravingPlan(ReferenceScore score) {
@@ -385,16 +394,14 @@ class FlowingEngraving {
         eventByNoteId[n.id] = e;
       }
     }
-    final tieChords = <int>{};
+    final tieChords = tieChordIds(score);
     final tieOrigin = <int, RefEvent>{};
     for (final e in score.events) {
-      if (e.notes.isNotEmpty && e.notes.every((n) => n.isTieDestination)) {
-        tieChords.add(e.id);
-        final oid = e.notes.first.tieOriginNoteId;
-        if (oid != null) {
-          final oe = eventByNoteId[oid];
-          if (oe != null) tieOrigin[e.id] = oe;
-        }
+      if (!tieChords.contains(e.id)) continue;
+      final oid = e.notes.first.tieOriginNoteId;
+      if (oid != null) {
+        final oe = eventByNoteId[oid];
+        if (oe != null) tieOrigin[e.id] = oe;
       }
     }
 

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/score/flowing_engraving.dart';
 import '../../core/score/flowing_timeline.dart';
 import '../../core/score/reference_score.dart';
+import 'flowing/fingering_hint.dart';
+import 'flowing/fingering_diagram.dart';
 import 'flowing/flowing_practice_controller.dart';
 
 /// 《天空之城》流水谱跟练页(一手数据 MVP)。
@@ -40,6 +42,10 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
 
   FlowingEngraving? _engraving;
   double _layoutWidth = 0;
+
+  /// 整组延音事件 id 集(票05 按法提示与画面数字共用判定;随排版一并
+  /// 缓存,每帧只做二分)。
+  Set<int>? _tieChords;
 
   @override
   void dispose() {
@@ -120,6 +126,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
     // 数字 18px,比例永远协调(竖屏上下留白是原谱同款呼吸感)。
     if (_engraving != null && _layoutWidth == width) return;
     _layoutWidth = width;
+    _tieChords = tieChordIds(score);
     final layout = FlowingLayout.fromScore(
       score,
       pixelsPerSecond: pixelsPerSecondFor(width),
@@ -149,6 +156,7 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
       body: Column(
         children: [
           _statusLine(state, controller),
+          if (score != null) _fingeringPair(score, seconds),
           if (score != null)
             Expanded(
               child: LayoutBuilder(
@@ -190,6 +198,46 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
   }
 
   double _cursorX(double width) => math.min(width - 90, width < 500 ? 252.0 : 320.0);
+
+  /// 按法提示对(票05):当前大图 + 下一步小图(codex 同款)。当前 =
+  /// 最后越过事件(间隙期=手上还按着的),整组延音/休止显式「无法
+  /// 提示」;每帧重算但只做一次二分(tie 集随排版缓存)。
+  Widget _fingeringPair(ReferenceScore score, double seconds) {
+    final pair = fingeringHintsAt(score, seconds, tieChords: _tieChords);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Flexible(child: _hintCard(pair.current, '现在', width: 126)),
+          const SizedBox(width: 16),
+          if (pair.next != null)
+            Flexible(child: _hintCard(pair.next!, '下一步', width: 96)),
+        ],
+      ),
+    );
+  }
+
+  Widget _hintCard(FingeringHint hint, String label, {required double width}) {
+    final showable = hint.showable;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: const TextStyle(color: _mutedGlyph, fontSize: 11)),
+        const SizedBox(height: 2),
+        FingeringDiagram(notes: hint.notes, width: width),
+        const SizedBox(height: 2),
+        Text(
+          showable ? hint.summary : '',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _glyph, fontSize: 11),
+        ),
+      ],
+    );
+  }
 
   Widget _statusLine(
     FlowingPracticeState state,
