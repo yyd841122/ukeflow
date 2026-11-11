@@ -6,7 +6,7 @@
 
 **Blocked by:** None
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 - [x] 速度选择 UI(0.5/0.75/1.0 三档)
 - [x] 慢放下的匀速无突跳(现有扫描闸按新斜率复跑)
@@ -39,3 +39,4 @@
   (错误信息推荐做法,faithful 页 initState 单建是安全写法无此雷)。
   另:机检脚本 ukeflow-flowing.sh `dump_get` 里 `adb cat` 缺 `shell`
   (adb 无裸 cat 命令)已顺手修。
+- 2026-11-11: 用户听感验收通过,翻 done。三档速度、播放中即切、整曲零漂移听感无异议。

@@ -5,7 +5,7 @@
 
 **Blocked by:** None
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 - [x] 四下计数音(当前拍速)
 - [x] 数完自动起播;可关闭
@@ -38,3 +38,4 @@
   TextButton 默认最小宽 64dp,2.625 密度下每颗 ≥168 物理px,五颗
   ~1000px 必爆。修 = `minimumSize: Size(0,36)` + `shrinkWrap` 收紧,
   提示文本拆独立一行(任何设备无横向压力)。
+- 2026-11-11: 用户听感验收通过,翻 done。数四下节奏与音量听感无异议。
