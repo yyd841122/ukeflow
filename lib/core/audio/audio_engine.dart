@@ -29,8 +29,10 @@ abstract interface class AudioEngine {
   /// 调度;过去时刻尽快播)。**禁用引擎原生 playClocked**——那是锚点
   /// 相对语义(「相对此前 clocked 调用」),喂绝对时刻会在锚点漂移后
   /// 整体提前/推迟出声(2026-11-08 流水谱真机实测:声音领先时间线,
-  /// 根因即此)。
-  EngineVoice playScheduled(EngineSound sound, Duration when);
+  /// 根因即此)。[volume] 0..1(票04 分路音量:预定时刻定音,改音量
+  /// 只影响之后的预定)。
+  EngineVoice playScheduled(EngineSound sound, Duration when,
+      {double volume = 1.0});
 
   /// 停止一个 voice;已响完则为无害空操作。
   void stop(EngineVoice voice);

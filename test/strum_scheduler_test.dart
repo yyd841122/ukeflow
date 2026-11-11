@@ -269,7 +269,8 @@ void main() {
 
 class BrokenEngine extends FakeAudioEngine {
   @override
-  EngineVoice playScheduled(EngineSound sound, Duration when) =>
+  EngineVoice playScheduled(EngineSound sound, Duration when,
+          {double volume = 1.0}) =>
       throw Exception('引擎预定失败(注入)');
 
   EngineSound loadMemSync(String key) => FakeSound(key);

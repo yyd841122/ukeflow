@@ -620,4 +620,226 @@ void main() {
     expect(controller().currentSeconds(), closeTo(0.4, 1e-6));
     expect(controller().countBeatNow(), isNull, reason: 'gap 段已过,回到正曲段');
   });
+
+  // —— 票04 声音分路 ——
+  // 测试谱节拍表:两小节各 3s@80bpm → 拍点 0/750/1500/2250 + 3000/3750/
+  // 4500/5250,小节头(0/3000)重拍 strong。
+
+  test('buildBeats:小节拍速均分四分拍,小节头重拍', () {
+    final beats = FlowingPracticeController.buildBeats(score());
+    expect(beats.map((b) => b.time.inMilliseconds).toList(),
+        [0, 750, 1500, 2250, 3000, 3750, 4500, 5250]);
+    expect(
+      beats.where((b) => b.accent).map((b) => b.time.inMilliseconds).toList(),
+      [0, 3000],
+    );
+  });
+
+  test('节拍器默认关:零 tick 预定,琴声照常', () async {
+    await pumpLoad();
+    await controller().play();
+    await pumpSteps(8); // now=2.8s。
+    expect(engine.scheduleLog.where((c) => c.key.startsWith('tick')), isEmpty);
+    expect(engine.scheduleLog, isNotEmpty, reason: '琴声照常预定');
+  });
+
+  test('节拍器开:拍点按拍速预定、强弱分音色、默认音量 0.5;琴声尽后 tick 独走到曲末', () async {
+    await pumpLoad();
+    controller().setAudioOptions(metroEnabled: true);
+    await controller().play();
+    await pumpSteps(8); // now=2.8s,limit=3.2s:末拍 3000 恰进窗(攻击 2000 已尽)。
+    final ticks =
+        engine.scheduleLog.where((c) => c.key.startsWith('tick')).toList();
+    expect(ticks.map((c) => c.time.inMilliseconds).toList(),
+        [0, 750, 1500, 2250, 3000]);
+    expect(ticks.map((c) => c.key).toList(), [
+      'tick_strong',
+      'tick_weak',
+      'tick_weak',
+      'tick_weak',
+      'tick_strong',
+    ]);
+    expect(ticks.every((c) => c.volume == 0.5), isTrue, reason: '默认节拍音量 0.5');
+    final notes = engine.scheduleLog.where((c) => !c.key.startsWith('tick'));
+    expect(notes.every((c) => c.volume == 1.0), isTrue);
+  });
+
+  test('示范静音:零琴声零 tick 也照推到曲末(静音的是出声不是时间)', () async {
+    await pumpLoad();
+    controller().setAudioOptions(demoEnabled: false);
+    await controller().play();
+    await pumpSteps(8); // now=2.8s。
+    expect(
+        engine.scheduleLog.where((c) => !c.key.startsWith('tick')), isEmpty);
+    expect(controller().currentSeconds(), closeTo(2.8, 0.05), reason: '红线照推');
+    await pumpSteps(10); // now=6.3s ≥ 曲长 6s。
+    await pumpPolls();
+    expect(state().status, FlowingStatus.finished, reason: '全静音不拖住曲末判定');
+  });
+
+  test('播放中静音琴声:在途立停、已响尾音不切、恢复不回放', () async {
+    await pumpLoad();
+    await controller().play();
+    await pumpSteps(5); // now=1.75s:500/1000 已响,@2000 两声在途。
+    expect(
+      engine.scheduleLog
+          .where((c) => !c.key.startsWith('tick'))
+          .where((c) => c.time.inMilliseconds == 2000)
+          .length,
+      2,
+      reason: '和弦两声都在途',
+    );
+    controller().setAudioOptions(demoEnabled: false);
+    final plucks =
+        engine.scheduleLog.where((c) => !c.key.startsWith('tick')).toList();
+    expect(plucks.length, 4);
+    for (final c in plucks) {
+      if (c.time.inMilliseconds == 2000) {
+        expect(c.stopped, isTrue, reason: '在途 ${c.time} 立停');
+      } else {
+        expect(c.stopped, isFalse, reason: '已响 ${c.time} 尾音不切');
+      }
+    }
+    await pumpSteps(6); // now=3.85s:跳过段无新琴声。
+    expect(engine.scheduleLog.where((c) => !c.key.startsWith('tick')).length, 4);
+    controller().setAudioOptions(demoEnabled: true);
+    await pumpSteps(6); // now=5.95s:恢复后已过攻击不回放。
+    final after =
+        engine.scheduleLog.where((c) => !c.key.startsWith('tick')).toList();
+    expect(after.length, 4, reason: '跳过段不回放');
+    final counts = <String, int>{};
+    for (final c in after) {
+      final tag = '${c.key}@${c.time}';
+      counts[tag] = (counts[tag] ?? 0) + 1;
+    }
+    expect(counts.values.every((v) => v == 1), isTrue, reason: '无任何重复预定');
+  });
+
+  test('播放中静音节拍:在途 tick 立停、已响不切;恢复后已过拍点不补响', () async {
+    await pumpLoad();
+    controller().setAudioOptions(metroEnabled: true);
+    await controller().play();
+    await pumpSteps(4); // now=1.4s:tick 0/750 已响,1500 在途。
+    controller().setAudioOptions(metroEnabled: false);
+    final ticks =
+        engine.scheduleLog.where((c) => c.key.startsWith('tick')).toList();
+    expect(ticks.map((c) => c.time.inMilliseconds).toList(), [0, 750, 1500]);
+    expect(ticks[2].stopped, isTrue, reason: '在途 1500 立停');
+    expect(ticks[0].stopped, isFalse, reason: '已响 0 尾音不切');
+    expect(ticks[1].stopped, isFalse, reason: '已响 750 尾音不切');
+    await pumpSteps(3); // now=2.45s:静音段无新 tick(拍点游标照走不补)。
+    expect(engine.scheduleLog.where((c) => c.key.startsWith('tick')).length, 3);
+    controller().setAudioOptions(metroEnabled: true);
+    await pumpSteps(6); // now=4.55s:静音段游标已消费 2250,恢复从 3000 续。
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.startsWith('tick'))
+          .map((c) => c.time.inMilliseconds)
+          .toList(),
+      [0, 750, 1500, 3000, 3750, 4500],
+      reason: '已过拍点不补响',
+    );
+  });
+
+  test('循环+节拍器:拍点跨缝回跳无缝,B 独占不越界', () async {
+    await pumpLoad();
+    controller().setAudioOptions(metroEnabled: true);
+    await pumpLoopWindow(); // 窗 [0, 2.2],t0=0。
+    await pumpSteps(7); // now=2.45s,过 wrap 2.2。
+    List<int> tickTimes() => engine.scheduleLog
+        .where((c) => c.key.startsWith('tick') && c.key != 'tick_count')
+        .map((c) => c.time.inMilliseconds)
+        .toList();
+    // 第一轮 0/750/1500(2250 ≥ B 排除),回跳后 2200(=A,重拍)跨缝续。
+    expect(tickTimes(), [0, 750, 1500, 2200]);
+    await pumpSteps(9); // now=5.6s,limit=6.0s。
+    // 第二轮 2950/3700(4450 ≥ B′ 4400 排除),第三轮 4400 续,5150/5900 进窗。
+    expect(tickTimes(), [0, 750, 1500, 2200, 2950, 3700, 4400, 5150, 5900]);
+  });
+
+  test('循环每轮数+节拍器:gap 段只有数拍 tick,节拍不进 gap', () async {
+    await pumpLoad();
+    controller().setAudioOptions(metroEnabled: true);
+    await pumpLoopWindow(); // 窗 [0, 2.2],t0=0。
+    controller().setCountOptions(countPerLoop: true); // 播放中换挡重锚(t0 不变)。
+    await pumpSteps(7); // now=2.45s,gap 段。
+    final counts = engine.scheduleLog
+        .where((c) => c.key == 'tick_count')
+        .map((c) => c.time.inMilliseconds)
+        .toList();
+    expect(counts, [2200, 2950, 3700, 4450], reason: '数拍 tick 独占 gap');
+    final metro = engine.scheduleLog
+        .where((c) => c.key.startsWith('tick') && c.key != 'tick_count')
+        .map((c) => c.time.inMilliseconds)
+        .toList();
+    expect(metro, [0, 750, 1500], reason: '节拍只在正曲段,gap 不重叠');
+    expect(controller().countBeatNow(), 1);
+    expect(controller().currentSeconds(), closeTo(0, 1e-6), reason: '红线定在 A');
+    // gap 走完:节拍在新轮起点续上(2200+3000=5200 重拍),数拍 tick 不再加。
+    await pumpSteps(9); // now=5.6s。
+    final metro2 = engine.scheduleLog
+        .where((c) => c.key.startsWith('tick') && c.key != 'tick_count')
+        .map((c) => c.time.inMilliseconds)
+        .toList();
+    expect(metro2, [0, 750, 1500, 5200, 5950]);
+    expect(controller().countBeatNow(), isNull, reason: '回正曲段');
+  });
+
+  test('音量穿透:琴声/节拍音量进预定;数拍 tick 骑节拍音量;播放中改音量即时生效', () async {
+    await pumpLoad();
+    controller()
+      ..setAudioOptions(demoVolume: 0.3, metroVolume: 0.4)
+      ..setCountOptions(countInEnabled: true);
+    engine.now = const Duration(seconds: 1);
+    await controller().play();
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key == 'tick_count')
+          .every((c) => c.volume == 0.4),
+      isTrue,
+      reason: '预备 tick 音量骑节拍音量(codex 同款)',
+    );
+    engine.advance(const Duration(seconds: 4)); // 数完(now=5s)自动起播,t0=5s。
+    await pumpPolls();
+    expect(state().status, FlowingStatus.playing);
+    controller().setAudioOptions(metroEnabled: true); // 播放中即切,不重建。
+    engine.advance(const Duration(milliseconds: 350)); // now=5.35s。
+    await pumpPolls();
+    expect(
+      engine.scheduleLog
+          .where((c) => !c.key.startsWith('tick'))
+          .where((c) => c.time.inMilliseconds == 5500)
+          .every((c) => c.volume == 0.3),
+      isTrue,
+      reason: '琴声音量穿透',
+    );
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.startsWith('tick') && c.key != 'tick_count')
+          .every((c) => c.volume == 0.4),
+      isTrue,
+    );
+    controller().setAudioOptions(metroVolume: 0.8);
+    engine.advance(const Duration(milliseconds: 700)); // now=6.05s。
+    await pumpPolls();
+    engine.advance(const Duration(milliseconds: 200)); // now=6.25s:6500 进窗。
+    await pumpPolls();
+    expect(
+      engine.scheduleLog
+          .where((c) => c.key.startsWith('tick') && c.key != 'tick_count')
+          .where((c) => c.time.inMilliseconds == 6500)
+          .single
+          .volume,
+      0.8,
+      reason: '改音量只影响之后的预定',
+    );
+  });
+
+  test('音量钳制:越界值收敛到 0..1', () {
+    controller()
+      ..setAudioOptions(demoVolume: 5)
+      ..setAudioOptions(metroVolume: -1);
+    expect(state().demoVolume, 1.0);
+    expect(state().metroVolume, 0.0);
+  });
 }

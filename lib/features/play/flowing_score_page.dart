@@ -287,6 +287,8 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
             if (score != null && state.status != FlowingStatus.loading)
               _speedSelector(state, controller),
             if (score != null && state.status != FlowingStatus.loading)
+              _audioControls(state, controller),
+            if (score != null && state.status != FlowingStatus.loading)
               _loopControls(state, controller),
             if (score == null && state.status == FlowingStatus.loading)
               const Padding(
@@ -318,6 +320,76 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
         showSelectedIcon: false,
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
         onSelectionChanged: (selection) => controller.setSpeed(selection.first),
+      ),
+    );
+  }
+
+  /// 声音分路(票04):琴声/节拍各自开关+音量,codex 同款默认(琴声
+  /// 开 1.0、节拍关 0.5)。滑条 0.05 步进(codex step 同款);播放中即
+  /// 切(控制器直改调度器字段,不重建,位置天然连续)。
+  Widget _audioControls(
+    FlowingPracticeState state,
+    FlowingPracticeController controller,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          _countToggle(
+            key: const Key('audio-demo-toggle'),
+            label: '琴声',
+            active: state.demoEnabled,
+            onPressed: () => controller
+                .setAudioOptions(demoEnabled: !state.demoEnabled),
+          ),
+          Expanded(
+            child: _volumeSlider(
+              key: const Key('audio-demo-volume'),
+              value: state.demoVolume,
+              onChanged: (v) => controller.setAudioOptions(demoVolume: v),
+            ),
+          ),
+          _countToggle(
+            key: const Key('audio-metro-toggle'),
+            label: '节拍',
+            active: state.metroEnabled,
+            onPressed: () => controller
+                .setAudioOptions(metroEnabled: !state.metroEnabled),
+          ),
+          Expanded(
+            child: _volumeSlider(
+              key: const Key('audio-metro-volume'),
+              value: state.metroVolume,
+              onChanged: (v) => controller.setAudioOptions(metroVolume: v),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 音量滑条(0..1,0.05 步进):紧凑高 36,不挤竖屏。
+  Widget _volumeSlider({
+    required Key key,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    return SizedBox(
+      height: 36,
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 3,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        ),
+        child: Slider(
+          key: key,
+          value: value.clamp(0.0, 1.0),
+          min: 0,
+          max: 1,
+          divisions: 20,
+          onChanged: onChanged,
+        ),
       ),
     );
   }

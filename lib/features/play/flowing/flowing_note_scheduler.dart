@@ -5,8 +5,16 @@ import '../../../core/audio/audio_engine.dart';
 /// 一次同时拨响:相对时间轴原点的时刻 + 该刻要拨的全部音高(Hz)。
 typedef FlowingAttack = ({Duration time, List<double> freqs});
 
-/// 一条在途预定:voice 与其引擎时刻(过期清理与停机善后用)。
-typedef _PendingPlay = ({EngineVoice voice, Duration time});
+/// 节拍器拍点(票04):音乐域时刻 + 是否小节头重拍(strong/weak 音色)。
+typedef FlowingBeat = ({Duration time, bool accent});
+
+/// 声音分路(票04):在途预定按路记账,静音/截尾按路停声。count 路是
+/// 数四下 tick(票03,音量骑节拍音量但开关独立),不经分路静音。
+enum _Channel { note, metro, count }
+
+/// 一条在途预定:voice、引擎时刻与所属分路(过期清理、静音停声与
+/// 停机善后用)。
+typedef _PendingPlay = ({EngineVoice voice, Duration time, _Channel channel});
 
 /// 流水示范声调度器:把练习时间表的节拍事件接到引擎 playScheduled——
 /// 一事件一组同刻拨弦,与画面变色出自同一份时间表、同一个曲头锚
@@ -28,6 +36,12 @@ class FlowingNoteScheduler {
     this.countPerLoop = false,
     this.beatDur,
     this.pickCountSound,
+    this.beats = const [],
+    this.pickMetroSound,
+    this.demoEnabled = true,
+    this.demoVolume = 1.0,
+    this.metroEnabled = false,
+    this.metroVolume = 0.5,
     this.onFinished,
     this.onError,
     this.pollInterval = const Duration(milliseconds: 40),
@@ -68,6 +82,25 @@ class FlowingNoteScheduler {
   /// 数拍音源查取(独立 tick 音色,非 KS 示范声);null/返回 null = 静默。
   final EngineSound? Function()? pickCountSound;
 
+  /// 节拍器拍点序列(票04,音乐域升序;控制器从小节表预处理)。与示范
+  /// 声同走一套循环/慢放变换——第二游标并走同一个 pass 循环,轮次推进
+  /// (passBase)与截尾完全共享,拍点与红线同源同刻。
+  final List<FlowingBeat> beats;
+
+  /// 节拍音源查取(重拍 strong / 弱拍 weak);null/返回 null = 静默。
+  final EngineSound? Function(bool accent)? pickMetroSound;
+
+  /// 分路开关与音量(票04;可变字段,构造给初值——播放中即切由控制
+  /// 器直改,不重建调度器不重锚,位置天然连续)。静音 = 不预定新声 +
+  /// 停该路在途未响(已响尾音自然衰减);**游标照走、时钟照推**——
+  /// 静音的是出声不是时间,红线与推进不受影响(测试锁定)。音量在预
+  /// 定时刻定音,改音量只影响之后的预定(在途 ≤400ms 内的已排声保持
+  /// 旧值)。
+  bool demoEnabled;
+  double demoVolume;
+  bool metroEnabled;
+  double metroVolume;
+
   /// 循环轮间音乐域 gap(countPerLoop 时的 4 拍;轮次推进与视图模回跳
   /// 公式的 cycle = 窗长 + gap 必须同源一致)。
   Duration get _gapMusic =>
@@ -85,6 +118,9 @@ class FlowingNoteScheduler {
   Timer? _timer;
   Duration? _t0;
   int _next = 0;
+
+  /// 节拍流游标(票04;与示范声同型:序推进、循环回跳重置)。
+  int _nextMetro = 0;
   bool _finishedFired = false;
 
   /// 循环轮次的音乐域累计偏移(k·窗口长;纯音乐域推进——越过 B 的攻击
@@ -108,6 +144,21 @@ class FlowingNoteScheduler {
     while (lo < hi) {
       final mid = (lo + hi) >> 1;
       if (attacks[mid].time < musicTime) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+
+  /// 第一个音乐时刻 ≥ [musicTime] 的拍点下标(二分,与攻击同型)。
+  int _firstBeatIndexFrom(Duration musicTime) {
+    var lo = 0;
+    var hi = beats.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (beats[mid].time < musicTime) {
         lo = mid + 1;
       } else {
         hi = mid;
@@ -153,6 +204,16 @@ class FlowingNoteScheduler {
         break;
       }
     }
+    // 节拍流同型跳过(票04:重建时已响拍点不重响)。
+    while (_nextMetro < beats.length) {
+      final time = t0 + _scaled(beats[_nextMetro].time);
+      if (time < now - _maxLate ||
+          (consumedUntil != null && time <= consumedUntil)) {
+        _nextMetro++;
+      } else {
+        break;
+      }
+    }
     _timer = Timer.periodic(pollInterval, (_) => _pass());
     _pass();
   }
@@ -182,9 +243,63 @@ class FlowingNoteScheduler {
     _pending.clear();
     _t0 = null;
     _next = 0;
+    _nextMetro = 0;
     _passBase = Duration.zero;
     _cutDoneBase = null;
     return pending;
+  }
+
+  /// 静音示范路(票04):停该路在途未响预定(已响尾音自然衰减)。
+  /// 游标照走、时钟照推——静音的是出声不是时间。
+  void silenceDemoPending() => _silenceChannel(_Channel.note);
+
+  /// 静音节拍路(票04):只停节拍 tick;循环数拍(count 路)归数四下
+  /// 开关管,不受此影响(音量仍骑节拍音量滑条,codex 同款)。
+  void silenceMetroPending() => _silenceChannel(_Channel.metro);
+
+  void _silenceChannel(_Channel channel) {
+    Duration? now;
+    try {
+      now = engine.engineTime();
+    } catch (_) {
+      return; // 钟不可读:不动在途(停机/截尾路径兜底)。
+    }
+    final effective = now;
+    // 只停未响在途(立静);已响尾音自然衰减——静音不是暂停,不该听得见。
+    for (final entry in _pending
+        .where((e) => e.channel == channel && e.time > effective)
+        .toList()) {
+      try {
+        engine.stop(entry.voice);
+      } catch (_) {}
+    }
+    _pending.removeWhere((e) => e.channel == channel && e.time > effective);
+  }
+
+  /// 预定一组同刻拨弦(和弦一事件多声;音量走示范路)。
+  void _scheduleNote(FlowingAttack attack, Duration time) {
+    if (!demoEnabled) return;
+    final sounds = pickSound(attack.freqs);
+    for (final sound in sounds) {
+      if (sound == null) continue;
+      _pending.add((
+        voice: engine.playScheduled(sound, time, volume: demoVolume),
+        time: time,
+        channel: _Channel.note,
+      ));
+    }
+  }
+
+  /// 预定一记节拍 tick(重拍 strong/弱拍 weak,音量走节拍路)。
+  void _scheduleMetro(FlowingBeat beat, Duration time) {
+    if (!metroEnabled) return;
+    final sound = pickMetroSound?.call(beat.accent);
+    if (sound == null) return;
+    _pending.add((
+      voice: engine.playScheduled(sound, time, volume: metroVolume),
+      time: time,
+      channel: _Channel.metro,
+    ));
   }
 
   void _pass() {
@@ -198,46 +313,72 @@ class FlowingNoteScheduler {
       final a = looping ? loopStart! : null;
       final b = looping ? loopEnd! : null;
       while (true) {
-        // 需要进下一轮:攻击走完(循环永不走完)或越过 B。
-        var needPass = _next >= attacks.length;
-        if (!needPass && b != null && attacks[_next].time >= b) needPass = true;
-        if (needPass) {
-          if (b == null) break; // 非循环:攻击奏毕。
+        // 需要进下一轮:两流都越过窗口末(循环)或都走完(非循环)。
+        // 节拍流与示范声同窗同轮次——拍点与红线/示范声同源同刻(票04)。
+        final notePast =
+            _next >= attacks.length || (b != null && attacks[_next].time >= b);
+        final metroPast = _nextMetro >= beats.length ||
+            (b != null && beats[_nextMetro].time >= b);
+        if (notePast && metroPast) {
+          if (b == null) break; // 非循环:示范声与节拍都奏毕。
           // 本轮窗口奏毕,进下一轮(纯音乐域推进,跨接缝提前预定)。
           final first = _firstIndexFrom(a!);
-          if (first >= attacks.length || attacks[first].time >= b) {
-            break; // 窗内无攻击:无可推进项(截尾仍按时刻照做)。
+          final firstMetro = _firstBeatIndexFrom(a);
+          final emptyNote =
+              first >= attacks.length || attacks[first].time >= b;
+          final emptyMetro =
+              firstMetro >= beats.length || beats[firstMetro].time >= b;
+          if (emptyNote && emptyMetro) {
+            break; // 窗内无事件:无可推进项(截尾仍按时刻照做)。
           }
           // 回跳点(本轮 B 的绝对时刻)= 下一轮数拍的起拍。
           final wrapAt = t0 + _scaled(b + _passBase);
           _passBase += (b - a) + _gapMusic;
           _next = first;
+          _nextMetro = firstMetro;
           // 数四下(票03):回跳后 4 记 tick,下一轮示范声整体后移一个
           // gap。tick 预定可远超 lookahead(playScheduled 绝对时刻,幂等
-          // 停机由 _pending 收口);已过容差的跳过。
+          // 停机由 _pending 收口);已过容差的跳过。音量骑节拍音量(票04,
+          // codex 同款:预备 tick 属节拍通道,开关归「每轮数」)。
           if (_gapMusic > Duration.zero && pickCountSound != null) {
             final tickSound = pickCountSound!();
             if (tickSound != null) {
               for (var j = 0; j < 4; j++) {
                 final at = wrapAt + _scaled(beatDur! * j);
                 if (at < now - _maxLate) continue;
-                _pending.add(
-                  (voice: engine.playScheduled(tickSound, at), time: at),
-                );
+                _pending.add((
+                  voice: engine.playScheduled(tickSound, at,
+                      volume: metroVolume),
+                  time: at,
+                  channel: _Channel.count,
+                ));
               }
             }
           }
         }
-        final time = t0 + _scaled(attacks[_next].time + _passBase);
-        if (time > limit) break;
-        if (time >= from) {
-          final sounds = pickSound(attacks[_next].freqs);
-          for (final sound in sounds) {
-            if (sound == null) continue;
-            _pending.add((voice: engine.playScheduled(sound, time), time: time));
-          }
+        // 双流合并取最早:示范声与节拍各按自身游标给候选,轮到谁预定谁
+        // (并列按示范声先;处理顺序不影响绝对时刻)。候选越 lookahead
+        // 即歇,下轮询再来。静音开关只拦「预定」,游标照走——静音的是
+        // 出声不是时间(票04 红线,测试锁定)。
+        final tNote = notePast
+            ? null
+            : t0 + _scaled(attacks[_next].time + _passBase);
+        final tMetro = metroPast
+            ? null
+            : t0 + _scaled(beats[_nextMetro].time + _passBase);
+        if (tNote == null && tMetro == null) break; // 防御:双流皆无候选。
+        // 节拍优先于并列/更晚的示范声?(顺序处理,绝对时刻不受影响。)
+        if (tMetro != null && (tNote == null || tMetro <= tNote)) {
+          if (tMetro > limit) break;
+          if (tMetro >= from) _scheduleMetro(beats[_nextMetro], tMetro);
+          _nextMetro++;
+        } else {
+          // 双空已在上面的 break 排除;此支 tMetro 空或更晚,tNote 必非空。
+          final note = tNote ?? (t0 + _scaled(attacks[_next].time + _passBase));
+          if (note > limit) break;
+          if (note >= from) _scheduleNote(attacks[_next], note);
+          _next++;
         }
-        _next++;
       }
       if (looping) {
         // 越 B 截尾:上一轮的 B 绝对时刻一到,停掉绝对时刻 < 回跳点的

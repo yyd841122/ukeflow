@@ -372,7 +372,8 @@ void main() {
 
 class BrokenPlayEngine extends FakeAudioEngine {
   @override
-  EngineVoice playScheduled(EngineSound sound, Duration when) =>
+  EngineVoice playScheduled(EngineSound sound, Duration when,
+          {double volume = 1.0}) =>
       throw Exception('引擎预定失败(注入)');
 }
 
@@ -382,7 +383,8 @@ class HalfBrokenEngine extends FakeAudioEngine {
   int _playCalls = 0;
 
   @override
-  EngineVoice playScheduled(EngineSound sound, Duration when) {
+  EngineVoice playScheduled(EngineSound sound, Duration when,
+      {double volume = 1.0}) {
     _playCalls++;
     if (_playCalls > 5) throw Exception('引擎预定失败(注入)');
     return super.playScheduled(sound, when);

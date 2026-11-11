@@ -65,11 +65,12 @@ class FakeAudioEngine implements AudioEngine {
   }
 
   @override
-  EngineVoice playScheduled(EngineSound sound, Duration when) {
+  EngineVoice playScheduled(EngineSound sound, Duration when,
+      {double volume = 1.0}) {
     if (failNow) throw Exception('FakeAudioEngine: 模拟运行中引擎异常');
     final voice = FakeVoice(_nextVoiceId++);
     scheduleLog.add(
-      FakeScheduledCall(key: sound.key, time: when, voice: voice),
+      FakeScheduledCall(key: sound.key, time: when, voice: voice, volume: volume),
     );
     return voice;
   }
@@ -111,10 +112,14 @@ final class FakeScheduledCall {
     required this.key,
     required this.time,
     required this.voice,
+    this.volume = 1.0,
   });
 
   final String key;
   final Duration time;
   final EngineVoice voice;
+
+  /// 预定音量 0..1(票04 分路音量断言用;缺省 1.0)。
+  final double volume;
   bool stopped = false;
 }

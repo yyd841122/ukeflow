@@ -8,7 +8,8 @@ import '../../../core/audio/providers.dart';
 import '../../../core/audio/tick_sounds.dart';
 import '../../../core/score/flowing_timeline.dart';
 import '../../../core/score/reference_score.dart';
-import 'flowing_note_scheduler.dart';
+import 'flowing_note_scheduler.dart'
+    show FlowingAttack, FlowingBeat, FlowingNoteScheduler;
 
 /// 可覆盖的曲谱装载缝(测试注入,免 rootBundle)。
 final flowingScoreLoaderProvider = Provider<Future<ReferenceScore> Function()>(
@@ -52,6 +53,10 @@ class FlowingPracticeState {
     this.countPerLoop = false,
     this.countStart,
     this.countBeatDur,
+    this.demoEnabled = true,
+    this.demoVolume = 1.0,
+    this.metroEnabled = false,
+    this.metroVolume = 0.5,
     this.error,
   });
 
@@ -84,6 +89,16 @@ class FlowingPracticeState {
 
   /// 数拍节拍时长(音乐域 60/tempo;视图按 speed 缩放显示倒计数)。
   final Duration? countBeatDur;
+
+  /// 示范琴声开关与音量(票04,codex 同款默认:开 / 1.0)。静音只停
+  /// 「出声」,时间线照推——红线与推进不受影响。
+  final bool demoEnabled;
+  final double demoVolume;
+
+  /// 节拍器开关与音量(票04 新增节拍轨,codex 同款默认:关 / 0.5)。
+  /// 数四下 tick 音量同骑此滑条(开关仍归数拍开关管)。
+  final bool metroEnabled;
+  final double metroVolume;
   final String? error;
 
   /// 生效中的循环窗口;null = 不循环。
@@ -106,6 +121,10 @@ class FlowingPracticeState {
     bool? countPerLoop,
     Duration? countStart,
     Duration? countBeatDur,
+    bool? demoEnabled,
+    double? demoVolume,
+    bool? metroEnabled,
+    double? metroVolume,
     String? error,
     bool clearT0 = false,
     bool clearError = false,
@@ -124,6 +143,10 @@ class FlowingPracticeState {
       countPerLoop: countPerLoop ?? this.countPerLoop,
       countStart: clearCount ? null : (countStart ?? this.countStart),
       countBeatDur: clearCount ? null : (countBeatDur ?? this.countBeatDur),
+      demoEnabled: demoEnabled ?? this.demoEnabled,
+      demoVolume: demoVolume ?? this.demoVolume,
+      metroEnabled: metroEnabled ?? this.metroEnabled,
+      metroVolume: metroVolume ?? this.metroVolume,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -143,6 +166,14 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
 
   /// 数拍 tick 音源(独立预备音色,装载失败降级为不数直接播)。
   EngineSound? _countSound;
+
+  /// 节拍器音源(票04:重拍 strong/弱拍 weak;与数拍同一次装载,
+  /// 失败一并降级为无声——开关与音量仍在,只是不响)。
+  EngineSound? _metroStrong;
+  EngineSound? _metroWeak;
+
+  /// 节拍器拍点表(票04,音乐域升序;装载时从小节表一次算清)。
+  List<FlowingBeat> _metroBeats = const [];
 
   /// 预备数拍的引擎钟轮询(票03:Timer 只当触发器,数完时刻读引擎钟,
   /// 与调度器同纪律;测试可手动推进引擎钟立即翻状态)。
@@ -185,11 +216,18 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       await pluck.preloadSounds({
         for (final a in _attacks) ...a.freqs,
       });
-      // 数拍音源(票03;失败不阻断装载——降级为不数直接播)。
+      // tick 音源(票03 数拍 + 票04 节拍器 strong/weak 同一揽子装载;
+      // 失败不阻断装载——降级为不数、节拍无声,开关与音量仍在)。
+      _metroBeats = buildBeats(score);
       try {
-        final ticks = await TickSounds.load(_engine, count: true);
+        final ticks =
+            await TickSounds.load(_engine, strong: true, weak: true, count: true);
+        _metroStrong = ticks.strong;
+        _metroWeak = ticks.weak;
         _countSound = ticks.count;
       } catch (_) {
+        _metroStrong = null;
+        _metroWeak = null;
         _countSound = null;
       }
       if (_disposed) return;
@@ -226,6 +264,27 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       ));
     }
     return attacks;
+  }
+
+  /// 小节表 → 节拍器拍点(票04):每小节按其拍速把时长均分为四分音符
+  /// 拍(与转换器 quarterBeats×60/tempo 同式回推),小节头为重拍。纯
+  /// 音乐域时刻——慢放/循环由调度器统一变换,与示范声同源。
+  @visibleForTesting
+  static List<FlowingBeat> buildBeats(ReferenceScore score) {
+    final beats = <FlowingBeat>[];
+    for (final measure in score.measures) {
+      final startMs = (measure.startSeconds * 1000).round();
+      final beatMs = 60000 / measure.tempo;
+      final count =
+          (measure.durationSeconds * measure.tempo / 60).round();
+      for (var k = 0; k < count; k++) {
+        beats.add((
+          time: Duration(milliseconds: startMs + (beatMs * k).round()),
+          accent: k == 0,
+        ));
+      }
+    }
+    return beats;
   }
 
   /// 当前音乐秒(唯一时间源=引擎时钟;未播放时为静态位置)。慢放:
@@ -324,7 +383,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       final at =
           countStart + Duration(microseconds: (beat.inMicroseconds * j / speed).round());
       try {
-        _countVoices.add(_engine.playScheduled(sound, at));
+        _countVoices.add(
+          _engine.playScheduled(sound, at, volume: state.metroVolume),
+        );
       } catch (_) {}
     }
     _countEnd = countStart +
@@ -519,6 +580,42 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     state = state.copyWith(t0: t0, positionSeconds: position);
   }
 
+  /// 声音分路(票04):示范琴声/节拍器各自开关+音量,codex 同款默认
+  /// (琴声开 1.0、节拍关 0.5)。静音任一路只停「出声」:在途调度器
+  /// 可变字段直改 + 停该路在途未响预定(≤400ms 已排声立静),不重建
+  /// 调度器不重锚——游标照走、时钟照推,红线与推进不受影响(测试
+  /// 锁定);静止态只换状态,下次起播生效。音量改动只影响之后的预定
+  /// (在途已排声保持旧值,≤400ms 追平;循环数拍 tick 在回跳点一次
+  /// 排 4 记,本轮回跳前的改动下一轮生效)。数拍 tick 音量同骑节拍
+  /// 音量滑条(codex 同款),但开关归数拍开关管。
+  void setAudioOptions({
+    bool? demoEnabled,
+    double? demoVolume,
+    bool? metroEnabled,
+    double? metroVolume,
+  }) {
+    state = state.copyWith(
+      demoEnabled: demoEnabled,
+      demoVolume: demoVolume?.clamp(0.0, 1.0),
+      metroEnabled: metroEnabled,
+      metroVolume: metroVolume?.clamp(0.0, 1.0),
+    );
+    if (kDebugMode) {
+      debugPrint('UFLOW_FLOW AUDIO demo=${state.demoEnabled}/'
+          '${state.demoVolume.toStringAsFixed(2)} '
+          'metro=${state.metroEnabled}/${state.metroVolume.toStringAsFixed(2)}');
+    }
+    final scheduler = _scheduler;
+    if (scheduler == null) return; // 静止态只换状态,下次起播生效。
+    scheduler
+      ..demoEnabled = state.demoEnabled
+      ..demoVolume = state.demoVolume
+      ..metroEnabled = state.metroEnabled
+      ..metroVolume = state.metroVolume;
+    if (demoEnabled == false) scheduler.silenceDemoPending();
+    if (metroEnabled == false) scheduler.silenceMetroPending();
+  }
+
   /// 预备数拍当前拍号(1..4);不在数拍段返回 null(状态行倒计数用)。
   /// 起播预备由 countStart/拍长推;循环轮间数拍由模公式 gap 段推。
   int? countBeatNow() {
@@ -636,6 +733,12 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       countPerLoop: loopCount,
       beatDur: loopCount ? _beatDurAt(effectiveLoop.start) : null,
       pickCountSound: () => _countSound,
+      beats: _metroBeats,
+      pickMetroSound: (accent) => accent ? _metroStrong : _metroWeak,
+      demoEnabled: state.demoEnabled,
+      demoVolume: state.demoVolume,
+      metroEnabled: state.metroEnabled,
+      metroVolume: state.metroVolume,
       pickSound: (freqs) => [for (final f in freqs) pluck.loadedSound(f)],
       onFinished: () {
         if (_disposed) return;
