@@ -233,6 +233,9 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
 
   Widget _hintCard(FingeringHint hint, String label, {required double width}) {
     final showable = hint.showable;
+    // 尺寸全固定(票05 验收反馈):图定宽、文本框定宽定高一行——文字长
+    // 就 FittedBox 自动缩小,卡片高度永不随内容变,曲谱可用高度稳定
+    // (FittedBox 缩放不再时大时小)。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -242,11 +245,18 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
         const SizedBox(height: 2),
         FingeringDiagram(notes: hint.notes, width: width),
         const SizedBox(height: 2),
-        Text(
-          showable ? hint.summary : '',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: _glyph, fontSize: 11),
+        SizedBox(
+          width: width,
+          height: 15,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              showable ? hint.summary : '',
+              maxLines: 1,
+              style: const TextStyle(color: _glyph, fontSize: 11),
+            ),
+          ),
         ),
       ],
     );
