@@ -253,8 +253,19 @@ void main() {
     expect(nextRect.width, lessThan(curRect.width), reason: '预告用小尺寸');
   });
 
+  testWidgets('相邻小节同和弦:预告照显同名,不空白(票63)', (tester) async {
+    // 第 2 小节 [C],下一小节仍是 [C]——显 C,不跳显后面的 Am 也不消失。
+    await pumpView(tester, const Duration(seconds: 4));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('next-chord-name'))).data,
+      'C',
+      reason: '新手需要「下一个还是 C,手上别动」的确认',
+    );
+    expect(find.byKey(const Key('next-chord-card')), findsOneWidget);
+  });
+
   testWidgets('曲末无下一和弦:预告卡不占位', (tester) async {
-    // 第 4 小节 [Am] 之后没有换和弦点了。
+    // 第 4 小节 [Am] 是最后一小节,之后没有下一小节了。
     await pumpView(tester, const Duration(seconds: 9, milliseconds: 100));
     expect(find.byKey(const Key('next-chord-card')), findsNothing);
   });

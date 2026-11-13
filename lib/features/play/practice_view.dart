@@ -202,17 +202,17 @@ class PracticeView extends StatelessWidget {
     return name == null ? null : chords[name];
   }
 
-  /// 下一和弦(俄罗斯方块预告的最小切片):自下一小节起,第一个与当前
-  /// 和弦不同的和弦名;曲末/无名 → null。完整动作预告窗归工单 10。
+  /// 下一和弦(俄罗斯方块预告的最小切片):下一小节第一个有名和弦;
+  /// 与当前相同也照显——新手需要「下一个还是 C,手上别动」的确认,
+  /// 空白比重复更容易搞混(票63);曲末无下一小节/无名 → null。
+  /// 完整动作预告窗归工单 10。
   String? get _nextChordName {
     final currentName = practice.currentStrum?.chord;
     if (currentName == null) return null;
     final nextBar = practice.beat ~/ beatsPerBar + 1;
     for (final strum in timeline.strums) {
       if (strum.barIndex < nextBar) continue;
-      if (strum.chord != null && strum.chord != currentName) {
-        return strum.chord;
-      }
+      if (strum.chord != null) return strum.chord;
     }
     return null;
   }
