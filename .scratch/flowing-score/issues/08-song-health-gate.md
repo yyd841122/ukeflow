@@ -6,7 +6,7 @@
 
 **Blocked by:** 07(数据要先能进来)
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 - [x] 体检清点:拍号/调弦/反复/连音/效果记号逐项
 - [x] 三态结论与报告展示
@@ -40,3 +40,5 @@
   (反复·1 处/效果记号·2 处/连音·1 处),页底「按换歌纪律,该谱未导入」,
   全程无「进入跟练」按钮,不误导入;logcat 无 E/flutter、无 FATAL。
   截图 /tmp/uke08/(report_top/report_bottom)。待用户过目翻 done。
+- 2026-11-14: 用户过目报告 + 听完机制讲解后确认,翻 done。流水谱线
+  01-08 全部收口。
