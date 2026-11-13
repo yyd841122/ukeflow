@@ -5,7 +5,7 @@
 
 **Blocked by:** None
 
-**Status:** implemented (awaiting device check)
+**Status:** done
 
 - [x] 会话记录落库(drift,流水谱线新表)
 - [x] 时长扣除暂停/预备(测试锁定)
@@ -47,3 +47,5 @@
   维护);首版 `_persistSession` 读 state.speed 也在退页时炸,改读镜
   像。所有容错 catch 曾把断言吞掉静默漏账——靠逐站 debugPrint 才挖
   出,统计路径的静默容错要配日志。
+- 2026-11-13: 用户真机验收过,四条全对(记录行自洽/自评持久/速度与
+  循环重开恢复/列表展示),翻 done。
