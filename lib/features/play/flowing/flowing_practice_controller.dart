@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,9 @@ import '../../../core/audio/providers.dart';
 import '../../../core/audio/tick_sounds.dart';
 import '../../../core/score/flowing_timeline.dart';
 import '../../../core/score/reference_score.dart';
+import '../../../data/flowing_sessions_dao.dart';
+import '../../../data/providers.dart';
+import '../../../data/settings_dao.dart';
 import 'flowing_note_scheduler.dart'
     show FlowingAttack, FlowingBeat, FlowingNoteScheduler;
 
@@ -184,6 +188,29 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   /// 暂停续播不重数(codex 同款:暂停→播放直续;seek/曲末重开重数)。
   bool _resumeWithoutCount = false;
 
+  /// 练习会话(票06,codex practice-session 同语义):一次进页 = 一行;
+  /// 时长只累计播放中的引擎钟段(墙钟等值,预备数拍/暂停不计——测试
+  /// 锁定);暂停/seek/曲末/退页随写随存同一行,曲末后再播新起一行。
+  /// 引擎钟差值而非 Stopwatch:测试手动推钟即可精确断言,时序纪律
+  /// (ADR-0005)不破——这里只做统计,不进任何同步路径。
+  int? _sessionId;
+  int? _playingSinceMs;
+
+  /// 播放窗锚镜像(音乐秒/速度/引擎 ms):退页落库换算终位用——
+  /// Riverpod 3 禁 onDispose 里碰 state,窗锚用纯字段记账。
+  double _winFrom = 0;
+  double _winSpeed = 1.0;
+  int _winT0Ms = 0;
+  int _sessionDurationMs = 0;
+  bool _sessionClosed = false;
+
+  /// 存取口 build 期取定(Riverpod 3:onDispose 里不可再 ref.read——
+  /// 退页落库/结窗的引擎读取都走字段,否则断言抛出被统计路径的容错
+  /// 吞掉,静默漏账);库故障在此炸出 → 装载失败路径,与曲谱装载同级。
+  late final FlowingSessionsDao _sessionsDao;
+  late final SettingsDao _settingsDao;
+  late final AudioEngine _engine;
+
   /// 真机诊断遥测(仅 debug 构建编译进来;ADR-0005 不破:墙钟只进日志,
   /// 不进任何同步逻辑——codex SCORE_TELEMETRY 同款办法,量「时钟 vs
   /// 真实时间推进比例」「调度进度」)。
@@ -194,17 +221,25 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
 
   @override
   FlowingPracticeState build() {
+    _sessionsDao = ref.watch(flowingSessionsDaoProvider);
+    _settingsDao = ref.watch(settingsDaoProvider);
+    _engine = ref.watch(audioEngineProvider);
     // 页面关闭(监听清空 → provider 销毁)即停声清场。
     ref.onDispose(() {
       _disposed = true;
       _cancelCount();
+      // 退页结窗落库(票06):页关即写当前快照,下次进页是新的会话行。
+      // 位置按窗锚换算——Riverpod 3 禁 onDispose 里碰 state/ref。
+      if (_playingSinceMs != null) {
+        final position = _disposePosition();
+        _closePlayingWindow();
+        _persistSession(position);
+      }
       _disposeScheduler();
     });
     Future(() => _load());
     return const FlowingPracticeState();
   }
-
-  AudioEngine get _engine => ref.read(audioEngineProvider);
 
   Future<void> _load() async {
     try {
@@ -231,12 +266,36 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         _countSound = null;
       }
       if (_disposed) return;
+      // 恢复上次段落与速度(票06):就绪待播,不自动开演;无档/坏档
+      // 按缺档处理(0.5/0.75/1.0 白名单外的速度一律弃用)。
+      var restoredSpeed = 1.0;
+      double? restoredA;
+      double? restoredB;
+      try {
+        final raw = await _settingsDao.getString(SettingsKeys.flowingPracticeState);
+        if (raw != null) {
+          final json = jsonDecode(raw) as Map<String, dynamic>;
+          final speed = (json['speed'] as num?)?.toDouble();
+          if (speed != null && _validSpeeds.contains(speed)) {
+            restoredSpeed = speed;
+          }
+          final a = (json['loopA'] as num?)?.toDouble();
+          final b = (json['loopB'] as num?)?.toDouble();
+          if (a != null && b != null && b > a && b <= score.durationSeconds) {
+            restoredA = a;
+            restoredB = b;
+          }
+        }
+      } catch (_) {}
       state = FlowingPracticeState(
         status: FlowingStatus.ready,
         score: score,
         positionSeconds: 0,
         countInEnabled: state.countInEnabled,
         countPerLoop: state.countPerLoop,
+        speed: restoredSpeed,
+        loopStart: restoredA,
+        loopEnd: restoredB,
       );
     } catch (error) {
       if (_disposed) return;
@@ -360,6 +419,17 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     }
     final resumeWithoutCount = _resumeWithoutCount;
     _resumeWithoutCount = false;
+    // 会话开行(票06):进页首次播放或曲末再播各起一行;库故障不挡练琴
+    // (统计缺席比练琴中断便宜)。
+    if (_sessionId == null || _sessionClosed) {
+      try {
+        _sessionId = await _sessionsDao.start(DateTime.now().millisecondsSinceEpoch);
+        _sessionDurationMs = 0;
+        _sessionClosed = false;
+      } catch (_) {
+        _sessionId = null;
+      }
+    }
     if (state.countInEnabled && !resumeWithoutCount && _countSound != null) {
       _beginCount(from);
       return;
@@ -442,7 +512,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     _startPlaybackAt(from);
   }
 
-  /// 起播公共路径:锚 t0、建调度器、翻 playing。
+  /// 起播公共路径:锚 t0、建调度器、翻 playing。开播放窗(会话计时)。
   void _startPlaybackAt(double from) {
     final score = state.score;
     if (score == null) return;
@@ -451,6 +521,15 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         Duration(
             microseconds:
                 (from / speed * Duration.microsecondsPerSecond).round());
+    try {
+      final engMs = _engine.engineTime().inMilliseconds;
+      _playingSinceMs = engMs;
+      _winFrom = from;
+      _winSpeed = speed;
+      _winT0Ms = engMs;
+    } catch (_) {
+      _playingSinceMs = null;
+    }
     final scheduler = _buildScheduler(score, speed);
     scheduler.start(t0: t0);
     _scheduler = scheduler;
@@ -479,6 +558,8 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     }
     if (state.status != FlowingStatus.playing) return;
     final position = currentSeconds();
+    _closePlayingWindow();
+    _persistSession(position);
     _disposeScheduler();
     _resumeWithoutCount = true;
     state = state.copyWith(
@@ -498,6 +579,10 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     if (position < 0) position = 0;
     if (position > score.durationSeconds) position = score.durationSeconds;
     if (state.status == FlowingStatus.counting) _cancelCount();
+    if (state.status == FlowingStatus.playing && state.t0 != null) {
+      _closePlayingWindow();
+      _persistSession(position);
+    }
     _disposeScheduler();
     _resumeWithoutCount = false;
     state = state.copyWith(
@@ -524,6 +609,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     if (state.status != FlowingStatus.playing || state.score == null) {
       // 静止态只换倍率:下次 play() 按新速度锚定。
       state = state.copyWith(speed: value);
+      _persistPracticeSettings();
       if (kDebugMode) debugPrint('UFLOW_FLOW SPEED $value (静止,待播生效)');
       return;
     }
@@ -539,6 +625,10 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     scheduler.start(t0: t0, consumedUntil: now);
     _scheduler = scheduler;
     state = state.copyWith(speed: value, t0: t0, positionSeconds: position);
+    _winFrom = position;
+    _winSpeed = value;
+    _winT0Ms = now.inMilliseconds;
+    _persistPracticeSettings();
     if (kDebugMode) {
       debugPrint(
           'UFLOW_FLOW SPEED $value pos=${position.toStringAsFixed(3)} '
@@ -675,6 +765,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     final clear = ca == null && cb == null;
     if (state.status != FlowingStatus.playing || state.t0 == null) {
       state = state.copyWith(loopStart: ca, loopEnd: cb, clearLoop: clear);
+      _persistPracticeSettings();
       return;
     }
     var pos = currentSeconds();
@@ -701,6 +792,10 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       t0: t0,
       positionSeconds: pos,
     );
+    _winFrom = pos;
+    _winSpeed = state.speed;
+    _winT0Ms = now.inMilliseconds;
+    _persistPracticeSettings();
     if (kDebugMode) {
       debugPrint('UFLOW_FLOW LOOP ${loop == null ? 'off' : '${loop.start}-${loop.end}'} '
           'pos=${pos.toStringAsFixed(3)} engMs=${now.inMilliseconds}');
@@ -742,6 +837,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       pickSound: (freqs) => [for (final f in freqs) pluck.loadedSound(f)],
       onFinished: () {
         if (_disposed) return;
+        controller._closePlayingWindow();
+        controller._sessionClosed = true;
+        controller._persistSession(score.durationSeconds);
         controller.state = controller.state.copyWith(
           status: FlowingStatus.finished,
           positionSeconds: score.durationSeconds,
@@ -757,6 +855,62 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         );
       },
     );
+  }
+
+  /// 退页时刻的音乐秒(窗锚换算;引擎不可读退回窗起点)。
+  double _disposePosition() {
+    try {
+      final eng = _engine.engineTime().inMilliseconds;
+      return _winFrom + (eng - _winT0Ms) / 1000 * _winSpeed;
+    } catch (_) {
+      return _winFrom;
+    }
+  }
+
+  /// 结当前播放窗:引擎钟差值入会话时长(重复调用安全——窗没开即空操作)。
+  void _closePlayingWindow() {
+    final since = _playingSinceMs;
+    if (since == null) return;
+    _playingSinceMs = null;
+    try {
+      final delta = _engine.engineTime().inMilliseconds - since;
+      if (delta > 0) _sessionDurationMs += delta;
+    } catch (_) {}
+  }
+
+  /// 会话快照落库(票06;fire-and-forget:统计写失败静默,不追练琴)。
+  /// 速度取窗锚镜像——onDispose 路径禁碰 state,镜像由换挡点同步维护。
+  void _persistSession(double endPosition) {
+    final id = _sessionId;
+    if (id == null) return;
+    final durationMs = _sessionDurationMs;
+    final speed = _winSpeed;
+    unawaited(() async {
+      try {
+        await _sessionsDao.saveSnapshot(
+              id: id,
+              durationMs: durationMs,
+              endPositionSeconds: endPosition,
+              speed: speed,
+            );
+      } catch (_) {}
+    }());
+  }
+
+  /// 上次段落与速度写透(票06;codex saveSettings 同款:改档/改循环即
+  /// 写,重开恢复)。fire-and-forget;JSON 单键原子覆盖,清循环 = 键内
+  /// 去掉 loop 字段。
+  void _persistPracticeSettings() {
+    final loop = state.activeLoop;
+    final raw = jsonEncode({
+      'speed': state.speed,
+      if (loop != null) ...{'loopA': loop.start, 'loopB': loop.end},
+    });
+    unawaited(() async {
+      try {
+        await _settingsDao.setString(SettingsKeys.flowingPracticeState, raw);
+      } catch (_) {}
+    }());
   }
 
   void _disposeScheduler() {

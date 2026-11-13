@@ -4,6 +4,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import '../core/model/checkin.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
+import 'flowing_sessions_dao.dart';
 import 'image_charts_dao.dart';
 import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
@@ -98,16 +99,47 @@ class ImportedSoloCharts extends Table {
   TextColumn get sourceHtml => text().nullable()();
 }
 
+/// 流水谱练习会话表(票06):一行 = 一次进页练琴会话。时长只累计
+/// 播放中的墙钟段(预备数拍/暂停不计,测试锁定);暂停/曲末/退页随写
+/// 随存同一行(id upsert),曲末后再播新起一行(codex 同款)。
+class FlowingSessions extends Table {
+  /// 自增主键:会话标识,自评按 id 定点改。
+  IntColumn get id => integer().autoIncrement()();
+
+  /// 会话起始时刻(epoch ms;列表展示与排序)。
+  IntColumn get startedAtMs => integer()();
+
+  /// 实际练习时长(ms):播放中的引擎钟差值累计。
+  IntColumn get durationMs => integer().withDefault(const Constant(0))();
+
+  /// 结束位置(曲谱秒):暂停/退页时刻,曲末 = 曲长。
+  RealColumn get endPositionSeconds => real().withDefault(const Constant(0))();
+
+  /// 会话内速度(最后使用值;三档 0.5/0.75/1.0)。
+  RealColumn get speed => real().withDefault(const Constant(1.0))();
+
+  /// 自评:null 未自评 / 1 还要练 / 2 逐渐熟 / 3 比较顺(codex 三档)。
+  IntColumn get rating => integer().nullable()();
+}
+
 /// UkeFlow 本地数据库(drift/SQLite)。
 /// 加表时 schemaVersion 递增并写迁移。
 @DriftDatabase(
-  tables: [CheckIns, CustomCharts, ImageCharts, ImportedSoloCharts, Settings],
+  tables: [
+    CheckIns,
+    CustomCharts,
+    ImageCharts,
+    ImportedSoloCharts,
+    Settings,
+    FlowingSessions,
+  ],
   daos: [
     CheckInsDao,
     CustomChartsDao,
     ImageChartsDao,
     ImportedSoloChartsDao,
     SettingsDao,
+    FlowingSessionsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -116,7 +148,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'ukeflow'));
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   // v1 前期 schema 只加不改:建库与升级都 createAll(生成 IF NOT EXISTS,幂等),
   // 后续工单加表只需建表 + 递增 schemaVersion,升级安装也能拿到新表;

@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
 import 'package:ukeflow/core/score/reference_score.dart';
+import 'package:ukeflow/data/database.dart';
+import 'package:ukeflow/data/providers.dart';
+import 'package:ukeflow/data/settings_dao.dart';
 import 'package:ukeflow/features/play/flowing/flowing_practice_controller.dart';
 
 /// 流水谱跟练控制器:装载/播放/暂停/跳转/曲末的会话状态机,
@@ -13,6 +17,7 @@ import 'package:ukeflow/features/play/flowing/flowing_practice_controller.dart';
 /// 真实短延迟驱动 40ms 轮询(引擎时钟手动推进,两者解耦)。
 void main() {
   late FakeAudioEngine engine;
+  late AppDatabase db;
   late ProviderContainer container;
 
   /// 小合成谱:休止@0(0.5s)、单音@0.5(midi69)、和弦@1.0(69+73,
@@ -77,16 +82,20 @@ void main() {
 
   setUp(() {
     engine = FakeAudioEngine();
+    db = AppDatabase(NativeDatabase.memory());
     container = ProviderContainer(
       overrides: [
         audioEngineProvider.overrideWithValue(engine),
         flowingScoreLoaderProvider.overrideWithValue(() async => score()),
+        settingsDaoProvider.overrideWithValue(db.settingsDao),
+        flowingSessionsDaoProvider.overrideWithValue(db.flowingSessionsDao),
       ],
     );
     // listen 订阅钉活 provider:Riverpod 3 无监听即回收,断续 read 会被
     // 销毁重建,状态与调度全断。
     container.listen(flowingPracticeProvider, (_, _) {});
     addTearDown(container.dispose);
+    addTearDown(db.close);
     // 旧用例默认关数拍(票03 专测自行开启):起播预备会延迟翻播放状态。
     container
         .read(flowingPracticeProvider.notifier)
@@ -833,6 +842,123 @@ void main() {
       0.8,
       reason: '改音量只影响之后的预定',
     );
+  });
+
+  // —— 票06 练习记录 ——
+  // 时长语义:只累计播放中的引擎钟段(手动推钟→毫秒级精确断言)。
+
+  test('会话:播放段累计时长,暂停/间隙不计,同一行随写随存', () async {
+    await pumpLoad();
+    await controller().play();
+    engine.advance(const Duration(seconds: 3));
+    controller().pause(); // 快照1:3000ms。
+    engine.advance(const Duration(minutes: 5)); // 暂停期不计。
+    await controller().play();
+    engine.advance(const Duration(milliseconds: 1500));
+    controller().pause(); // 快照2:4500ms,仍是同一行。
+    final rows = await db.flowingSessionsDao.recent();
+    expect(rows, hasLength(1));
+    expect(rows.single.durationMs, 4500);
+    expect(rows.single.endPositionSeconds, closeTo(4.5, 0.01));
+    expect(rows.single.speed, 1.0);
+  });
+
+  test('预备数拍不计入时长', () async {
+    await pumpLoad();
+    controller().setCountOptions(countInEnabled: true);
+    engine.now = const Duration(seconds: 10);
+    await controller().play(); // 预备(引擎钟走 3s 不计)。
+    engine.advance(const Duration(milliseconds: 3200));
+    await pumpPolls(); // 数完自动起播。
+    expect(state().status, FlowingStatus.playing);
+    engine.advance(const Duration(seconds: 2));
+    controller().pause();
+    final rows = await db.flowingSessionsDao.recent();
+    expect(rows.single.durationMs, 2000, reason: '只有起播后的 2 秒');
+  });
+
+  test('曲末收行:终点=曲长,再播新起一行', () async {
+    await pumpLoad();
+    await controller().play();
+    engine.advance(const Duration(seconds: 7)); // 越曲长 6s。
+    await pumpPolls();
+    expect(state().status, FlowingStatus.finished);
+    final rows = await db.flowingSessionsDao.recent();
+    expect(rows, hasLength(1));
+    expect(rows.single.endPositionSeconds, closeTo(6.0, 0.05));
+    // 曲末再按:新会话行(codex 同款)。
+    await controller().play();
+    engine.advance(const Duration(seconds: 1));
+    controller().pause();
+    expect(await db.flowingSessionsDao.recent(), hasLength(2));
+  });
+
+  test('seek 计入时长并落快照;退页也落(会话收口)', () async {
+    final rows0 = await db.flowingSessionsDao.recent();
+    expect(rows0, isEmpty);
+    await pumpLoad();
+    await controller().play();
+    engine.advance(const Duration(seconds: 2));
+    controller().seek(4.0); // 播放中跳转:结窗落库(2000ms)。
+    expect(await db.flowingSessionsDao.recent(), hasLength(1));
+    await controller().play();
+    engine.advance(const Duration(seconds: 1));
+    container.dispose(); // 退页:窗内 1000ms 由窗锚换算落库。
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final rows = await db.flowingSessionsDao.recent();
+    expect(rows, hasLength(1));
+    expect(rows.single.durationMs, 3000);
+    expect(rows.single.endPositionSeconds, closeTo(5.0, 0.05),
+        reason: '窗锚换算:4.0 + 1s×1.0');
+  });
+
+  test('重开恢复段落与速度,就绪待播不自动开演', () async {
+    await db.settingsDao.setString(SettingsKeys.flowingPracticeState,
+        '{"speed":0.75,"loopA":1.0,"loopB":2.5}');
+    await pumpLoad();
+    expect(state().status, FlowingStatus.ready, reason: '恢复后停在就绪,等用户点播');
+    expect(state().speed, 0.75);
+    expect(state().loopStart, 1.0);
+    expect(state().loopEnd, 2.5);
+    expect(state().activeLoop, isNotNull);
+  });
+
+  test('坏档安全:速度白名单外/窗口无效/JSON 坏 → 缺档', () async {
+    await db.settingsDao.setString(
+        SettingsKeys.flowingPracticeState, '{"speed":1.5}');
+    await pumpLoad();
+    expect(state().speed, 1.0, reason: '白名单外弃用');
+    await db.settingsDao.setString(SettingsKeys.flowingPracticeState, 'not-json');
+    await pumpLoad();
+    expect(state().speed, 1.0);
+    await db.settingsDao.setString(SettingsKeys.flowingPracticeState,
+        '{"speed":0.5,"loopA":5.0,"loopB":2.0}');
+    await pumpLoad();
+    expect(state().loopStart, isNull, reason: 'A≥B 不恢复');
+  });
+
+  test('改档/改循环写透设置键,清循环去 loop 字段', () async {
+    await pumpLoad();
+    controller()
+      ..seek(1.0)
+      ..markLoopStart()
+      ..seek(2.0)
+      ..markLoopEnd()
+      ..setSpeed(0.5);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final saved =
+        await db.settingsDao.getString(SettingsKeys.flowingPracticeState);
+    final json = jsonDecode(saved!) as Map<String, dynamic>;
+    expect(json['speed'], 0.5);
+    expect((json['loopA'] as num).toDouble(), 1.0);
+    expect((json['loopB'] as num).toDouble(), 2.0);
+    controller().clearLoop();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final after = jsonDecode(
+        (await db.settingsDao.getString(SettingsKeys.flowingPracticeState))!)
+        as Map<String, dynamic>;
+    expect(after['speed'], 0.5);
+    expect(after.containsKey('loopA'), isFalse);
   });
 
   test('音量钳制:越界值收敛到 0..1', () {

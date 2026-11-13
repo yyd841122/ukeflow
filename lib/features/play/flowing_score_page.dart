@@ -10,6 +10,7 @@ import '../../core/score/reference_score.dart';
 import 'flowing/fingering_hint.dart';
 import 'flowing/fingering_diagram.dart';
 import 'flowing/flowing_practice_controller.dart';
+import 'flowing_history_page.dart';
 
 /// 《天空之城》流水谱跟练页(一手数据 MVP)。
 ///
@@ -151,7 +152,19 @@ class _FlowingScorePageState extends ConsumerState<FlowingScorePage>
         : state.positionSeconds;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('天空之城 · 流水谱')),
+      appBar: AppBar(
+        title: const Text('天空之城 · 流水谱'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: '练习记录',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const FlowingHistoryPage()),
+            ),
+          ),
+        ],
+      ),
       backgroundColor: _background,
       body: Column(
         children: [

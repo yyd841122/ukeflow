@@ -5,6 +5,7 @@ import 'backup_service.dart';
 import 'database.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
+import 'flowing_sessions_dao.dart';
 import 'image_charts_dao.dart';
 import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
@@ -39,6 +40,11 @@ final importedSoloChartsDaoProvider = Provider<ImportedSoloChartsDao>(
 /// 设置数据访问(工单 20:键值读写,加载/写透纪律见 settings_providers)。
 final settingsDaoProvider = Provider<SettingsDao>(
   (ref) => ref.watch(appDatabaseProvider).settingsDao,
+);
+
+/// 流水谱练习会话数据访问(票06:会话行/自评,时长语义见控制器)。
+final flowingSessionsDaoProvider = Provider<FlowingSessionsDao>(
+  (ref) => ref.watch(appDatabaseProvider).flowingSessionsDao,
 );
 
 /// 备份服务(工单 21:四表全量与单个 JSON 文档互转的落库口)。

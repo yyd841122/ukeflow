@@ -26,6 +26,10 @@ abstract final class SettingsKeys {
 
   /// 跟练评分的链路延迟(毫秒,可负;工单 33,GLOSSARY「延迟校准」)。
   static const scoringLatencyMs = 'scoring_latency_ms';
+
+  /// 流水谱上次练琴状态(票06):JSON `{"speed":0.5,"loopA":..,"loopB":..}`,
+  /// 重开恢复段落与速度;解析失败按缺档处理,不炸。
+  static const flowingPracticeState = 'flowing_practice_state';
 }
 
 /// 设置表(工单 20):键值对,key 主键——每键至多一行,重写即覆盖

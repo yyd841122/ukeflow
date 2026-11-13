@@ -1563,6 +1563,429 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $FlowingSessionsTable extends FlowingSessions
+    with TableInfo<$FlowingSessionsTable, FlowingSession> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FlowingSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _startedAtMsMeta = const VerificationMeta(
+    'startedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> startedAtMs = GeneratedColumn<int>(
+    'started_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _endPositionSecondsMeta =
+      const VerificationMeta('endPositionSeconds');
+  @override
+  late final GeneratedColumn<double> endPositionSeconds =
+      GeneratedColumn<double>(
+        'end_position_seconds',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
+  static const VerificationMeta _speedMeta = const VerificationMeta('speed');
+  @override
+  late final GeneratedColumn<double> speed = GeneratedColumn<double>(
+    'speed',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _ratingMeta = const VerificationMeta('rating');
+  @override
+  late final GeneratedColumn<int> rating = GeneratedColumn<int>(
+    'rating',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    startedAtMs,
+    durationMs,
+    endPositionSeconds,
+    speed,
+    rating,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'flowing_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FlowingSession> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('started_at_ms')) {
+      context.handle(
+        _startedAtMsMeta,
+        startedAtMs.isAcceptableOrUnknown(
+          data['started_at_ms']!,
+          _startedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMsMeta);
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    }
+    if (data.containsKey('end_position_seconds')) {
+      context.handle(
+        _endPositionSecondsMeta,
+        endPositionSeconds.isAcceptableOrUnknown(
+          data['end_position_seconds']!,
+          _endPositionSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('speed')) {
+      context.handle(
+        _speedMeta,
+        speed.isAcceptableOrUnknown(data['speed']!, _speedMeta),
+      );
+    }
+    if (data.containsKey('rating')) {
+      context.handle(
+        _ratingMeta,
+        rating.isAcceptableOrUnknown(data['rating']!, _ratingMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FlowingSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FlowingSession(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      startedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}started_at_ms'],
+      )!,
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      )!,
+      endPositionSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}end_position_seconds'],
+      )!,
+      speed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}speed'],
+      )!,
+      rating: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rating'],
+      ),
+    );
+  }
+
+  @override
+  $FlowingSessionsTable createAlias(String alias) {
+    return $FlowingSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class FlowingSession extends DataClass implements Insertable<FlowingSession> {
+  /// 自增主键:会话标识,自评按 id 定点改。
+  final int id;
+
+  /// 会话起始时刻(epoch ms;列表展示与排序)。
+  final int startedAtMs;
+
+  /// 实际练习时长(ms):播放中的引擎钟差值累计。
+  final int durationMs;
+
+  /// 结束位置(曲谱秒):暂停/退页时刻,曲末 = 曲长。
+  final double endPositionSeconds;
+
+  /// 会话内速度(最后使用值;三档 0.5/0.75/1.0)。
+  final double speed;
+
+  /// 自评:null 未自评 / 1 还要练 / 2 逐渐熟 / 3 比较顺(codex 三档)。
+  final int? rating;
+  const FlowingSession({
+    required this.id,
+    required this.startedAtMs,
+    required this.durationMs,
+    required this.endPositionSeconds,
+    required this.speed,
+    this.rating,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['started_at_ms'] = Variable<int>(startedAtMs);
+    map['duration_ms'] = Variable<int>(durationMs);
+    map['end_position_seconds'] = Variable<double>(endPositionSeconds);
+    map['speed'] = Variable<double>(speed);
+    if (!nullToAbsent || rating != null) {
+      map['rating'] = Variable<int>(rating);
+    }
+    return map;
+  }
+
+  FlowingSessionsCompanion toCompanion(bool nullToAbsent) {
+    return FlowingSessionsCompanion(
+      id: Value(id),
+      startedAtMs: Value(startedAtMs),
+      durationMs: Value(durationMs),
+      endPositionSeconds: Value(endPositionSeconds),
+      speed: Value(speed),
+      rating: rating == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rating),
+    );
+  }
+
+  factory FlowingSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FlowingSession(
+      id: serializer.fromJson<int>(json['id']),
+      startedAtMs: serializer.fromJson<int>(json['startedAtMs']),
+      durationMs: serializer.fromJson<int>(json['durationMs']),
+      endPositionSeconds: serializer.fromJson<double>(
+        json['endPositionSeconds'],
+      ),
+      speed: serializer.fromJson<double>(json['speed']),
+      rating: serializer.fromJson<int?>(json['rating']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'startedAtMs': serializer.toJson<int>(startedAtMs),
+      'durationMs': serializer.toJson<int>(durationMs),
+      'endPositionSeconds': serializer.toJson<double>(endPositionSeconds),
+      'speed': serializer.toJson<double>(speed),
+      'rating': serializer.toJson<int?>(rating),
+    };
+  }
+
+  FlowingSession copyWith({
+    int? id,
+    int? startedAtMs,
+    int? durationMs,
+    double? endPositionSeconds,
+    double? speed,
+    Value<int?> rating = const Value.absent(),
+  }) => FlowingSession(
+    id: id ?? this.id,
+    startedAtMs: startedAtMs ?? this.startedAtMs,
+    durationMs: durationMs ?? this.durationMs,
+    endPositionSeconds: endPositionSeconds ?? this.endPositionSeconds,
+    speed: speed ?? this.speed,
+    rating: rating.present ? rating.value : this.rating,
+  );
+  FlowingSession copyWithCompanion(FlowingSessionsCompanion data) {
+    return FlowingSession(
+      id: data.id.present ? data.id.value : this.id,
+      startedAtMs: data.startedAtMs.present
+          ? data.startedAtMs.value
+          : this.startedAtMs,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      endPositionSeconds: data.endPositionSeconds.present
+          ? data.endPositionSeconds.value
+          : this.endPositionSeconds,
+      speed: data.speed.present ? data.speed.value : this.speed,
+      rating: data.rating.present ? data.rating.value : this.rating,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FlowingSession(')
+          ..write('id: $id, ')
+          ..write('startedAtMs: $startedAtMs, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('endPositionSeconds: $endPositionSeconds, ')
+          ..write('speed: $speed, ')
+          ..write('rating: $rating')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    startedAtMs,
+    durationMs,
+    endPositionSeconds,
+    speed,
+    rating,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FlowingSession &&
+          other.id == this.id &&
+          other.startedAtMs == this.startedAtMs &&
+          other.durationMs == this.durationMs &&
+          other.endPositionSeconds == this.endPositionSeconds &&
+          other.speed == this.speed &&
+          other.rating == this.rating);
+}
+
+class FlowingSessionsCompanion extends UpdateCompanion<FlowingSession> {
+  final Value<int> id;
+  final Value<int> startedAtMs;
+  final Value<int> durationMs;
+  final Value<double> endPositionSeconds;
+  final Value<double> speed;
+  final Value<int?> rating;
+  const FlowingSessionsCompanion({
+    this.id = const Value.absent(),
+    this.startedAtMs = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.endPositionSeconds = const Value.absent(),
+    this.speed = const Value.absent(),
+    this.rating = const Value.absent(),
+  });
+  FlowingSessionsCompanion.insert({
+    this.id = const Value.absent(),
+    required int startedAtMs,
+    this.durationMs = const Value.absent(),
+    this.endPositionSeconds = const Value.absent(),
+    this.speed = const Value.absent(),
+    this.rating = const Value.absent(),
+  }) : startedAtMs = Value(startedAtMs);
+  static Insertable<FlowingSession> custom({
+    Expression<int>? id,
+    Expression<int>? startedAtMs,
+    Expression<int>? durationMs,
+    Expression<double>? endPositionSeconds,
+    Expression<double>? speed,
+    Expression<int>? rating,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (startedAtMs != null) 'started_at_ms': startedAtMs,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (endPositionSeconds != null)
+        'end_position_seconds': endPositionSeconds,
+      if (speed != null) 'speed': speed,
+      if (rating != null) 'rating': rating,
+    });
+  }
+
+  FlowingSessionsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? startedAtMs,
+    Value<int>? durationMs,
+    Value<double>? endPositionSeconds,
+    Value<double>? speed,
+    Value<int?>? rating,
+  }) {
+    return FlowingSessionsCompanion(
+      id: id ?? this.id,
+      startedAtMs: startedAtMs ?? this.startedAtMs,
+      durationMs: durationMs ?? this.durationMs,
+      endPositionSeconds: endPositionSeconds ?? this.endPositionSeconds,
+      speed: speed ?? this.speed,
+      rating: rating ?? this.rating,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (startedAtMs.present) {
+      map['started_at_ms'] = Variable<int>(startedAtMs.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (endPositionSeconds.present) {
+      map['end_position_seconds'] = Variable<double>(endPositionSeconds.value);
+    }
+    if (speed.present) {
+      map['speed'] = Variable<double>(speed.value);
+    }
+    if (rating.present) {
+      map['rating'] = Variable<int>(rating.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FlowingSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('startedAtMs: $startedAtMs, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('endPositionSeconds: $endPositionSeconds, ')
+          ..write('speed: $speed, ')
+          ..write('rating: $rating')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1572,6 +1995,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ImportedSoloChartsTable importedSoloCharts =
       $ImportedSoloChartsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $FlowingSessionsTable flowingSessions = $FlowingSessionsTable(
+    this,
+  );
   late final CheckInsDao checkInsDao = CheckInsDao(this as AppDatabase);
   late final CustomChartsDao customChartsDao = CustomChartsDao(
     this as AppDatabase,
@@ -1582,6 +2008,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ImportedSoloChartsDao importedSoloChartsDao =
       ImportedSoloChartsDao(this as AppDatabase);
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
+  late final FlowingSessionsDao flowingSessionsDao = FlowingSessionsDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1592,6 +2021,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     imageCharts,
     importedSoloCharts,
     settings,
+    flowingSessions,
   ];
 }
 
@@ -2525,6 +2955,240 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$FlowingSessionsTableCreateCompanionBuilder =
+    FlowingSessionsCompanion Function({
+      Value<int> id,
+      required int startedAtMs,
+      Value<int> durationMs,
+      Value<double> endPositionSeconds,
+      Value<double> speed,
+      Value<int?> rating,
+    });
+typedef $$FlowingSessionsTableUpdateCompanionBuilder =
+    FlowingSessionsCompanion Function({
+      Value<int> id,
+      Value<int> startedAtMs,
+      Value<int> durationMs,
+      Value<double> endPositionSeconds,
+      Value<double> speed,
+      Value<int?> rating,
+    });
+
+class $$FlowingSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $FlowingSessionsTable> {
+  $$FlowingSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get startedAtMs => $composableBuilder(
+    column: $table.startedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get endPositionSeconds => $composableBuilder(
+    column: $table.endPositionSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get speed => $composableBuilder(
+    column: $table.speed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rating => $composableBuilder(
+    column: $table.rating,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FlowingSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FlowingSessionsTable> {
+  $$FlowingSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startedAtMs => $composableBuilder(
+    column: $table.startedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get endPositionSeconds => $composableBuilder(
+    column: $table.endPositionSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get speed => $composableBuilder(
+    column: $table.speed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rating => $composableBuilder(
+    column: $table.rating,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FlowingSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FlowingSessionsTable> {
+  $$FlowingSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get startedAtMs => $composableBuilder(
+    column: $table.startedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get endPositionSeconds => $composableBuilder(
+    column: $table.endPositionSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get speed =>
+      $composableBuilder(column: $table.speed, builder: (column) => column);
+
+  GeneratedColumn<int> get rating =>
+      $composableBuilder(column: $table.rating, builder: (column) => column);
+}
+
+class $$FlowingSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FlowingSessionsTable,
+          FlowingSession,
+          $$FlowingSessionsTableFilterComposer,
+          $$FlowingSessionsTableOrderingComposer,
+          $$FlowingSessionsTableAnnotationComposer,
+          $$FlowingSessionsTableCreateCompanionBuilder,
+          $$FlowingSessionsTableUpdateCompanionBuilder,
+          (
+            FlowingSession,
+            BaseReferences<
+              _$AppDatabase,
+              $FlowingSessionsTable,
+              FlowingSession
+            >,
+          ),
+          FlowingSession,
+          PrefetchHooks Function()
+        > {
+  $$FlowingSessionsTableTableManager(
+    _$AppDatabase db,
+    $FlowingSessionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FlowingSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FlowingSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FlowingSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> startedAtMs = const Value.absent(),
+                Value<int> durationMs = const Value.absent(),
+                Value<double> endPositionSeconds = const Value.absent(),
+                Value<double> speed = const Value.absent(),
+                Value<int?> rating = const Value.absent(),
+              }) => FlowingSessionsCompanion(
+                id: id,
+                startedAtMs: startedAtMs,
+                durationMs: durationMs,
+                endPositionSeconds: endPositionSeconds,
+                speed: speed,
+                rating: rating,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int startedAtMs,
+                Value<int> durationMs = const Value.absent(),
+                Value<double> endPositionSeconds = const Value.absent(),
+                Value<double> speed = const Value.absent(),
+                Value<int?> rating = const Value.absent(),
+              }) => FlowingSessionsCompanion.insert(
+                id: id,
+                startedAtMs: startedAtMs,
+                durationMs: durationMs,
+                endPositionSeconds: endPositionSeconds,
+                speed: speed,
+                rating: rating,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$FlowingSessionsTable, FlowingSession>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $FlowingSessionsTable,
+                    FlowingSession
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FlowingSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FlowingSessionsTable,
+      FlowingSession,
+      $$FlowingSessionsTableFilterComposer,
+      $$FlowingSessionsTableOrderingComposer,
+      $$FlowingSessionsTableAnnotationComposer,
+      $$FlowingSessionsTableCreateCompanionBuilder,
+      $$FlowingSessionsTableUpdateCompanionBuilder,
+      (
+        FlowingSession,
+        BaseReferences<_$AppDatabase, $FlowingSessionsTable, FlowingSession>,
+      ),
+      FlowingSession,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2539,4 +3203,6 @@ class $AppDatabaseManager {
       $$ImportedSoloChartsTableTableManager(_db, _db.importedSoloCharts);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$FlowingSessionsTableTableManager get flowingSessions =>
+      $$FlowingSessionsTableTableManager(_db, _db.flowingSessions);
 }
