@@ -273,7 +273,7 @@ final scoreSheetCatalog = <ScoreSheetDef>[
       ScoreRestEvent(7, 0.5), // b2:卷弦A(四分)后八分休止(实心点+拖尾钩)
     ],
     slides: const [
-      ScoreSlideEvent(9.5, 10.0), // b3:①7→①4 滑音(印张两数字间斜线,2026-10-25 实测)
+      ScoreSlideEvent(9.5, 10.0), // b3:①7→①7 间滑线(印张两数字间斜线;2026-11-14 用户原版直读定案)
     ],
     tremolos: const [
       ScoreTremoloEvent(82), // b22:椭圆框震音 × 柱(印张实测 19×59 瘦椭圆罩四弦)

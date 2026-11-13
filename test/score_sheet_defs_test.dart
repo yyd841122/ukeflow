@@ -178,7 +178,8 @@ void main() {
     expect(def.strums.any((e) => e.beat == 12.0), isFalse);
     // 休止事件:b2 卷弦 A 后八分休止(拍 7)、b3 下扫位为二拍休止占位(9.5)。
     expect(def.rests.map((r) => (r.beat, r.beats)), containsAll([(7.0, 0.5)]));
-    // 滑音:b3 ①7→①4(2026-10-25 印张实测,原"二拍休止占位"系误读)。
+    // 滑音:b3 ①7→①7 间滑线(2026-11-14 用户原版直读定案,原"二拍
+    // 休止占位"系误读;像素读数 ①7→①4 作废)。
     expect(def.slides.map((e) => (e.fromBeat, e.toBeat)), [(9.5, 10.0)]);
     expect(def.strums.any((e) => e.beat == 9.5), isFalse,
         reason: '下扫位照印张为休止占位');
@@ -196,7 +197,8 @@ void main() {
     expect(def.strums.any((e) => e.beat == 82.0), isFalse,
         reason: '@82 为震音柱');
     expect(def.tremolos.map((t) => t.beat), [82.0]);
-    // 数据侧:拍 9-10 = ①8/①7/①4 三个单音(滑音线,2026-10-25 实测)。
+    // 数据侧:拍 9-10 = ①5/①7/①7 三个单音(滑线,2026-11-14 用户
+    // 原版直读定案)。
     final charts2 = {
       for (final e in builtinTabChartCatalog) e.id: e.chart,
     };
@@ -205,7 +207,7 @@ void main() {
       solo2.notes
           .where((n) => n.beat >= 9.0 && n.beat <= 10.0)
           .map((n) => (n.beat, n.string, n.fret)),
-      [(9.0, 1, 8), (9.5, 1, 7), (10.0, 1, 4)],
+      [(9.0, 1, 5), (9.5, 1, 7), (10.0, 1, 7)],
     );
     // 升序不重拍。
     for (var i = 1; i < def.strums.length; i++) {
