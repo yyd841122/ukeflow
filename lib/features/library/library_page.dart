@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../play/flowing/flowing_gate_page.dart';
 import '../rhythm/metronome_page.dart';
 import '../rhythm/rhythm_trainer_page.dart';
 import 'library_chart_list_page.dart';
@@ -50,38 +48,6 @@ class LibraryPage extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        // 一手数据流水谱入口:换歌先过体检闸(票08,可练才进跟练)。
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.graphic_eq),
-            title: const Text('天空之城 · 流水谱'),
-            subtitle: const Text('一手数据试验 · 固定红线跟滚 + 示范声'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const FlowingScoreGatePage(),
-              ),
-            ),
-          ),
-        ),
-        // 体检自检:坏谱样例的三态报告演示(仅 debug 构建露出,真机
-        // 验收可反复跑;release 不出现)。
-        if (kDebugMode)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.fact_check),
-              title: const Text('体检自检 · 坏谱样例'),
-              subtitle: const Text('换歌体检报告演示(仅调试)'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const FlowingScoreGatePage(
-                    assetKey: 'assets/scores/selftest-broken.json',
-                    selftest: true,
-                  ),
-                ),
-              ),
-            ),
-          ),
         const SizedBox(height: 24),
         for (final category in LibraryCategory.values)
           Card(
