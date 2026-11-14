@@ -109,26 +109,12 @@ void main() {
       if (title == '指弹谱') {
         expect(find.text('小星星'), findsOneWidget);
         expect(find.text('欢乐颂'), findsOneWidget);
-        expect(find.text('爱你不是两三天'), findsOneWidget);
-        expect(find.text('爱你不是两三天·独奏'), findsNothing);
         expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
       }
       if (title == '独奏谱') {
-        // 工单 39:独奏谱类型位真实化,点开默认进谱面视图。
-        expect(find.text('独奏谱即将上线'), findsNothing);
-        expect(find.text('爱你不是两三天'), findsOneWidget);
-        expect(find.text('梁静茹 · 78 BPM · 1=E'), findsOneWidget);
-        expect(
-          find.byKey(const Key('solo-chart-ai-ni-bu-shi-liang-san-tian-solo')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(
-            const Key('solo-tab-entry-ai-ni-bu-shi-liang-san-tian-solo'),
-          ),
-          findsOneWidget,
-          reason: '四线谱跟练次入口保留',
-        );
+        // ADR-0013:曲谱识别线终止,内置独奏谱(爱你不是两三天)已删,
+        // 类型位保留收导入独奏谱(工单 43)。
+        expect(find.text('爱你不是两三天'), findsNothing);
       }
       expect(find.text('相册选图'), title == '图片谱' ? findsOneWidget : findsNothing);
       await tester.pageBack();
@@ -274,44 +260,6 @@ void main() {
     expect(find.text('相册选图'), findsOneWidget);
   });
 
-  // ── 工单 39:独奏谱类型位,谱面视图默认入口 + 四线谱次入口 ──
-
-  testWidgets('点独奏谱卡默认进谱面视图(弹前读谱),弹回回独奏谱列表', (tester) async {
-    await pumpLibrary(tester, category: '独奏谱');
-
-    await tester.tap(
-      find.byKey(const Key('solo-chart-ai-ni-bu-shi-liang-san-tian-solo')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('谱面视图 · 梁静茹 · 78 BPM · 1=E'), findsOneWidget);
-    expect(find.byKey(const Key('score-strip')), findsOneWidget);
-    // 票07 双钮并排:示范试听 + 开始跟练同屏。
-    expect(find.text('示范试听'), findsOneWidget, reason: '会话页空闲面板');
-    expect(find.text('开始跟练'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('独奏谱'), findsOneWidget);
-  });
-
-  testWidgets('独奏谱卡次入口进四线谱跟练(功能不砍)', (tester) async {
-    await pumpLibrary(tester, category: '独奏谱');
-
-    await tester.tap(
-      find.byKey(const Key('solo-tab-entry-ai-ni-bu-shi-liang-san-tian-solo')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('tab-chart-canvas')),
-      findsOneWidget,
-      reason: '四线谱跟练会话页',
-    );
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('独奏谱'), findsOneWidget);
-  });
-
   // ── 工单 43:导入独奏谱与内置组合并列同列,坏源降级,删除 = 隐藏 ──
 
   /// 合法源入库(工单 42 夹具的最小可物化源)。
@@ -325,8 +273,9 @@ void main() {
   testWidgets('导入独奏谱与内置并列入列,点卡进谱面视图,次入口进四线谱', (tester) async {
     await pumpLibrary(tester, category: '独奏谱', seed: (db) => seedValid(db));
 
-    expect(find.text('爱你不是两三天'), findsOneWidget, reason: '内置组合在前');
-    expect(find.text('入库名'), findsOneWidget, reason: '导入谱尾随');
+    expect(find.text('爱你不是两三天'), findsNothing,
+        reason: 'ADR-0013 删歌后目录仅导入条目');
+    expect(find.text('入库名'), findsOneWidget, reason: '导入谱在列');
     expect(find.text('导入 · 测试者 · 78 BPM · 1=E'), findsOneWidget);
     expect(find.byKey(const Key('imported-solo-1')), findsOneWidget);
 
@@ -727,11 +676,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsNothing);
-      // 列表原地不动:内置独奏谱照旧在列,无导入卡新增。
-      expect(
-        find.byKey(const Key('solo-chart-ai-ni-bu-shi-liang-san-tian-solo')),
-        findsOneWidget,
-      );
+      // 列表原地不动:空目录无新增导入卡。
+      expect(find.text('爱你不是两三天'), findsNothing);
       expect(find.byKey(const Key('imported-solo-1')), findsNothing);
     });
 

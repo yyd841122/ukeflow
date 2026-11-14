@@ -12,7 +12,8 @@ if grep -rInE 'fakeAsync\(\s*\([^)]*\)\s*async\b' test/; then
   exit 1
 fi
 # 工单49 retro:大二进制不入库(26MB onnx 曾因 .gitignore 写错被误暂存)。
-bad=$(git diff --cached --name-only -z 2>/dev/null | xargs -0 -r stat -c '%s' 2>/dev/null \
+# --diff-filter=d:排除已删除路径(工作区无文件,stat 必炸 → 123 静默死)。
+bad=$(git diff --cached --diff-filter=d --name-only -z 2>/dev/null | xargs -0 -r stat -c '%s' 2>/dev/null \
   | awk '$1 > 5242880 {c++} END {print c+0}')
 if [ "$bad" -gt 0 ]; then
   echo "✗ 暂存含 $bad 个 >5MB 文件(二进制不入库,进 .gitignore):"

@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
-import 'package:ukeflow/core/practice/tab_timeline.dart';
 import 'package:ukeflow/core/model/tab_chart.dart';
 
 /// 工单 12 内容缝:内置指弹曲录入正确性。
@@ -68,8 +67,8 @@ void main() {
       [
         '小星星', '欢乐颂',
         // 2026-10-22 起目标曲指弹谱(工单 25,纯旋律版,逐首录入;
-        // 「·独奏」版自工单 37 起逐首续录)。
-        '沧海一声笑', '爱你不是两三天', '爱你不是两三天·独奏', 'Big Big World',
+        // 「·独奏」版随曲谱识别线终止不再续录,ADR-0013)。
+        '沧海一声笑', 'Big Big World',
         // 2026-10-18 迁入 8 首(ukulele-demo 指弹谱转录)。
         '两只老虎', '玛丽有只小羊羔', '伦敦桥', '铃儿响叮当',
         '卡农', '绿袖子', '划小船', '老麦克唐纳',
@@ -263,158 +262,6 @@ void main() {
     expect(song.notes.last.fret, 0);
     expect(song.notes.last.beat, 96);
     expect(song.notes.last.frequency, closeTo(c4Frequency, 1e-9));
-  });
-
-  test('爱你不是两三天:主歌一+副歌整段 168 音 22 小节,权威源转录抽查', () {
-    final song = loadBuiltinTabCharts()
-        .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian')
-        .chart;
-
-    expect(song.notes, hasLength(168));
-    expect(song.tempo, 78);
-
-    // 起句「你的信只留下」:附点八分+16 分同音连线(G4 G4 [G4] C5)。
-    expect(song.notes.take(4).map((n) => (n.string, n.fret, n.beat)), [
-      (2, 3, 0),
-      (2, 3, 0.75),
-      (2, 3, 1),
-      (1, 3, 1.5),
-    ]);
-
-    // 音域 D4..A5(主歌 E4..E5,副歌高置段 印张双点 D5..A5,工单 37 台账)。
-    for (final n in song.notes) {
-      expect(
-        midiOf(n.frequency).round(),
-        inInclusiveRange(62, 81),
-        reason: '${song.title} 出音域:$n',
-      );
-    }
-
-    // 逐音缀字全文(拖腔音留空;印张连线尾音带字处照录,如 b10「信」)。
-    expect(
-      song.notes.map((n) => n.lyric ?? '').join(),
-      '你的信只留下最后一封淡淡笔迹你熟悉的温柔请别介意我会将信纸好好收着'
-      '当我需要你关怀的时候走过夏日街头还是想牵你的手好想听到一句温暖的问候'
-      '虽然我们说好了还是朋友但为什么却没有再联络'
-      '爱你不是两三天每天却想你很多遍还不习惯孤独街道拥挤人潮没'
-      '你拥抱爱你不是两三天一眨眼心跳能沉淀你是否想念',
-    );
-
-    // 段落锚点抽查:副歌起「两」= G4 ②3 @64;顶点「天」= G5 ①10 @66。
-    final liang = song.notes.singleWhere((n) => n.lyric == '两' && n.beat == 64);
-    expect((liang.string, liang.fret, liang.beat), (2, 3, 64));
-    final tianTop = song.notes.singleWhere(
-      (n) => n.lyric == '天' && n.beat == 66,
-    );
-    expect((tianTop.string, tianTop.fret), (1, 10));
-    // 高置段连续判断:三/每 = E5 ①7。
-    final san = song.notes.singleWhere((n) => n.lyric == '三' && n.beat == 64.5);
-    expect((san.string, san.fret, san.beat), (1, 7, 64.5));
-
-    expectNotesLegal(song.notes, context: song.title);
-
-    // 全曲末音「念」= A5 ①12 @87.5(长音接原曲间奏)。
-    expect(song.notes.last.string, 1);
-    expect(song.notes.last.fret, 12);
-    expect(song.notes.last.beat, 87.5);
-  });
-
-  test('爱你不是两三天·独奏:前奏+主歌+副歌 484 音,权威源 TAB 行转录抽查', () {
-    final song = loadBuiltinTabCharts()
-        .singleWhere((c) => c.id == 'ai-ni-bu-shi-liang-san-tian-solo')
-        .chart;
-
-    expect(song.notes, hasLength(484));
-    expect(song.tempo, 78);
-
-    // 小节2 卷弦起 = E 和弦 4442 块(低弦→高弦),接 ③④②③ 拨弦序列。
-    expect(song.notes.take(7).map((n) => (n.string, n.fret, n.beat)), [
-      (4, 4, 4.0),
-      (3, 4, 4.0),
-      (2, 4, 4.0),
-      (1, 2, 4.0),
-      (3, 4, 4.5),
-      (2, 4, 5.0),
-      (3, 4, 5.5),
-    ]);
-
-    // 小节4 和弦堆的旋律音 ①2=B4 与三连音直化位(工单 37 台账)。
-    final stack = song.notes.where((n) => n.beat == 12.0).toList();
-    expect(stack.map((n) => (n.string, n.fret)), [
-      (4, 2),
-      (3, 1),
-      (2, 0),
-      (1, 2),
-    ]);
-    expect(
-      song.notes
-          .where((n) => n.beat >= 13.0 && n.beat < 14.0)
-          .map((n) => (n.string, n.fret, n.beat)),
-      [(2, 0, 13.0), (1, 0, 13.25), (1, 2, 13.5)],
-    );
-
-    // 拍 9-10 照印张 = ①5/①7/①7 单音+滑线(2026-11-14 用户原版直读
-    // 定案;2026-10-25 像素读数 ①8/①4 作废)。
-    expect(
-      song.notes
-          .where((n) => n.beat >= 9.0 && n.beat <= 10.0)
-          .map((n) => (n.beat, n.string, n.fret)),
-      [(9.0, 1, 5), (9.5, 1, 7), (10.0, 1, 7)],
-    );
-
-    // 前奏末音 = ①8=F5 @18(印张数字外套椭圆,二拍长音)。
-    final fermata = song.notes.singleWhere((n) => n.beat == 18.0);
-    expect((fermata.string, fermata.fret), (1, 8));
-
-    // 主歌 b6 E 堆 @20(④②①,③ 位竖杆=虚按不发音)+ ③4 补音 @20.5。
-    expect(
-      song.notes.where((n) => n.beat == 20.0).map((n) => (n.string, n.fret)),
-      [(4, 4), (2, 4), (1, 2)],
-    );
-    expect(
-      song.notes.where((n) => n.beat == 20.5).map((n) => (n.string, n.fret)),
-      [(3, 4)],
-    );
-    // 延展小节(b9 E 整小节)重拍不重击低音:beat 34 只 ②①。
-    expect(
-      song.notes.where((n) => n.beat == 34.0).map((n) => (n.string, n.fret)),
-      [(2, 4), (1, 2)],
-    );
-    // 副歌A b19 G#7(1323)堆 @72;高置段 b22 首扫 @84 = E 全四弦,
-    // 拍 86 = ×柱连音环不占拍(无攻击)。
-    expect(
-      song.notes.where((n) => n.beat == 72.0).map((n) => (n.string, n.fret)),
-      [(4, 1), (2, 2), (1, 3)],
-    );
-    expect(
-      song.notes.where((n) => n.beat == 84.0).map((n) => (n.string, n.fret)),
-      [(4, 4), (3, 4), (2, 4), (1, 2)],
-    );
-    expect(song.notes.where((n) => n.beat == 86.0), isEmpty);
-    // b25 D7 闷音柱 {①3③2}(②④×不发音);曲末扫 @107.75 = G#7 全四弦。
-    expect(
-      song.notes.where((n) => n.beat == 98.0).map((n) => (n.string, n.fret)),
-      [(3, 2), (1, 3)],
-    );
-    expect(
-      song.notes.where((n) => n.beat == 107.75).map((n) => (n.string, n.fret)),
-      [(4, 1), (3, 3), (2, 2), (1, 3)],
-    );
-
-    // 曲末 112 拍(末扫 107.75 上取整到整小节线)。
-    expect(tabTotalBeats(song), 112);
-
-    // 器乐谱无缀字;音域 C#4..F5(61..77,印张 E 调指形原样)。
-    expect(song.notes.where((n) => n.lyric != null), isEmpty);
-    for (final n in song.notes) {
-      expect(
-        midiOf(n.frequency).round(),
-        inInclusiveRange(61, 77),
-        reason: '${song.title} 出音域:$n',
-      );
-    }
-
-    expectNotesLegal(song.notes, context: song.title);
   });
 
   test('Big Big World:副歌+主歌一 79 音 17 小节,权威源转录抽查', () {

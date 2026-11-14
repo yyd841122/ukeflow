@@ -1,19 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ukeflow/core/chart/builtin_tab_charts.dart';
-import 'package:ukeflow/core/chart/score_sheet_defs.dart';
 import 'package:ukeflow/core/import/score_ir_editor.dart';
 import 'package:ukeflow/core/practice/score_sheet_layout.dart';
 import 'package:ukeflow/features/play/score_sheet_view.dart';
 import 'package:ukeflow/features/play/tab_chart_layout.dart';
 import 'package:ukeflow/features/play/tab_chart_view.dart';
 
+import 'helpers/score_sheet_fixture.dart';
+
 /// 工单 45 点选(纯函数缝):点位 → 音引用。横带/四线谱两套命中带与
-/// 容差用真数据锁定;点空处返回 null(不误开面板)。
+/// 容差用合成组合夹具锁定;点空处返回 null(不误开面板)。
 void main() {
-  final charts = {for (final e in builtinTabChartCatalog) e.id: e.chart};
-  final def = scoreSheetCatalog.single;
-  final solo = charts[def.tabChartId]!;
-  final melody = charts[def.melodyChartId]!;
+  final def = sheetFixtureDef;
+  final solo = sheetFixtureTab;
+  final melody = sheetFixtureMelody;
 
   group('横带 pickStripNote', () {
     final layout = ScoreSheetLayout(

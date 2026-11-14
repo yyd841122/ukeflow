@@ -36,7 +36,7 @@ void main() {
 
   test('清单与资产一一对应，${builtinChartCatalog.length} 首全部加载成功', () {
     expect(charts, hasLength(builtinChartCatalog.length));
-    expect(charts, hasLength(24), reason: '5 首目标曲 + 19 首旧项目迁移谱');
+    expect(charts, hasLength(23), reason: '4 首目标曲 + 19 首旧项目迁移谱(ADR-0013 删爱你不是两三天)');
     expect(
       charts.map((c) => c.id).toSet(),
       hasLength(builtinChartCatalog.length),
@@ -46,7 +46,6 @@ void main() {
 
   group('每首目标曲的内容契约', () {
     final expected = {
-      'ai-ni-bu-shi-liang-san-tian-strum': ('爱你不是两三天', '梁静茹'),
       'cang-hai-yi-sheng-xiao-strum': ('沧海一声笑', '黄霑'),
       'big-big-world-strum': ('Big Big World', 'Emilia'),
       'love-you-more-than-i-can-say-strum': ('More Than I Can Say', 'Leo Sayer'),
