@@ -227,14 +227,9 @@ class _HiddenChartsCard extends ConsumerWidget {
         ref.watch(hiddenBuiltinStrumsProvider).value ?? const <String>{};
     final hiddenTabs =
         ref.watch(hiddenBuiltinTabsProvider).value ?? const <String>{};
-    final hiddenImages =
-        ref.watch(hiddenBuiltinImagesProvider).value ?? const <String>{};
     final hiddenImported =
         ref.watch(hiddenImportedSolosProvider).value ?? const <String>{};
-    if (hiddenStrums.isEmpty &&
-        hiddenTabs.isEmpty &&
-        hiddenImages.isEmpty &&
-        hiddenImported.isEmpty) {
+    if (hiddenStrums.isEmpty && hiddenTabs.isEmpty && hiddenImported.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -245,9 +240,6 @@ class _HiddenChartsCard extends ConsumerWidget {
     final tabTitles = {
       for (final t in ref.watch(builtinTabChartsProvider).value ?? const [])
         t.id: t.chart.title,
-    };
-    final imageTitles = {
-      for (final c in builtinImageChartCatalog) c.id: c.title,
     };
     // 导入独奏谱曲名按行 id 解析(隐藏集存 id 十进制串;行已不存在的
     // 陈年 id 以原样 id 呈现)。
@@ -280,15 +272,6 @@ class _HiddenChartsCard extends ConsumerWidget {
             title: tabTitles[id] ?? id,
             kind: '指弹谱',
             onRestore: () => visibility.restoreTab(id),
-          ),
-      for (final id in hiddenImages)
-        if (imageTitles.containsKey(id))
-          _HiddenRow(
-            key: Key('hidden-image-$id'),
-            restoreKey: Key('restore-image-$id'),
-            title: imageTitles[id] ?? id,
-            kind: '图片谱',
-            onRestore: () => visibility.restoreImage(id),
           ),
       for (final id in hiddenImported)
         _HiddenRow(

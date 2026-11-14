@@ -1,10 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/chart/builtin_charts.dart';
-import '../core/chart/builtin_image_charts.dart';
 import '../core/chart/builtin_tab_charts.dart';
 import '../core/chart/custom_charts.dart';
 import '../core/chart/score_sheet_defs.dart';
@@ -18,8 +16,6 @@ import 'settings_dao.dart';
 
 export '../core/chart/builtin_charts.dart'
     show BuiltInChart, builtinChartCatalog;
-export '../core/chart/builtin_image_charts.dart'
-    show BuiltinImageChart, builtinImageChartCatalog;
 export '../core/chart/builtin_tab_charts.dart'
     show BuiltInTabChart, builtinTabChartCatalog;
 
@@ -63,7 +59,6 @@ typedef LibraryContent = ({
   List<BuiltInChart> builtinStrum,
   List<CustomStrumEntry> customStrum,
   List<BuiltInTabChart> tab,
-  List<ImageChartEntry> imageCharts,
   List<ImportedSoloEntry> importedSolos,
 });
 
@@ -205,72 +200,6 @@ ImportedSoloEntry _parseImportedSoloEntry(ImportedSoloChart row) {
   }
 }
 
-/// 图片谱条目(工单 18,GLOSSARY「图片谱」):只读——无解析、无
-/// 降级,能解码就展示(入库前已验真,见 core/chart/image_ingest.dart)。
-sealed class ImageChartEntry {
-  const ImageChartEntry({required this.title});
-
-  final String title;
-
-  /// 查看器用图片源。
-  ImageProvider get imageProvider;
-
-  /// 曲库卡片 key。
-  String get cardKey;
-}
-
-/// 内置图片谱:资产随 App 交付。
-class BuiltinImageChartEntry extends ImageChartEntry {
-  const BuiltinImageChartEntry({
-    required super.title,
-    required this.id,
-    required this.assetPath,
-  });
-
-  final String id;
-  final String assetPath;
-
-  @override
-  ImageProvider get imageProvider => AssetImage(assetPath);
-
-  @override
-  String get cardKey => 'builtin-image-$id';
-}
-
-/// 相册入库图片谱(GLOSSARY「用户图片谱」):字节整块落库(BLOB),
-/// 备份天然携带。命名取 User,不碰「自建谱(Custom Chart)」——
-/// GLOSSARY 把自建谱限定为文本谱。
-class UserImageChartEntry extends ImageChartEntry {
-  const UserImageChartEntry({
-    required super.title,
-    required this.id,
-    required this.bytes,
-  });
-
-  final int id;
-  final Uint8List bytes;
-
-  @override
-  ImageProvider get imageProvider => MemoryImage(bytes);
-
-  @override
-  String get cardKey => 'user-image-$id';
-}
-
-/// 相册图片谱流(工单 18):数据库行直映条目,选图入库即自动入列。
-final imageChartsProvider = StreamProvider<List<UserImageChartEntry>>((ref) {
-  return ref.watch(imageChartsDaoProvider).watchAll().map(
-        (rows) => [
-          for (final row in rows)
-            UserImageChartEntry(
-              id: row.id,
-              title: row.title,
-              bytes: row.image,
-            ),
-        ],
-      );
-});
-
 /// 逗号并 id 集解析(工单 32 隐藏集的存放格式):空/缺行 = 空集。
 Set<String> parseHiddenIds(String? raw) =>
     raw == null || raw.isEmpty ? <String>{} : raw.split(',').toSet();
@@ -289,14 +218,6 @@ final hiddenBuiltinTabsProvider = StreamProvider<Set<String>>(
   (ref) => ref
       .watch(settingsDaoProvider)
       .watchString(SettingsKeys.hiddenBuiltinTabs)
-      .map(parseHiddenIds),
-);
-
-/// 隐藏内置图片谱 id 集(工单 32)。
-final hiddenBuiltinImagesProvider = StreamProvider<Set<String>>(
-  (ref) => ref
-      .watch(settingsDaoProvider)
-      .watchString(SettingsKeys.hiddenBuiltinImages)
       .map(parseHiddenIds),
 );
 
@@ -343,16 +264,12 @@ class BuiltinChartVisibility {
       _change(SettingsKeys.hiddenBuiltinStrums, id, true);
   Future<void> hideTab(String id) =>
       _change(SettingsKeys.hiddenBuiltinTabs, id, true);
-  Future<void> hideImage(String id) =>
-      _change(SettingsKeys.hiddenBuiltinImages, id, true);
 
   /// 恢复(设置页管理区):从对应集合移除。
   Future<void> restoreStrum(String id) =>
       _change(SettingsKeys.hiddenBuiltinStrums, id, false);
   Future<void> restoreTab(String id) =>
       _change(SettingsKeys.hiddenBuiltinTabs, id, false);
-  Future<void> restoreImage(String id) =>
-      _change(SettingsKeys.hiddenBuiltinImages, id, false);
 }
 
 final builtinChartVisibilityProvider = Provider<BuiltinChartVisibility>(
@@ -381,34 +298,22 @@ final importedSoloVisibilityProvider = Provider<ImportedSoloVisibility>(
   (ref) => ImportedSoloVisibility(ref.watch(settingsDaoProvider)),
 );
 
-/// 曲库数据源(工单 15):五路曲目合流为一处 AsyncValue,曲库页
+/// 曲库数据源(工单 15):四路曲目合流为一处 AsyncValue,曲库页
 /// 统一呈现加载/错误/数据。自建谱、用户图片谱与导入独奏谱走流,导入
 /// 后本 provider 自动重建,新谱即出现在列表(「同一列表」验收的数据面)。
 final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   final builtinStrum = await ref.watch(builtinChartsProvider.future);
   final customStrum = await ref.watch(customStrumChartsProvider.future);
   final tab = await ref.watch(builtinTabChartsProvider.future);
-  final customImages = await ref.watch(imageChartsProvider.future);
   final importedSolos = await ref.watch(importedSoloChartsProvider.future);
   if (!ref.mounted) {
     throw StateError('libraryProvider 在启动中被回收');
   }
-  // 隐藏集过滤(工单 32/43):内置谱三类与导入独奏谱按 settings id 集
-  // 出列,自建谱与用户图片谱走真删不经此(数据库行删了流即少一行)。
+  // 隐藏集过滤(工单 32/43):内置谱两类与导入独奏谱按 settings id 集
+  // 出列,自建谱走真删不经此(数据库行删了流即少一行)。
   final hiddenStrums = await ref.watch(hiddenBuiltinStrumsProvider.future);
   final hiddenTabs = await ref.watch(hiddenBuiltinTabsProvider.future);
-  final hiddenImages = await ref.watch(hiddenBuiltinImagesProvider.future);
   final hiddenImported = await ref.watch(hiddenImportedSolosProvider.future);
-  final imageCharts = [
-    for (final chart in builtinImageChartCatalog)
-      if (!hiddenImages.contains(chart.id))
-        BuiltinImageChartEntry(
-          id: chart.id,
-          title: chart.title,
-          assetPath: chart.assetPath,
-        ),
-    ...customImages,
-  ];
   return (
     builtinStrum: [
       for (final chart in builtinStrum)
@@ -416,7 +321,6 @@ final libraryProvider = FutureProvider<LibraryContent>((ref) async {
     ],
     customStrum: customStrum,
     tab: [for (final t in tab) if (!hiddenTabs.contains(t.id)) t],
-    imageCharts: imageCharts,
     importedSolos: [
       for (final entry in importedSolos)
         if (!hiddenImported.contains('${entry.id}')) entry,

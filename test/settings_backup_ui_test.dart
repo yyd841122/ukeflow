@@ -50,8 +50,7 @@ void main() {
           customCharts: const [
             BackupCustomChart(id: 1, title: '小草', source: '[C]没有花香'),
           ],
-          imageCharts: const [],
-        ).toJsonMap(),
+            ).toJsonMap(),
       ),
     ),
   );

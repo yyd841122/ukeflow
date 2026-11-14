@@ -1,15 +1,15 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import '../model/checkin.dart';
 
-/// 备份文档编解码(工单 21,纯数据变换零 drift 依赖):数据库四表
-/// (打卡/自建谱/用户图片谱/设置)与单个 JSON 文档互转。
+/// 备份文档编解码(工单 21,纯数据变换零 drift 依赖):数据库三表
+/// (打卡/自建谱/设置)与单个 JSON 文档互转。
 ///
 /// 格式契约(v1):顶层对象带 `version`(将来格式演进升版本留门,
-/// 票面「导出文件带版本号」),四段键名 `settings`/`checkins`/
-/// `custom_charts`/`image_charts`,条目字段用数据库列名
-/// (`checked_on_day` 等);图片字节 base64。未知键忽略(段内前向兼容)。
+/// 票面「导出文件带版本号」),键名 `settings`/`checkins`/`custom_charts`,
+/// 条目字段用数据库列名(`checked_on_day` 等)。未知键忽略(段内前向
+/// 兼容)——旧版备份里的 `image_charts` 段(图片谱线已终止,ADR-0013)
+/// 读取时静默丢弃。
 ///
 /// 解析入口 [parseBackupJson]:任何非法形态抛 [BackupFormatException],
 /// 消息为可读中文——导入坏文件给可读错误,不崩溃(工单 21 验收)。
@@ -23,13 +23,11 @@ final class BackupDoc {
 
   final List<BackupCheckIn> checkIns;
   final List<BackupCustomChart> customCharts;
-  final List<BackupImageChart> imageCharts;
 
   const BackupDoc({
     required this.settings,
     required this.checkIns,
     required this.customCharts,
-    required this.imageCharts,
   });
 
   @override
@@ -37,8 +35,7 @@ final class BackupDoc {
       other is BackupDoc &&
       _mapsEqual(settings, other.settings) &&
       _listsEqual(checkIns, other.checkIns) &&
-      _listsEqual(customCharts, other.customCharts) &&
-      _listsEqual(imageCharts, other.imageCharts);
+      _listsEqual(customCharts, other.customCharts);
 
   @override
   int get hashCode => Object.hash(
@@ -47,7 +44,6 @@ final class BackupDoc {
     ),
     Object.hashAll(checkIns),
     Object.hashAll(customCharts),
-    Object.hashAll(imageCharts),
   );
 
   Map<String, Object?> toJsonMap() => {
@@ -60,10 +56,6 @@ final class BackupDoc {
     'custom_charts': [
       for (final e in customCharts)
         {'id': e.id, 'title': e.title, 'source': e.source},
-    ],
-    'image_charts': [
-      for (final e in imageCharts)
-        {'id': e.id, 'title': e.title, 'image': base64Encode(e.image)},
     ],
   };
 }
@@ -112,29 +104,6 @@ final class BackupCustomChart {
 
   @override
   int get hashCode => Object.hash(id, title, source);
-}
-
-/// 用户图片谱备份条目(对应 ImageCharts 表行,字节 base64 进文档)。
-final class BackupImageChart {
-  final int id;
-  final String title;
-  final Uint8List image;
-
-  const BackupImageChart({
-    required this.id,
-    required this.title,
-    required this.image,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      other is BackupImageChart &&
-      id == other.id &&
-      title == other.title &&
-      _listsEqual<int>(image, other.image);
-
-  @override
-  int get hashCode => Object.hash(id, title, Object.hashAll(image));
 }
 
 bool _listsEqual<T>(List<T> a, List<T> b) {
@@ -196,18 +165,10 @@ BackupDoc parseBackupJson(String source) {
     '自建谱',
     _parseCustomChart,
   );
-  final imageCharts = _parseEach(
-    _listOrComplain(root['image_charts'], '图片谱'),
-    '图片谱',
-    _parseImageChart,
-  );
   final settings = _parseSettings(root['settings']);
   // 全空文档在这里拦下:真机导出的备份至少有设置行,四段全空只可能是
   // 挑错的文件——而导入即覆盖的语义下,放它过去等于一键清库(评审 2026-10-17)。
-  if (settings.isEmpty &&
-      checkIns.isEmpty &&
-      customCharts.isEmpty &&
-      imageCharts.isEmpty) {
+  if (settings.isEmpty && checkIns.isEmpty && customCharts.isEmpty) {
     throw BackupFormatException('备份文件里没有数据——请选择 UkeFlow 导出的备份文件');
   }
   // 主键重复在这里拦下(而不是留给还原时撞库):day/编号是各表主键,
@@ -218,17 +179,11 @@ BackupDoc parseBackupJson(String source) {
     (e) => e.id,
     (n) => '自建谱有重复的编号 $n',
   );
-  _rejectDuplicate(
-    imageCharts,
-    (e) => e.id,
-    (n) => '图片谱有重复的编号 $n',
-  );
 
   return BackupDoc(
     settings: settings,
     checkIns: checkIns,
     customCharts: customCharts,
-    imageCharts: imageCharts,
   );
 }
 
@@ -301,22 +256,6 @@ BackupCustomChart _parseCustomChart(Map<String, Object?> map, int index) {
     id: _intField(map, 'id', where),
     title: _stringField(map, 'title', where),
     source: _stringField(map, 'source', where),
-  );
-}
-
-BackupImageChart _parseImageChart(Map<String, Object?> map, int index) {
-  final where = '图片谱第${index + 1}条';
-  final encoded = _stringField(map, 'image', where);
-  final Uint8List bytes;
-  try {
-    bytes = base64Decode(encoded);
-  } on FormatException {
-    throw BackupFormatException('$where的图片数据无法解码');
-  }
-  return BackupImageChart(
-    id: _intField(map, 'id', where),
-    title: _stringField(map, 'title', where),
-    image: bytes,
   );
 }
 

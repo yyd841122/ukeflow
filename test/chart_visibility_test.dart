@@ -47,7 +47,6 @@ void main() {
     // watch 这些 provider,天然有听众,不受此影响。
     container.listen(hiddenBuiltinStrumsProvider, (_, _) {});
     container.listen(hiddenBuiltinTabsProvider, (_, _) {});
-    container.listen(hiddenBuiltinImagesProvider, (_, _) {});
     container.listen(libraryProvider, (_, _) {});
   });
 

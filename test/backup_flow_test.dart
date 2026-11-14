@@ -17,7 +17,6 @@ void main() {
         BackupCheckIn(day: 1, kind: CheckInKind.completed, checkedOnDay: 20650),
       ],
       customCharts: const [],
-      imageCharts: const [],
     ).toJsonMap(),
   );
 

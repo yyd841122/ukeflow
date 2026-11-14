@@ -6,7 +6,6 @@ import 'database.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
 import 'flowing_sessions_dao.dart';
-import 'image_charts_dao.dart';
 import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
 
@@ -25,11 +24,6 @@ final checkInsDaoProvider = Provider<CheckInsDao>(
 /// 自建谱数据访问（曲库数据源，工单 15）。
 final customChartsDaoProvider = Provider<CustomChartsDao>(
   (ref) => ref.watch(appDatabaseProvider).customChartsDao,
-);
-
-/// 图片谱数据访问(相册图片谱数据源,工单 18)。
-final imageChartsDaoProvider = Provider<ImageChartsDao>(
-  (ref) => ref.watch(appDatabaseProvider).imageChartsDao,
 );
 
 /// 导入独奏谱数据访问(曲库独奏谱类目数据源,工单 43)。

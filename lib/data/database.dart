@@ -5,7 +5,6 @@ import '../core/model/checkin.dart';
 import 'checkins_dao.dart';
 import 'custom_charts_dao.dart';
 import 'flowing_sessions_dao.dart';
-import 'image_charts_dao.dart';
 import 'imported_solo_charts_dao.dart';
 import 'settings_dao.dart';
 
@@ -45,21 +44,6 @@ class CustomCharts extends Table {
 }
 
 /// 图片谱表(工单 18):一行 = 一张从相册入库的图片谱(GLOSSARY
-/// 「图片谱」——只读,不参与跟练)。图片字节整块落库(BLOB):备份
-/// (工单 21,单 JSON 导出)天然携带,不散落应用目录、无孤儿文件清理。
-/// 展示名 = 入库命名,与自建谱同一纪律;入库前解码验真在
-/// core/chart/image_ingest.dart,DAO 只管存取。
-class ImageCharts extends Table {
-  /// 自增主键:入库序即曲库展示序。
-  IntColumn get id => integer().autoIncrement()();
-
-  /// 入库时的命名。
-  TextColumn get title => text()();
-
-  /// 图片文件全字节(PNG/JPEG 由解码器自动识别)。
-  BlobColumn get image => blob()();
-}
-
 /// 导入独奏谱表(工单 43,ADR-0009):一行 = 一份工作台导出的识谱源。
 /// 存源 JSON 全文(唯一真源,自建谱存源文本同型),读出过解析+校验+
 /// 物化管线(core/import/imported_solo_charts.dart)才成弹练三源——
@@ -128,7 +112,6 @@ class FlowingSessions extends Table {
   tables: [
     CheckIns,
     CustomCharts,
-    ImageCharts,
     ImportedSoloCharts,
     Settings,
     FlowingSessions,
@@ -136,7 +119,6 @@ class FlowingSessions extends Table {
   daos: [
     CheckInsDao,
     CustomChartsDao,
-    ImageChartsDao,
     ImportedSoloChartsDao,
     SettingsDao,
     FlowingSessionsDao,
@@ -148,7 +130,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'ukeflow'));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   // v1 前期 schema 只加不改:建库与升级都 createAll(生成 IF NOT EXISTS,幂等),
   // 后续工单加表只需建表 + 递增 schemaVersion,升级安装也能拿到新表;
@@ -161,6 +143,11 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       if (from < 7) {
         await m.addColumn(importedSoloCharts, importedSoloCharts.sourceHtml);
+      }
+      // v9(ADR-0013 同期定向):图片谱线终止,表下线;表类已从 @DriftDatabase
+      // 移除,用裸语句兜底(IF NOT EXISTS 幂等,老库才真有表)。
+      if (from < 9) {
+        await customStatement('DROP TABLE IF EXISTS image_charts');
       }
     },
   );

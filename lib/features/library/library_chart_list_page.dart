@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,12 +10,11 @@ import '../../core/ui/centered_hint.dart';
 import '../../data/chart_providers.dart';
 import '../../data/providers.dart';
 import '../play/chart_meta.dart';
+import '../play/flowing/flowing_gate_page.dart';
 import '../play/practice_page.dart';
 import '../play/score_sheet_page.dart';
 import '../play/tab_chart_page.dart';
 import 'cifraclub_search_page.dart';
-import 'image_chart_viewer_page.dart';
-import 'image_pick_flow.dart';
 import 'score_source_import_flow.dart';
 import 'score_source_import_page.dart';
 import 'text_import_page.dart';
@@ -45,8 +45,7 @@ List<SoloChartEntry> _soloEntries(List<BuiltInTabChart> tabCharts) => [
 enum LibraryCategory {
   strum('弹唱谱', Icons.queue_music),
   tab('指弹谱', Icons.music_note),
-  solo('独奏谱', Icons.piano),
-  image('图片谱', Icons.image_outlined);
+  solo('独奏谱', Icons.piano);
 
   const LibraryCategory(this.title, this.icon);
 
@@ -59,14 +58,11 @@ class LibraryChartListPage extends ConsumerWidget {
   const LibraryChartListPage({
     super.key,
     required this.category,
-    this.imagePickFlow,
     this.scoreSourceImportFlow,
   });
 
   final LibraryCategory category;
-  final ImagePickFlow? imagePickFlow;
-
-  /// 识谱源导入流程(工单 44),注入缝同 imagePickFlow。
+  /// 识谱源导入流程(工单 44),注入缝同上。
   final ScoreSourceImportFlow? scoreSourceImportFlow;
 
   @override
@@ -88,8 +84,6 @@ class LibraryChartListPage extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           if (category == LibraryCategory.strum) _strumActions(context),
-          if (category == LibraryCategory.image)
-            _imageActions(context, onPick: () => _pickImageChart(context, ref)),
           if (category == LibraryCategory.solo)
             _soloActions(
               context,
@@ -226,8 +220,18 @@ class LibraryChartListPage extends ConsumerWidget {
                   const CenteredHint(message: '暂无独奏谱', detail: '隐藏的谱可在设置页恢复。'),
               ],
               if (category == LibraryCategory.tab) ...[
-                // 「·独奏」版主轴归独奏谱类型(组合定义引用,工单 39),
-                // 指弹谱列表只列旋律型。
+                // 天空之城流水谱(ADR-0012 一手数据 MVP):器乐独奏编配,
+                // 按实际曲谱归指弹谱类;入口过换歌体检闸(票08)。
+                _ChartCard(
+                  cardKey: 'flowing-sky-city',
+                  title: '天空之城 · 流水谱',
+                  subtitle: '一手数据 · 固定红线跟滚 + 示范声',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const FlowingScoreGatePage(),
+                    ),
+                  ),
+                ),
                 for (final entry in library.tab.where(
                   (entry) => !scoreSheetCatalog.any(
                     (def) => def.tabChartId == entry.id,
@@ -252,50 +256,27 @@ class LibraryChartListPage extends ConsumerWidget {
                     ),
                   ),
 
+                // 体检自检:坏谱样例的三态报告演示(仅 debug,票08 真机
+                // 回归口;release 不出现)。
+                if (kDebugMode)
+                  _ChartCard(
+                    cardKey: 'flowing-selftest-broken',
+                    title: '体检自检 · 坏谱样例',
+                    subtitle: '换歌体检报告演示(仅调试)',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const FlowingScoreGatePage(
+                          assetKey: 'assets/scores/selftest-broken.json',
+                          selftest: true,
+                        ),
+                      ),
+                    ),
+                  ),
+
                 if (library.tab.isEmpty)
                   const CenteredHint(
                     message: '暂无指弹谱',
                     detail: '隐藏的内置谱可在设置页恢复。',
-                  ),
-              ],
-              if (category == LibraryCategory.image) ...[
-                for (final entry in library.imageCharts)
-                  _ChartCard(
-                    cardKey: entry.cardKey,
-                    title: entry.title,
-                    subtitle: '图片谱 · 只读',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ImageChartViewerPage(
-                          title: entry.title,
-                          imageProvider: entry.imageProvider,
-                        ),
-                      ),
-                    ),
-                    onRename: entry is UserImageChartEntry
-                        ? () => _renameUserImage(context, ref, entry)
-                        : null,
-                    onDelete: switch (entry) {
-                      BuiltinImageChartEntry() => () => _hideBuiltin(
-                        context,
-                        ref,
-                        title: entry.title,
-                        hide: () => ref
-                            .read(builtinChartVisibilityProvider)
-                            .hideImage(entry.id),
-                      ),
-                      UserImageChartEntry() => () => _deleteUserImage(
-                        context,
-                        ref,
-                        entry,
-                      ),
-                    },
-                  ),
-
-                if (library.imageCharts.isEmpty)
-                  const CenteredHint(
-                    message: '暂无图片谱',
-                    detail: '可从相册选图入库,或在设置页恢复内置谱。',
                   ),
               ],
             ],
@@ -311,37 +292,6 @@ class LibraryChartListPage extends ConsumerWidget {
     ).push(MaterialPageRoute<void>(builder: (_) => PracticePage(chart: chart)));
   }
 
-  /// 相册选图入口(工单 18):选图 → 验真 → 命名 → 落库,曲库流
-  /// 自动入列。取消静默、选图失败可读引导、坏图不入库(选图流程的
-  /// 权限姿态见 image_pick_flow.dart:系统照片选择器按次授权,
-  /// App 全程不申请存储权限);落库失败同样给可读引导,不静默。
-  Future<void> _pickImageChart(BuildContext context, WidgetRef ref) async {
-    final flow = imagePickFlow ?? ImagePickFlow();
-    final outcome = await flow.pickAndValidate();
-    if (!context.mounted) return;
-    switch (outcome) {
-      case ImagePickCancelled():
-        break;
-      case ImagePickFailed(:final message):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      case ImagePicked(:final bytes, :final suggestedTitle):
-        final title = await _promptImageTitle(context, suggestedTitle);
-        if (title == null || !context.mounted) return;
-        try {
-          await ref
-              .read(imageChartsDaoProvider)
-              .add(title: title, image: bytes);
-        } on Object catch (error) {
-          debugPrint('UkeFlow: 图片谱入库失败 $error');
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('没存进曲库——请再试一次')));
-        }
-    }
-  }
 
   /// 识谱源导入入口(工单 44):选 JSON → 校验/查重 → 预览命名入库。
   /// 取消静默、坏源逐条人话对话框(可「重新选择」闭环——修源在电脑端
@@ -534,128 +484,10 @@ class LibraryChartListPage extends ConsumerWidget {
     }
   }
 
-  /// 用户图片谱删除 = 数据库行硬删(工单 32)。
-  Future<void> _deleteUserImage(
-    BuildContext context,
-    WidgetRef ref,
-    UserImageChartEntry entry,
-  ) async {
-    final confirmed = await _confirmDelete(
-      context,
-      title: '删除「${entry.title}」?',
-      dialogText: '图片谱删除后不可恢复;备份文件里如有,可导入找回。',
-      confirmLabel: '删除',
-    );
-    if (!confirmed) return;
-    try {
-      await ref.read(imageChartsDaoProvider).deleteById(entry.id);
-    } on Object catch (error) {
-      debugPrint('UkeFlow: 图片谱删除失败 $error');
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('没删成——请再试一次')));
-    }
-  }
-
-  /// 已存图片谱改名只更新标题,保留原图与记录 id。
-  Future<void> _renameUserImage(
-    BuildContext context,
-    WidgetRef ref,
-    UserImageChartEntry entry,
-  ) async {
-    final title = await showDialog<String>(
-      context: context,
-      builder: (_) => _ImageChartTitleDialog(
-        suggested: entry.title,
-        fallbackTitle: entry.title,
-        renaming: true,
-      ),
-    );
-    if (title == null || !context.mounted) return;
-    try {
-      await ref.read(imageChartsDaoProvider).renameTitle(entry.id, title);
-    } on Object catch (error) {
-      debugPrint('UkeFlow: 图片谱改名失败 $error');
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('没改成——请再试一次')));
-    }
-  }
-
-  /// 命名入库(与文本导入同一纪律:展示名 = 入库命名)。预填选图器
-  /// 给的文件名;留空确认则按当日日期给默认名。返回 null = 取消。
-  Future<String?> _promptImageTitle(BuildContext context, String? suggested) {
-    final now = DateTime.now();
-    return showDialog<String>(
-      context: context,
-      builder: (_) => _ImageChartTitleDialog(
-        suggested: suggested,
-        fallbackTitle: '图片谱 ${now.month}月${now.day}日',
-      ),
-    );
-  }
 }
 
 /// 命名对话框:控制器归 State 管(随路由销毁才 dispose——挂 whenComplete
 /// 会在退场动画期把还在用的控制器收掉)。
-class _ImageChartTitleDialog extends StatefulWidget {
-  const _ImageChartTitleDialog({
-    required this.fallbackTitle,
-    this.suggested,
-    this.renaming = false,
-  });
-
-  final bool renaming;
-  final String? suggested;
-  final String fallbackTitle;
-
-  @override
-  State<_ImageChartTitleDialog> createState() => _ImageChartTitleDialogState();
-}
-
-class _ImageChartTitleDialogState extends State<_ImageChartTitleDialog> {
-  late final _controller = TextEditingController(text: widget.suggested ?? '');
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _confirm() {
-    final text = _controller.text.trim();
-    Navigator.of(context).pop(text.isEmpty ? widget.fallbackTitle : text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.renaming ? '图片谱改名' : '给这张图片谱起个名'),
-      content: TextField(
-        key: const Key('image-chart-title-input'),
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: '如:歌名 / 来源页',
-          labelText: '曲名',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          key: const Key('image-chart-title-save'),
-          onPressed: _confirm,
-          child: Text(widget.renaming ? '保存' : '存入曲库'),
-        ),
-      ],
-    );
-  }
-}
 
 /// 自建卡副标题:有元信息才带「 · 」;无元信息只标「自建」,
 /// 不拿类型名凑数(页签与 AppBar 已是类型)。
@@ -664,19 +496,6 @@ String _customSubtitle(StrumChart chart) {
   return meta == null ? '自建' : '自建 · $meta';
 }
 
-/// 图片谱列表操作:相册选图不依赖曲库数据,加载/错误态也可用。
-Widget _imageActions(BuildContext context, {required VoidCallback onPick}) {
-  return Row(
-    children: [
-      const Spacer(),
-      TextButton.icon(
-        onPressed: onPick,
-        icon: const Icon(Icons.photo_library_outlined),
-        label: const Text('相册选图'),
-      ),
-    ],
-  );
-}
 
 /// 弹唱谱列表操作:文本导入入口(工单 16)+ 搜索源入口(工单 27
 /// 原生搜索页;原站浏览兜底在搜索页右上角)。入口不依赖曲库数据,加载/
@@ -729,7 +548,6 @@ class _ChartCard extends StatelessWidget {
     this.enabled = true,
     this.onTap,
     this.onDelete,
-    this.onRename,
     this.actions = const <Widget>[],
   });
 
@@ -746,7 +564,6 @@ class _ChartCard extends StatelessWidget {
   /// 由调用方确认后处置,卡片只管呈现。key 取 delete-<卡片 key>,
   /// 机检/测试按同一前缀定位。
   final VoidCallback? onDelete;
-  final VoidCallback? onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -760,13 +577,6 @@ class _ChartCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ...actions,
-            if (onRename != null)
-              IconButton(
-                key: Key('rename-$cardKey'),
-                tooltip: '改名',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: onRename,
-              ),
             if (onDelete != null)
               IconButton(
                 key: Key('delete-$cardKey'),

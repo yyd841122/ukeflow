@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../play/flowing/flowing_gate_page.dart';
 import '../rhythm/metronome_page.dart';
 import '../rhythm/rhythm_trainer_page.dart';
-import 'image_pick_flow.dart';
 import 'library_chart_list_page.dart';
 import 'score_source_import_flow.dart';
 
@@ -12,14 +11,10 @@ import 'score_source_import_flow.dart';
 class LibraryPage extends StatelessWidget {
   const LibraryPage({
     super.key,
-    this.imagePickFlow,
     this.scoreSourceImportFlow,
   });
 
-  /// 选图流程随图片谱入口传入列表,保留测试注入缝。
-  final ImagePickFlow? imagePickFlow;
-
-  /// 识谱源导入流程随独奏谱入口传入列表,同上注入缝。
+  /// 识谱源导入流程随独奏谱入口传入列表,测试注入缝。
   final ScoreSourceImportFlow? scoreSourceImportFlow;
 
   @override
@@ -98,7 +93,6 @@ class LibraryPage extends StatelessWidget {
                 MaterialPageRoute<void>(
                   builder: (_) => LibraryChartListPage(
                     category: category,
-                    imagePickFlow: imagePickFlow,
                     scoreSourceImportFlow: scoreSourceImportFlow,
                   ),
                 ),

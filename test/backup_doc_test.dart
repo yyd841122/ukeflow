@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/backup/backup_doc.dart';
@@ -9,7 +8,7 @@ import 'package:ukeflow/core/model/checkin.dart';
 /// toJsonMap → JSON 串 → parseBackupJson 全字段还原;坏文件全族
 /// (版本/形状/重复主键/坏 base64)给可读中文错,不崩溃。
 void main() {
-  // 造一份全量非空的备份文档:四表各至少一条,图片谱带真实字节。
+  // 造一份全量非空的备份文档:三表各至少一条。
   BackupDoc fullDoc() => BackupDoc(
     settings: const {'reference_a4': '432', 'default_bpm': '96'},
     checkIns: const [
@@ -19,13 +18,6 @@ void main() {
     customCharts: const [
       BackupCustomChart(id: 3, title: 'Beat It', source: '{title: Beat It}'),
       BackupCustomChart(id: 7, title: '小草', source: '[C]没有花香'),
-    ],
-    imageCharts: [
-      BackupImageChart(
-        id: 2,
-        title: '手写谱',
-        image: Uint8List.fromList(const [1, 2, 3, 255, 0]),
-      ),
     ],
   );
 
@@ -43,9 +35,6 @@ void main() {
     expect(restored.settings, doc.settings);
     expect(restored.checkIns, doc.checkIns);
     expect(restored.customCharts, doc.customCharts);
-    expect(restored.imageCharts.map((e) => e.id), doc.imageCharts.map((e) => e.id));
-    expect(restored.imageCharts.single.title, '手写谱');
-    expect(restored.imageCharts.single.image, doc.imageCharts.single.image);
   });
 
   // 注:「全空文档可还原」曾是本文件的旧契约,评审(2026-10-17)推翻——
@@ -148,28 +137,6 @@ void main() {
       expect(error.message, contains('重复'));
     });
 
-    test('图片谱编号重复', () {
-      final error = parseError(
-        reEncode(
-          (root) => root..['image_charts'] = [
-            {'id': 2, 'title': 'a', 'image': 'AAAA'},
-            {'id': 2, 'title': 'b', 'image': 'BBBB'},
-          ],
-        ),
-      );
-      expect(error.message, contains('重复'));
-    });
-
-    test('图片谱 base64 坏', () {
-      parseError(
-        reEncode(
-          (root) => root..['image_charts'] = [
-            {'id': 2, 'title': 'a', 'image': '不是base64!!!'},
-          ],
-        ),
-      );
-    });
-
     test('合法文档不被误拒(负面对抗:守卫只拦真坏的)', () {
       // 全空段+单条最小形态都放行——丢弃/误拒合法内容是静默数据损失。
       final json = jsonEncode(
@@ -179,7 +146,6 @@ void main() {
             BackupCheckIn(day: 30, kind: CheckInKind.madeUp, checkedOnDay: 0),
           ],
           customCharts: const [],
-          imageCharts: const [],
         ).toJsonMap(),
       );
       expect(parseBackupJson(json).settings['k'], 'v');

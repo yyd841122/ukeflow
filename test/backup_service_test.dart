@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +19,7 @@ void main() {
   });
   tearDown(() async => db.close());
 
-  /// 种子一份非空数据:两打卡(含补卡)、两自建谱、一图片谱、两设置。
+  /// 种子一份非空数据:两打卡(含补卡)、两自建谱、两设置。
   Future<void> seed(AppDatabase target) async {
     await target.checkInsDao.checkIn(
       day: 1,
@@ -34,10 +33,6 @@ void main() {
     );
     await target.customChartsDao.add(title: 'Beat It', source: '{title: Beat It}');
     await target.customChartsDao.add(title: '小草', source: '[C]没有花香');
-    await target.imageChartsDao.add(
-      title: '手写谱',
-      image: Uint8List.fromList([1, 2, 3, 255, 0]),
-    );
     await target.settingsDao.setInt(SettingsKeys.referenceA4, 432);
     await target.settingsDao.setInt(SettingsKeys.defaultBpm, 96);
   }
@@ -61,14 +56,6 @@ void main() {
         for (final row in await target.customChartsDao.getAll())
           BackupCustomChart(id: row.id, title: row.title, source: row.source),
       ],
-      imageCharts: [
-        for (final row in await target.imageChartsDao.getAll())
-          BackupImageChart(
-            id: row.id,
-            title: row.title,
-            image: row.image,
-          ),
-      ],
     );
   }
 
@@ -82,7 +69,6 @@ void main() {
     expect(doc.settings, expected.settings);
     expect(doc.checkIns, expected.checkIns);
     expect(doc.customCharts, expected.customCharts);
-    expect(doc.imageCharts, expected.imageCharts);
   });
 
   test('导出→清数据→导入:新库状态完整还原(id 保留)', () async {
@@ -95,14 +81,11 @@ void main() {
     addTearDown(fresh.close);
     await BackupService(fresh).restoreJson(json);
 
-    expect(await readState(fresh), isNot(BackupDoc(settings: const {}, checkIns: const [], customCharts: const [], imageCharts: const [])));
+    expect(await readState(fresh), isNot(BackupDoc(settings: const {}, checkIns: const [], customCharts: const [])));
     // 逐面断言:id 保留(=入库序=曲库展示序)、字节原样、设置原样。
     expect(await readState(fresh), expected);
     final charts = await fresh.customChartsDao.getAll();
     expect(charts.map((c) => c.id).toList(), [1, 2]);
-    final images = await fresh.imageChartsDao.getAll();
-    expect(images.single.id, 1);
-    expect(images.single.image, Uint8List.fromList([1, 2, 3, 255, 0]));
   });
 
   test('导入即覆盖:非空库旧数据清零,换成备份状态', () async {
