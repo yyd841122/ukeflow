@@ -260,31 +260,36 @@ class _HiddenChartsCard extends ConsumerWidget {
     final visibility = ref.read(builtinChartVisibilityProvider);
     final importedVisibility = ref.read(importedSoloVisibilityProvider);
 
+    // 内置谱隐藏 id 若已无对应曲(ADR-0013 删歌后残留)即幽灵条目,
+    // 不渲染——目录成员稳定,缺席必是曲已删,恢复口无意义。
     final rows = <Widget>[
       for (final id in hiddenStrums)
-        _HiddenRow(
-          key: Key('hidden-strum-$id'),
-          restoreKey: Key('restore-strum-$id'),
-          title: strumTitles[id] ?? id,
-          kind: '弹唱谱',
-          onRestore: () => visibility.restoreStrum(id),
-        ),
+        if (strumTitles.containsKey(id))
+          _HiddenRow(
+            key: Key('hidden-strum-$id'),
+            restoreKey: Key('restore-strum-$id'),
+            title: strumTitles[id] ?? id,
+            kind: '弹唱谱',
+            onRestore: () => visibility.restoreStrum(id),
+          ),
       for (final id in hiddenTabs)
-        _HiddenRow(
-          key: Key('hidden-tab-$id'),
-          restoreKey: Key('restore-tab-$id'),
-          title: tabTitles[id] ?? id,
-          kind: '指弹谱',
-          onRestore: () => visibility.restoreTab(id),
-        ),
+        if (tabTitles.containsKey(id))
+          _HiddenRow(
+            key: Key('hidden-tab-$id'),
+            restoreKey: Key('restore-tab-$id'),
+            title: tabTitles[id] ?? id,
+            kind: '指弹谱',
+            onRestore: () => visibility.restoreTab(id),
+          ),
       for (final id in hiddenImages)
-        _HiddenRow(
-          key: Key('hidden-image-$id'),
-          restoreKey: Key('restore-image-$id'),
-          title: imageTitles[id] ?? id,
-          kind: '图片谱',
-          onRestore: () => visibility.restoreImage(id),
-        ),
+        if (imageTitles.containsKey(id))
+          _HiddenRow(
+            key: Key('hidden-image-$id'),
+            restoreKey: Key('restore-image-$id'),
+            title: imageTitles[id] ?? id,
+            kind: '图片谱',
+            onRestore: () => visibility.restoreImage(id),
+          ),
       for (final id in hiddenImported)
         _HiddenRow(
           key: Key('hidden-imported-solo-$id'),
