@@ -21,3 +21,7 @@ imported_solo_charts(DAO+表,schema 迁移下线)、LibraryCategory.solo 位。
 - 2026-11-14: 建票(ADR-0013 决策3)。耦合备忘:score_ir 类型与
   score_sheet_layout 被指弹轻改共用不可删;play_hint_bar/dual_track 仅
   曲谱页消费可删;备份服务无 imported_solo 耦合(已核 2026-11-14)。
+- 2026-11-14 机检备注:真机 imported_solo 表有 **1 条真实数据**
+  (tiankongzhicheng-vector.scoreir,矢量谱时代的天空之城识谱源,OPPO
+  PCAM00 独奏谱列表实证)。拆表 = 该行随库下线;它是已搁置矢量线的实验
+  数据,与流水谱天空之城重复,预期可弃——执行前与用户确认一句即可。
