@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/import/score_ir_editor.dart';
 import '../../core/model/tab_chart.dart';
 import '../../core/practice/tab_practice_state.dart';
 import '../../core/ui/step_slider_control.dart';
 import '../../core/ui/engine_status_line.dart';
 import '../../core/ui/speed_control.dart';
-import '../../data/chart_providers.dart';
-import '../../data/providers.dart';
 import '../demo/demo_playback_controller.dart';
 import 'chart_meta.dart';
-import 'note_tune_panel.dart';
 import 'practice_session_shell.dart';
-import 'score_ir_edit_session.dart';
 import 'tab_chart_view.dart';
 import 'tab_practice_controller.dart';
 import 'tab_practice_view.dart';
@@ -25,13 +20,9 @@ import 'tab_practice_view.dart';
 /// 曲末自动回闲。与弹唱跟练页(PracticePage)同构:无节奏型与参考音
 /// 切换——KS 逐音示范声就是参考声。
 class TabChartPage extends ConsumerStatefulWidget {
-  const TabChartPage({super.key, required this.chart, this.importedSoloRowId});
+  const TabChartPage({super.key, required this.chart});
 
   final TabChart chart;
-
-  /// 导入独奏谱的数据库行 id(工单 45):非空 = 四线谱音符可点选轻改
-  /// (伴奏层即主轴),改源存回后本页经导入谱流重物化换谱。内置谱 null。
-  final int? importedSoloRowId;
 
   @override
   ConsumerState<TabChartPage> createState() => _TabChartPageState();
@@ -41,16 +32,8 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
   /// 最近一次轮询算出的练习状态(运行中视图的全部数据源);空闲 null。
   TabPracticeState? _visual;
 
-  /// 当前展示谱(初始照 widget;轻改落库后经导入谱流换新,工单 45)。
-  late TabChart _chart = widget.chart;
-
-  /// 轻改会话(仅导入谱持有)。
-  ScoreIrEditSession? get _editSession => widget.importedSoloRowId == null
-      ? null
-      : ScoreIrEditSession(
-          ref.read(importedSoloChartsDaoProvider),
-          rowId: widget.importedSoloRowId!,
-        );
+  /// 当前展示谱(初始照 widget)。
+  late final TabChart _chart = widget.chart;
 
   // dispose 里不能用 ref(Riverpod 3):notifier 在 initState 缓存成字段。
   late final TabPracticeController _controller;
@@ -117,48 +100,6 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
     super.dispose();
   }
 
-  /// 轻改落库后的重物化换谱(工单 45):导入谱流推送新条目,逐音实变
-  /// 才换(物化逐次新建实例不能比身份;无关行推流内容同,免重定)。
-  void _onImportedSoloChanged(List<ImportedSoloEntry> entries) {
-    final entry = entries
-        .where((e) => e.id == widget.importedSoloRowId)
-        .firstOrNull;
-    if (entry is! ReadyImportedSolo) return;
-    final notes = entry.accompaniment.notes;
-    final current = _chart.notes;
-    final same =
-        notes.length == current.length &&
-        [
-              for (var i = 0; i < notes.length; i++)
-                (notes[i].string, notes[i].fret, notes[i].beat),
-            ].toString() ==
-            [
-              for (var i = 0; i < current.length; i++)
-                (current[i].string, current[i].fret, current[i].beat),
-            ].toString();
-    if (same) return;
-    setState(() => _chart = entry.accompaniment);
-    if (!ref.read(tabPracticeProvider).running) {
-      _controller.prepareFor(_chart);
-    }
-  }
-
-  /// 点选音 → 微调面板(工单 45;四线谱展示即伴奏主轴层)。
-  Future<void> _openTunePanel(ScoreIrNoteRef noteRef) async {
-    final session = _editSession;
-    if (session == null) return;
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => NoteTunePanel(session: session, noteRef: noteRef),
-    );
-    if (saved == true && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已存回,谱面已刷新')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(tabPracticeProvider);
@@ -168,13 +109,6 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
         next.running ? startPolling() : stopPolling();
       }
     });
-    // 轻改刷新源(工单 45):导入谱流推送即换谱。
-    if (widget.importedSoloRowId != null) {
-      ref.listen(importedSoloChartsProvider, (_, next) {
-        final entries = next.value;
-        if (entries != null) _onImportedSoloChanged(entries);
-      });
-    }
     return Scaffold(
       appBar: AppBar(title: Text(_chart.title)),
       body: SafeArea(
@@ -207,10 +141,7 @@ class _TabChartPageState extends PracticeSessionState<TabChartPage> {
           // 弹前读谱(工单 12「能看」收进会话页):静态四线谱,横向可滚。
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: TabChartView(
-              chart: _chart,
-              onNoteTap: _editSession == null ? null : _openTunePanel,
-            ),
+            child: TabChartView(chart: _chart),
           ),
           const SizedBox(height: 24),
           Text('速度', style: _sectionLabelStyle),

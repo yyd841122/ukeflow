@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
@@ -7,20 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ukeflow/core/audio/fake_audio_engine.dart';
 import 'package:ukeflow/core/audio/providers.dart';
-import 'package:ukeflow/core/import/score_ir.dart';
-import 'package:ukeflow/core/import/score_ir_materializer.dart';
 import 'package:ukeflow/data/chart_providers.dart';
 import 'package:ukeflow/data/database.dart';
 import 'package:ukeflow/data/providers.dart';
 import 'package:ukeflow/data/settings_dao.dart';
 import 'package:ukeflow/features/library/library_page.dart';
-import 'package:ukeflow/features/library/score_source_import_flow.dart';
 import 'package:ukeflow/features/play/chart_meta.dart';
-import 'package:ukeflow/features/play/score_sheet_page.dart';
 
 import 'helpers/chart_fixtures.dart';
 import 'helpers/chord_fixtures.dart';
-import 'helpers/score_ir_fixtures.dart';
 
 /// 曲库目录与各类型列表:内置谱注入 fixture,自建谱走真内存库
 /// (closeStreamsSynchronously 收口 drift 流计时器,见 path_page_test);
@@ -36,7 +30,6 @@ void main() {
 
   Future<void> pumpLibrary(
     WidgetTester tester, {
-    ScoreSourceImportFlow? scoreSourceImportFlow,
     String? category = '弹唱谱',
     Future<void> Function(AppDatabase db)? seed,
   }) async {
@@ -65,9 +58,7 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: LibraryPage(
-              scoreSourceImportFlow: scoreSourceImportFlow,
-            ),
+            body: const LibraryPage(),
           ),
         ),
       ),
@@ -76,7 +67,7 @@ void main() {
     if (category != null) await openCategory(tester, category);
   }
 
-  testWidgets('目录四类入口齐全,逐类往返,工具行保留,导入入口只在列表', (tester) async {
+  testWidgets('目录三类入口齐全,逐类往返,工具行保留', (tester) async {
     await pumpLibrary(tester, category: null);
     expect(find.text('节拍器'), findsOneWidget);
     expect(find.text('节奏型训练'), findsOneWidget);
@@ -84,7 +75,7 @@ void main() {
     expect(find.text('导入'), findsNothing);
     expect(find.text('Cifra Club'), findsNothing);
     expect(find.text('相册选图'), findsNothing);
-    for (final title in ['弹唱谱', '指弹谱', '独奏谱']) {
+    for (final title in ['弹唱谱', '指弹谱']) {
       expect(find.text(title), findsOneWidget);
       await openCategory(tester, title);
       expect(find.widgetWithText(AppBar, title), findsOneWidget);
@@ -103,11 +94,6 @@ void main() {
         expect(find.text('小星星'), findsOneWidget);
         expect(find.text('欢乐颂'), findsOneWidget);
         expect(find.text('指弹 · 传统童谣 · 90 BPM'), findsOneWidget);
-      }
-      if (title == '独奏谱') {
-        // ADR-0013:曲谱识别线终止,内置独奏谱(爱你不是两三天)已删,
-        // 类型位保留收导入独奏谱(工单 43)。
-        expect(find.text('爱你不是两三天'), findsNothing);
       }
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -242,91 +228,6 @@ void main() {
     expect(find.text('Cifra Club'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await openCategory(tester, '独奏谱');
-    // 独奏谱随曲库数据出列(主轴谱卡在 tab 列表里,同批加载失败):
-    // 类型占位时代「不订阅曲库」的隔离已成过去,失败态与其他类型同呈现。
-    expect(find.text('曲库加载失败'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-  });
-
-  // ── 工单 43:导入独奏谱与内置组合并列同列,坏源降级,删除 = 隐藏 ──
-
-  /// 合法源入库(工单 42 夹具的最小可物化源)。
-  Future<void> seedValid(AppDatabase db, {String title = '入库名'}) =>
-      db.importedSoloChartsDao.add(
-        title: title,
-        sourceJson: jsonEncode(validTinyIr().toJson()),
-        schemaVersion: scoreIrSchemaVersion,
-      );
-
-  testWidgets('导入独奏谱与内置并列入列,点卡进谱面视图,次入口进四线谱', (tester) async {
-    await pumpLibrary(tester, category: '独奏谱', seed: (db) => seedValid(db));
-
-    expect(find.text('爱你不是两三天'), findsNothing,
-        reason: 'ADR-0013 删歌后目录仅导入条目');
-    expect(find.text('入库名'), findsOneWidget, reason: '导入谱在列');
-    expect(find.text('导入 · 测试者 · 78 BPM · 1=E'), findsOneWidget);
-    expect(find.byKey(const Key('imported-solo-1')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('imported-solo-1')));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('谱面视图 · 测试者 · 78 BPM · 1=E'),
-      findsOneWidget,
-      reason: '导入谱与内置组合同等:默认进谱面视图',
-    );
-    expect(find.byKey(const Key('score-strip')), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('imported-solo-tab-entry-1')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('tab-chart-canvas')), findsOneWidget);
-  });
-
-  testWidgets('坏源降级损坏条目:可见、标记、不可跟练,好谱不受牵连', (tester) async {
-    await pumpLibrary(
-      tester,
-      category: '独奏谱',
-      seed: (db) async {
-        await seedValid(db);
-        await db.importedSoloChartsDao.add(
-          title: '坏谱',
-          sourceJson: '{bad',
-          schemaVersion: scoreIrSchemaVersion,
-        );
-      },
-    );
-
-    expect(find.text('入库名'), findsOneWidget);
-    expect(find.text('坏谱'), findsOneWidget);
-    expect(find.text('导入 · 已损坏,暂不可跟练'), findsOneWidget);
-    expect(find.byKey(const Key('imported-solo-2')), findsOneWidget);
-
-    // 损坏卡不可点(ListTile 无 onTap),点了原地不动(按页型断言,
-    // 文本前缀匹配会放过真导航)。
-    await tester.tap(find.byKey(const Key('imported-solo-2')));
-    await tester.pumpAndSettle();
-    expect(find.byType(ScoreSheetPage), findsNothing);
-  });
-
-  testWidgets('导入独奏谱删除 = 隐藏出曲库(确认后卡片退场)', (tester) async {
-    await pumpLibrary(tester, category: '独奏谱', seed: (db) => seedValid(db));
-
-    await tester.tap(find.byKey(const Key('delete-imported-solo-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('把「入库名」移出曲库?'), findsOneWidget);
-    expect(find.text('导入谱只是从曲库隐藏,不删内容;可随时在设置页恢复。'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('delete-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.text('入库名'), findsNothing);
-    expect(
-      await db.settingsDao.getString(SettingsKeys.hiddenImportedSoloIds),
-      '1',
-      reason: '隐藏写设置集合,源保留在库可恢复',
-    );
   });
 
   // ── 工单 32:删除(自建谱真删,内置谱隐藏;图片谱线已终止 ADR-0013)──
@@ -450,7 +351,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    for (final title in ['指弹谱', '独奏谱']) {
+    for (final title in ['指弹谱']) {
       await openCategory(tester, title);
       expect(tester.takeException(), isNull);
       await tester.pageBack();
@@ -472,128 +373,5 @@ void main() {
   });
 
 
-  group('独奏谱导入识谱源(工单 44)', () {
-    testWidgets('独奏谱列表有「导入识谱源」入口,其它类目没有', (tester) async {
-      await pumpLibrary(tester, category: '独奏谱');
-      expect(find.text('导入识谱源'), findsOneWidget);
-
-      // 同测内不重泵:pageBack 回目录再进弹唱谱(逐类往返既有模式)。
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await openCategory(tester, '弹唱谱');
-      expect(find.text('导入识谱源'), findsNothing);
-    });
-
-    testWidgets('用户取消选文件:静默返回,无提示无新卡', (tester) async {
-      await pumpLibrary(
-        tester,
-        category: '独奏谱',
-        scoreSourceImportFlow: _StubCancelledScoreSourceFlow(),
-      );
-
-      await tester.tap(find.text('导入识谱源'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(AlertDialog), findsNothing);
-      // 列表原地不动:空目录无新增导入卡。
-      expect(find.text('爱你不是两三天'), findsNothing);
-      expect(find.byKey(const Key('imported-solo-1')), findsNothing);
-    });
-
-    testWidgets('校验阻塞:对话框逐条人话列出,关闭退回', (tester) async {
-      await pumpLibrary(
-        tester,
-        category: '独奏谱',
-        scoreSourceImportFlow: _StubInvalidScoreSourceFlow(),
-      );
-
-      await tester.tap(find.text('导入识谱源'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('这份识谱源还进不了曲库'), findsOneWidget);
-      expect(find.textContaining('拍长不闭合'), findsOneWidget);
-      expect(find.textContaining('不支持记号'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('source-errors-close')));
-      await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-    });
-
-    testWidgets('同内容已入库:提示已有条目,不进预览', (tester) async {
-      await pumpLibrary(
-        tester,
-        category: '独奏谱',
-        scoreSourceImportFlow: _StubDuplicateScoreSourceFlow(),
-      );
-
-      await tester.tap(find.text('导入识谱源'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('内容相同'), findsOneWidget);
-      expect(find.byKey(const Key('import-score-title')), findsNothing);
-    });
-
-    testWidgets('全链路:选源 → 预览 → 命名入库 → 退回列表自动入列', (tester) async {
-      await pumpLibrary(
-        tester,
-        category: '独奏谱',
-        scoreSourceImportFlow: _StubReadyScoreSourceFlow(),
-      );
-
-      await tester.tap(find.text('导入识谱源'));
-      await tester.pumpAndSettle();
-
-      // 预览页:谱面横带在,建议名预填。
-      expect(find.byKey(const Key('score-strip-scroll')), findsOneWidget);
-      expect(find.text('ai-ni-score'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const Key('import-score-title')),
-        '导入的小谱',
-      );
-      await tester.tap(find.byKey(const Key('import-score-save')));
-      await tester.pumpAndSettle();
-
-      // 退回列表:曲库流自动入列,卡片用入库名。
-      expect(find.text('「导入的小谱」已存入曲库'), findsOneWidget);
-      expect(find.byKey(const Key('imported-solo-1')), findsOneWidget);
-      expect(find.text('导入的小谱'), findsOneWidget);
-    });
-  });
 }
 
-/// 工单 44 独奏谱导入桩流:跳过平台选图,直接给指定结局。
-class _StubCancelledScoreSourceFlow extends ScoreSourceImportFlow {
-  @override
-  Future<ScoreSourcePickOutcome> pickAndValidate() async =>
-      const ScoreSourceCancelled();
-}
-
-class _StubInvalidScoreSourceFlow extends ScoreSourceImportFlow {
-  @override
-  Future<ScoreSourcePickOutcome> pickAndValidate() async =>
-      const ScoreSourceInvalid([
-        '第 3 小节拍长不闭合:事件到 3.5 拍,差 0.5 拍',
-        '不支持记号「hammer-on」@5.5:禁止静默丢,校对台须先消解',
-      ]);
-}
-
-class _StubDuplicateScoreSourceFlow extends ScoreSourceImportFlow {
-  @override
-  Future<ScoreSourcePickOutcome> pickAndValidate() async =>
-      const ScoreSourceDuplicate(existingTitle: '已有谱');
-}
-
-class _StubReadyScoreSourceFlow extends ScoreSourceImportFlow {
-  @override
-  Future<ScoreSourcePickOutcome> pickAndValidate() async {
-    final ir = validTinyIr();
-    return ScoreSourceReady(
-      sourceJson: jsonEncode(ir.toJson()),
-      ir: ir,
-      materialization: materializeScoreIr(ir),
-      suggestedTitle: 'ai-ni-score',
-    );
-  }
-}
-
-/// 独奏谱导入入口(工单 44):选 JSON → 校验清单/查重 → 预览页命名
-/// 入库。选文件环节打桩(FakeAsync 区真通道挂死),落库走真内存库。

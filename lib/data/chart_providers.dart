@@ -5,9 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/chart/builtin_charts.dart';
 import '../core/chart/builtin_tab_charts.dart';
 import '../core/chart/custom_charts.dart';
-import '../core/chart/score_sheet_defs.dart';
-import '../core/import/imported_solo_charts.dart';
-import '../core/model/tab_chart.dart';
 import '../core/model/strum_chart.dart';
 import 'chord_library.dart';
 import 'database.dart';
@@ -59,7 +56,6 @@ typedef LibraryContent = ({
   List<BuiltInChart> builtinStrum,
   List<CustomStrumEntry> customStrum,
   List<BuiltInTabChart> tab,
-  List<ImportedSoloEntry> importedSolos,
 });
 
 /// 内置曲库（GLOSSARY「内置曲库」）：5 首目标曲，随 App 交付、开箱即练。
@@ -117,88 +113,6 @@ CustomStrumEntry _parseCustomEntry(CustomChart row, Set<String> allowedChords) {
   }
 }
 
-/// 曲库里的导入独奏谱条目(工单 43,GLOSSARY「识谱源」):
-/// id = 数据库自增主键(卡片 key 与隐藏集用),title = 入库命名
-/// (展示名以它为准,自建谱同一纪律)。
-sealed class ImportedSoloEntry {
-  const ImportedSoloEntry({required this.id, required this.title});
-
-  final int id;
-  final String title;
-}
-
-/// 读出管线(解码→解析→校验→物化)通过:与内置独奏谱同等跟练待遇
-/// (spec 故事 61/62),弹练三源在此齐备。
-class ReadyImportedSolo extends ImportedSoloEntry {
-  const ReadyImportedSolo({
-    required super.id,
-    required super.title,
-    required this.def,
-    required this.accompaniment,
-    required this.melody,
-    this.sourceHtml,
-  });
-
-  /// 组合定义(谱面视图/双轨混播的绑定源;id 照录识谱源)。
-  final ScoreSheetDef def;
-
-  /// TAB 伴奏层(主轴)。
-  final TabChart accompaniment;
-
-  /// 简谱旋律层(层内本地拍位,主轴定位在 [def].melodyAlignBeats)。
-  final TabChart melody;
-
-  /// 原样渲染 HTML(票05):非空 = 详情页有「原谱」入口;null = 无
-  /// (旧条目/非矢量谱页)。
-  final String? sourceHtml;
-}
-
-/// 读出管线任一环失败(源 JSON 坏损/schemaVersion 不符/校验阻塞):
-/// 条目保留在列、标记「已损坏」不可跟练——源保留在库可重试(修源
-/// 重导入/物化管线演进后重读),不静默消失也不牵连整库(spec 故事 65)。
-/// 原始报错走 debugPrint(logcat 可见)。
-class BrokenImportedSolo extends ImportedSoloEntry {
-  const BrokenImportedSolo({
-    required super.id,
-    required super.title,
-    required this.error,
-  });
-
-  final Object error;
-}
-
-/// 导入独奏谱流(工单 43):数据库行读出即过解码→解析→校验→物化管线,
-/// 导入写入即推送。逐行降级——任一环失败的行变 [BrokenImportedSolo]
-/// (可见、不可跟练),不让一份坏源把整库顶成错误页。弦库无关:
-/// 和弦锚自带指形,无白名单漂移面(与自建弹唱谱的差异点)。
-final importedSoloChartsProvider = StreamProvider<List<ImportedSoloEntry>>((
-  ref,
-) {
-  return ref.watch(importedSoloChartsDaoProvider).watchAll().map(
-    (rows) => [for (final row in rows) _parseImportedSoloEntry(row)],
-  );
-});
-
-/// 单行读出管线:失败降级为损坏条目(缺陷可见,不静默缺曲目)。
-ImportedSoloEntry _parseImportedSoloEntry(ImportedSoloChart row) {
-  try {
-    final m = materializeImportedSoloChart(
-      sourceJson: row.sourceJson,
-      title: row.title,
-    );
-    return ReadyImportedSolo(
-      id: row.id,
-      title: row.title,
-      def: m.def,
-      accompaniment: m.accompaniment,
-      melody: m.melody,
-      sourceHtml: row.sourceHtml,
-    );
-  } catch (error) {
-    debugPrint('UkeFlow: 导入独奏谱「${row.title}」读出校验失败 $error');
-    return BrokenImportedSolo(id: row.id, title: row.title, error: error);
-  }
-}
 
 /// 逗号并 id 集解析(工单 32 隐藏集的存放格式):空/缺行 = 空集。
 Set<String> parseHiddenIds(String? raw) =>
@@ -236,15 +150,6 @@ Future<void> toggleHiddenId(
   await dao.setString(key, next.join(','));
 }
 
-/// 隐藏导入独奏谱 id 集(工单 43):行 id 十进制串逗号并,流驱动——
-/// 隐藏/恢复写库即推送,曲库页与设置页同源刷新。
-final hiddenImportedSolosProvider = StreamProvider<Set<String>>(
-  (ref) => ref
-      .watch(settingsDaoProvider)
-      .watchString(SettingsKeys.hiddenImportedSoloIds)
-      .map(parseHiddenIds),
-);
-
 /// 内置谱隐藏/恢复的写入口(工单 32):读改写对应 settings 单行,
 /// 流订阅端(曲库/设置页)自动跟进。删除语义在 UI 层确认后走这里。
 class BuiltinChartVisibility {
@@ -276,36 +181,13 @@ final builtinChartVisibilityProvider = Provider<BuiltinChartVisibility>(
   (ref) => BuiltinChartVisibility(ref.watch(settingsDaoProvider)),
 );
 
-/// 导入独奏谱隐藏/恢复的写入口(工单 43):与内置谱同型(设置集合
-/// 模式,spec 实施决策),集合键为行 id 十进制串;恢复口同在设置页
-/// 管理区。删除语义在 UI 层确认后走这里。
-class ImportedSoloVisibility {
-  ImportedSoloVisibility(this._dao);
-
-  final SettingsDao _dao;
-
-  Future<void> _change(int rowId, bool add) =>
-      toggleHiddenId(_dao, SettingsKeys.hiddenImportedSoloIds, '$rowId', add);
-
-  /// 隐藏导入独奏谱(按数据库行 id)。
-  Future<void> hide(int rowId) => _change(rowId, true);
-
-  /// 恢复(设置页管理区):从集合移除,下次读出照过物化管线。
-  Future<void> restore(int rowId) => _change(rowId, false);
-}
-
-final importedSoloVisibilityProvider = Provider<ImportedSoloVisibility>(
-  (ref) => ImportedSoloVisibility(ref.watch(settingsDaoProvider)),
-);
-
-/// 曲库数据源(工单 15):四路曲目合流为一处 AsyncValue,曲库页
-/// 统一呈现加载/错误/数据。自建谱、用户图片谱与导入独奏谱走流,导入
+/// 曲库数据源(工单 15):三路曲目合流为一处 AsyncValue,曲库页
+/// 统一呈现加载/错误/数据。自建谱走流,导入
 /// 后本 provider 自动重建,新谱即出现在列表(「同一列表」验收的数据面)。
 final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   final builtinStrum = await ref.watch(builtinChartsProvider.future);
   final customStrum = await ref.watch(customStrumChartsProvider.future);
   final tab = await ref.watch(builtinTabChartsProvider.future);
-  final importedSolos = await ref.watch(importedSoloChartsProvider.future);
   if (!ref.mounted) {
     throw StateError('libraryProvider 在启动中被回收');
   }
@@ -313,7 +195,6 @@ final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   // 出列,自建谱走真删不经此(数据库行删了流即少一行)。
   final hiddenStrums = await ref.watch(hiddenBuiltinStrumsProvider.future);
   final hiddenTabs = await ref.watch(hiddenBuiltinTabsProvider.future);
-  final hiddenImported = await ref.watch(hiddenImportedSolosProvider.future);
   return (
     builtinStrum: [
       for (final chart in builtinStrum)
@@ -321,9 +202,5 @@ final libraryProvider = FutureProvider<LibraryContent>((ref) async {
     ],
     customStrum: customStrum,
     tab: [for (final t in tab) if (!hiddenTabs.contains(t.id)) t],
-    importedSolos: [
-      for (final entry in importedSolos)
-        if (!hiddenImported.contains('${entry.id}')) entry,
-    ],
   );
 });

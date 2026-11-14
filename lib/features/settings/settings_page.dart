@@ -227,9 +227,7 @@ class _HiddenChartsCard extends ConsumerWidget {
         ref.watch(hiddenBuiltinStrumsProvider).value ?? const <String>{};
     final hiddenTabs =
         ref.watch(hiddenBuiltinTabsProvider).value ?? const <String>{};
-    final hiddenImported =
-        ref.watch(hiddenImportedSolosProvider).value ?? const <String>{};
-    if (hiddenStrums.isEmpty && hiddenTabs.isEmpty && hiddenImported.isEmpty) {
+    if (hiddenStrums.isEmpty && hiddenTabs.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -241,16 +239,7 @@ class _HiddenChartsCard extends ConsumerWidget {
       for (final t in ref.watch(builtinTabChartsProvider).value ?? const [])
         t.id: t.chart.title,
     };
-    // 导入独奏谱曲名按行 id 解析(隐藏集存 id 十进制串;行已不存在的
-    // 陈年 id 以原样 id 呈现)。
-    final importedTitles = {
-      for (final e
-          in ref.watch(importedSoloChartsProvider).value ??
-              const <ImportedSoloEntry>[])
-        e.id: e.title,
-    };
     final visibility = ref.read(builtinChartVisibilityProvider);
-    final importedVisibility = ref.read(importedSoloVisibilityProvider);
 
     // 内置谱隐藏 id 若已无对应曲(ADR-0013 删歌后残留)即幽灵条目,
     // 不渲染——目录成员稳定,缺席必是曲已删,恢复口无意义。
@@ -273,41 +262,6 @@ class _HiddenChartsCard extends ConsumerWidget {
             kind: '指弹谱',
             onRestore: () => visibility.restoreTab(id),
           ),
-      for (final id in hiddenImported)
-        _HiddenRow(
-          key: Key('hidden-imported-solo-$id'),
-          restoreKey: Key('restore-imported-solo-$id'),
-          title: importedTitles[int.tryParse(id)] ?? id,
-          kind: '导入独奏谱',
-          onRestore: () => importedVisibility.restore(int.parse(id)),
-          // 导入谱支持真删除(票06):行整行移除 + 清隐藏集,不可恢复;
-          // 内置谱无此口(资产常量,隐藏即可恢复)。
-          onDelete: int.tryParse(id) == null
-              ? null
-              : () async {
-                  final rowId = int.parse(id);
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (dialogContext) => AlertDialog(
-                      content: const Text('彻底删除这份导入谱?不可恢复'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(dialogContext, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          key: const Key('confirm-delete-imported'),
-                          onPressed: () => Navigator.pop(dialogContext, true),
-                          child: const Text('删除'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirmed != true) return;
-                  await ref.read(importedSoloChartsDaoProvider).removeAt(rowId);
-                  await importedVisibility.restore(rowId);
-                },
-        ),
     ];
 
     return Card(
@@ -342,7 +296,6 @@ class _HiddenRow extends StatelessWidget {
     required this.title,
     required this.kind,
     required this.onRestore,
-    this.onDelete,
   });
 
   /// 恢复钮 key(与行 key 分开,测试与机检定位用)。
@@ -350,10 +303,6 @@ class _HiddenRow extends StatelessWidget {
   final String title;
   final String kind;
   final Future<void> Function() onRestore;
-
-  /// 真删除回调(票06):仅导入谱给(整行移除,不可恢复);null = 无
-  /// 删除口(内置谱隐藏即可恢复)。
-  final Future<void> Function()? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -367,14 +316,6 @@ class _HiddenRow extends StatelessWidget {
           onPressed: onRestore,
           child: const Text('恢复'),
         ),
-        if (onDelete != null)
-          IconButton(
-            key: Key('delete-$restoreKey'),
-            tooltip: '彻底删除',
-            icon: const Icon(Icons.delete_forever, size: 20),
-            color: Theme.of(context).colorScheme.error,
-            onPressed: onDelete,
-          ),
       ],
     );
   }
