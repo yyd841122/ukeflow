@@ -124,6 +124,11 @@ class CifraClubImporter {
   /// 落点 URL 与请求不符(重定向去了别页)按失败返回,绝不拿旧页内容
   /// 当目标谱。
   Future<Object?> _navigateAndExtract(Uri url) async {
+    // 导航前同源闸(F05):只去本站 https;带别处 host 的 URL 一律按
+    // wrong-page 处理,提取管线不碰外部 origin。
+    if (url.scheme != 'https' || url.host != CifraClubUrls.home.host) {
+      return const {'error': 'wrong-page'};
+    }
     final token = ++_navToken;
     final waiter = Completer<void>();
     _pageWaiter = waiter;
@@ -145,7 +150,7 @@ class CifraClubImporter {
       return segs.join('/');
     }
 
-    return normalize(a) == normalize(b);
+    return normalize(a) == normalize(b) && a.host == b.host;
   }
 
   /// 就绪重试:onPageFinished 可能早于 DOM 可用(真机实证——导航后

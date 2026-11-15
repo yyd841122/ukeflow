@@ -282,8 +282,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     );
     // 实时判定清零(工单 36):循环重开清零、回到开头清零,同一入口。
     _chromaCheckAt = null;
+    // 新一遍开始即恢复采集(F15):暂停 → 重启曾留 suspended=true,
+    // 采集照跑但 onset 永不收,整遍静默不评分。
     state = state.copyWith(
       liveVerdicts: List<StrumJudgment?>.filled(_strumTargets.length, null),
+      suspended: false,
     );
   }
 
@@ -542,6 +545,10 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
 
   /// 麦 chunk 到达:引擎钟打戳(ADR-0005)→ 存音频 → 检 onset(拍域)。
   /// 挂起期音频照存(重听上下文完整),onset 不收。
+  /// 重听缓冲保留窗(秒):20 分钟,超出丢最旧(WP-K)。长会话超窗的
+  /// 旧点格重听返回空(判定不受影响——onset 已在缓冲外判完)。
+  static const double _bufferRetentionSec = 1200;
+
   void _onPcmChunk(Uint8List bytes) {
     if (state.status != ScoringStatus.listening) return;
     final detector = _detector;
@@ -549,7 +556,14 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     final arrivalSec =
         ref.read(audioEngineProvider).engineTime().inMicroseconds / 1e6;
     final samples = _pcm16ToFloat64(bytes);
-    _buffer.append(samples, arrivalSec);
+    // 挂起期不进缓冲(WP-K):暂停不再无界积累;判定本就跳过挂起段。
+    if (!state.suspended) {
+      _buffer.append(samples, arrivalSec);
+      final cutoff = arrivalSec - _bufferRetentionSec;
+      if (_buffer.startSec != null && _buffer.startSec! < cutoff) {
+        _buffer.evictBefore(cutoff);
+      }
+    }
     if (state.suspended) return;
     final anchor = _handle.scheduleAnchor;
     final timeline = _handle.timeline;

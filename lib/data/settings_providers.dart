@@ -48,6 +48,25 @@ class AppSettings {
 
   /// 评分链路延迟毫秒(可负;跟练评分的报告初值与校准回退,工单 33)。
   final int scoringLatencyMs;
+
+  /// 逐字段保留的复制(F12):换单一设置不得重置无关字段——
+  /// 曾有 setReferenceA4 漏带 scoringLatencyMs,内存里延迟静默回默认。
+  AppSettings copyWith({int? referenceA4, int? defaultBpm, int? scoringLatencyMs}) =>
+    AppSettings(
+      referenceA4: referenceA4 ?? this.referenceA4,
+      defaultBpm: defaultBpm ?? this.defaultBpm,
+      scoringLatencyMs: scoringLatencyMs ?? this.scoringLatencyMs,
+    );
+
+  /// 范围钳制(F04):库值可能来自旧备份/外部写入,越界值进内存前夹回。
+  AppSettings get clamped => AppSettings(
+    referenceA4: referenceA4.clamp(minReferenceA4, maxReferenceA4),
+    defaultBpm: defaultBpm.clamp(minDefaultBpm, maxDefaultBpm),
+    scoringLatencyMs: scoringLatencyMs.clamp(
+      minScoringLatencyMs,
+      maxScoringLatencyMs,
+    ),
+  );
 }
 
 final settingsProvider = NotifierProvider<AppSettingsController, AppSettings>(
@@ -95,14 +114,13 @@ class AppSettingsController extends Notifier<AppSettings> {
       final bpm = await dao.getInt(SettingsKeys.defaultBpm);
       final latency = await dao.getInt(SettingsKeys.scoringLatencyMs);
       if (!ref.mounted) return;
-      state = AppSettings(
-        referenceA4: a4 ?? state.referenceA4,
-        defaultBpm: bpm ?? state.defaultBpm,
-        scoringLatencyMs: (latency ?? state.scoringLatencyMs).clamp(
-          minScoringLatencyMs,
-          maxScoringLatencyMs,
-        ),
-      );
+      // 缺键回退到【缺省】而非当前状态(F13):恢复旧备份缺某键时,
+      // 重启前后行为一致;越界值(旧备份/外部写入)夹回范围(F04)。
+      state = AppSettings.defaults().copyWith(
+        referenceA4: a4,
+        defaultBpm: bpm,
+        scoringLatencyMs: latency,
+      ).clamped;
     } catch (error, stackTrace) {
       debugPrint('UkeFlow: 设置加载失败,用缺省 $error\n$stackTrace');
     }
@@ -113,9 +131,8 @@ class AppSettingsController extends Notifier<AppSettings> {
   Future<void> setReferenceA4(int hz) async {
     await ready;
     if (!ref.mounted) return; // 容器已释放:状态无可落盘(与 _load 同纪律)。
-    state = AppSettings(
+    state = state.copyWith(
       referenceA4: hz.clamp(minReferenceA4, maxReferenceA4),
-      defaultBpm: state.defaultBpm,
     );
     await _persist(SettingsKeys.referenceA4, state.referenceA4);
   }
@@ -124,10 +141,8 @@ class AppSettingsController extends Notifier<AppSettings> {
   Future<void> setDefaultBpm(int bpm) async {
     await ready;
     if (!ref.mounted) return;
-    state = AppSettings(
-      referenceA4: state.referenceA4,
+    state = state.copyWith(
       defaultBpm: bpm.clamp(minDefaultBpm, maxDefaultBpm),
-      scoringLatencyMs: state.scoringLatencyMs,
     );
     await _persist(SettingsKeys.defaultBpm, state.defaultBpm);
   }

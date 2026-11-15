@@ -346,6 +346,10 @@ class _HealthWalk {
     }
     final masterBars = source['masterBars'] as List;
     masterBarCount = masterBars.length;
+    if (masterBars.isEmpty) {
+      flagStop('empty-score', '谱面没有小节——空数据不成谱');
+      return;
+    }
     if (staff['bars'] is! List) {
       flagStop('missing-bars', '小节数据缺失');
       return;
@@ -658,7 +662,11 @@ class _HealthWalk {
     }
     final chordId = beat['chordId'];
     final chordRaw = chordId is String ? chords[chordId] : null;
-    final chord = chordRaw is Map ? _parseChord(chordRaw) : null;
+    RefChord? chord;
+    if (chordRaw is Map) {
+      chord = _parseChord(chordRaw);
+      if (chord == null) return null; // 和弦形状坏 → 结构中止
+    }
     return RefEvent(
       id: _asInt(beat['id'], '曲谱数据格式无效'),
       measureIndex: measureIndex,
@@ -753,6 +761,13 @@ class _HealthWalk {
       flag('note-harmonic', GateCategory.effect,
           '第 $measureNo 小节泛音类型无效($harmonicType)', measure: measureNo);
     }
+    // 自然泛音仅核验过 12 品(音高恰等于该品正常音,工厂互证);
+    // 其他品位的自然泛音音高不同,按普通品计音高会错音(F18)。
+    if (harmonicType == 1 && fret != 12) {
+      flag('note-harmonic-fret', GateCategory.effect,
+          '第 $measureNo 小节有 $fret 品自然泛音(仅支持 12 品)',
+          measure: measureNo);
+    }
     final isTieDestination = note['isTieDestination'] == true;
     final tieOrigin = note['tieOriginNoteId'];
     return (
@@ -772,14 +787,21 @@ class _HealthWalk {
     );
   }
 
-  RefChord _parseChord(Map chordRaw) {
+  RefChord? _parseChord(Map chordRaw) {
+    final strings = [
+      for (final s in _list(chordRaw, 'strings', '曲谱数据格式无效'))
+        _asInt(s, '曲谱数据格式无效'),
+    ];
+    // 弦数须恰好 4(F17):绘制按四弦下标取值,短数组下游越界。
+    if (strings.length != 4) {
+      flagStop('chord-shape', '和弦按法弦数 ${strings.length} ≠ 4(资料不完整)',
+          category: GateCategory.structure);
+      return null;
+    }
     return RefChord(
       name: chordRaw['name'] is String ? chordRaw['name'] as String : '',
       firstFret: _asInt(chordRaw['firstFret'], '曲谱数据格式无效'),
-      strings: [
-        for (final s in _list(chordRaw, 'strings', '曲谱数据格式无效'))
-          _asInt(s, '曲谱数据格式无效'),
-      ],
+      strings: strings,
       showName: chordRaw['showName'] != false,
       showDiagram: chordRaw['showDiagram'] != false,
     );

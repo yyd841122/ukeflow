@@ -200,7 +200,11 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   /// Riverpod 3 禁 onDispose 里碰 state,窗锚用纯字段记账。
   double _winFrom = 0;
   double _winSpeed = 1.0;
-  int _winT0Ms = 0;
+  int _winT0Us = 0;
+  /// 窗镜像的循环/间隙/曲长(F21):退页换算读纯字段,与 state 同步写。
+  ({double start, double end})? _winLoop;
+  double _winGapSec = 0;
+  double _winDurationSec = 0;
   int _sessionDurationMs = 0;
   bool _sessionClosed = false;
 
@@ -260,7 +264,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         _metroStrong = ticks.strong;
         _metroWeak = ticks.weak;
         _countSound = ticks.count;
-      } catch (_) {
+      } catch (error, stackTrace) {
+        debugPrint('UkeFlow: 数拍/节拍音源装载失败,降级无声 '
+            '$error\n$stackTrace');
         _metroStrong = null;
         _metroWeak = null;
         _countSound = null;
@@ -356,20 +362,49 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     final t0 = state.t0;
     final score = state.score;
     if (t0 == null || score == null) return state.positionSeconds;
-    final raw =
-        state.speed * (_engine.engineTime() - t0).inMicroseconds / Duration.microsecondsPerSecond;
+    int engUs;
+    try {
+      engUs = _engine.engineTime().inMicroseconds;
+    } catch (_) {
+      return state.positionSeconds;
+    }
     final loop = state.activeLoop;
-    if (loop != null && raw >= loop.start) {
+    return resolvePosition(
+      // t0 = 音乐零点锚:位置 = (引擎 − t0) × 速度,无 from 项。
+      from: 0,
+      speed: state.speed,
+      engUs: engUs,
+      t0Us: t0.inMicroseconds,
+      loop: loop,
+      gapSec: loop == null ? 0 : _loopGapSeconds(loop),
+      durationSec: score.durationSeconds,
+    );
+  }
+
+  /// 位置换算单一来源(F21):播放态与退页记账共用同一份循环回绕/
+  /// 数拍间隙/曲长钳制语义——退页记账曾只做线性外推,循环模式下存出
+  /// 与可听位不符甚至超曲长的位置。纯函数,零实例依赖。
+  static double resolvePosition({
+    required double from,
+    required double speed,
+    required int engUs,
+    required int t0Us,
+    required ({double start, double end})? loop,
+    required double gapSec,
+    required double durationSec,
+  }) {
+    // 微秒域整数差(毫秒域 1ms×速度 ≈ 1mm 级跳动,破 ±1e-6 连续性)。
+    var pos = from + (engUs - t0Us) / Duration.microsecondsPerSecond * speed;
+    if (loop != null && pos >= loop.end) {
       final span = loop.end - loop.start;
-      final gap = _loopGapSeconds(loop);
-      final r = (raw - loop.start) % (span + gap);
+      final r = (pos - loop.start) % (span + gapSec);
       // r ∈ [0, span) 为正曲段;r ∈ [span, span+gap) 为轮间数拍段
       //(占真实时刻不占曲谱时间),红线定在 A。
-      return r < span ? loop.start + r : loop.start;
+      pos = r < span ? loop.start + r : loop.start;
     }
-    if (raw < 0) return 0;
-    if (raw > score.durationSeconds) return score.durationSeconds;
-    return raw;
+    if (pos < 0) return 0;
+    if (pos > durationSec) return durationSec;
+    return pos;
   }
 
   /// 循环轮间数拍 gap(音乐秒;与调度器 _gapMusic 同源:tempo 取 A 处
@@ -538,11 +573,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
             microseconds:
                 (from / speed * Duration.microsecondsPerSecond).round());
     try {
-      final engMs = _engine.engineTime().inMilliseconds;
-      _playingSinceMs = engMs;
-      _winFrom = from;
-      _winSpeed = speed;
-      _winT0Ms = engMs;
+      final engUs = _engine.engineTime().inMicroseconds;
+      _playingSinceMs = engUs ~/ 1000;
+      _syncWindowMirror(from, speed, engUs);
     } catch (_) {
       _playingSinceMs = null;
     }
@@ -656,9 +689,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     scheduler.start(t0: t0, consumedUntil: now);
     _scheduler = scheduler;
     state = state.copyWith(speed: value, t0: t0, positionSeconds: position);
-    _winFrom = position;
-    _winSpeed = value;
-    _winT0Ms = now.inMilliseconds;
+    _syncWindowMirror(position, value, now.inMicroseconds);
     _persistPracticeSettings();
     if (kDebugMode) {
       debugPrint(
@@ -702,6 +733,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     scheduler.start(t0: t0, consumedUntil: now);
     _scheduler = scheduler;
     state = state.copyWith(t0: t0, positionSeconds: position);
+    _syncWindowMirror(position, state.speed, now.inMicroseconds);
   }
 
   /// 声音分路(票04):示范琴声/节拍器各自开关+音量,codex 同款默认
@@ -830,9 +862,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       t0: t0,
       positionSeconds: pos,
     );
-    _winFrom = pos;
-    _winSpeed = state.speed;
-    _winT0Ms = now.inMilliseconds;
+    _syncWindowMirror(pos, state.speed, now.inMicroseconds);
     _persistPracticeSettings();
     if (kDebugMode) {
       debugPrint('UFLOW_FLOW LOOP ${loop == null ? 'off' : '${loop.start}-${loop.end}'} '
@@ -898,11 +928,30 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     );
   }
 
+  /// 窗锚镜像同步(各窗写入点统一调;读 state 现值,禁 onDispose 期)。
+  void _syncWindowMirror(double from, double speed, int engUs) {
+    _winFrom = from;
+    _winSpeed = speed;
+    _winT0Us = engUs;
+    final loop = state.activeLoop;
+    _winLoop = loop;
+    _winGapSec = loop == null ? 0 : _loopGapSeconds(loop);
+    _winDurationSec = state.score?.durationSeconds ?? _winDurationSec;
+  }
+
   /// 退页时刻的音乐秒(窗锚换算;引擎不可读退回窗起点)。
   double _disposePosition() {
     try {
-      final eng = _engine.engineTime().inMilliseconds;
-      return _winFrom + (eng - _winT0Ms) / 1000 * _winSpeed;
+      final eng = _engine.engineTime().inMicroseconds;
+      return resolvePosition(
+        from: _winFrom,
+        speed: _winSpeed,
+        engUs: eng,
+        t0Us: _winT0Us,
+        loop: _winLoop,
+        gapSec: _winGapSec,
+        durationSec: _winDurationSec,
+      );
     } catch (_) {
       return _winFrom;
     }
@@ -934,7 +983,11 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
               endPositionSeconds: endPosition,
               speed: speed,
             );
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        // 容错保留(统计缺席不挡练琴),失败必须可见(F19——静默吞
+        // 曾是仓库已踩的坑)。
+        debugPrint('UkeFlow: 练琴会话落库失败 $error\n$stackTrace');
+      }
     }());
   }
 
@@ -950,7 +1003,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     unawaited(() async {
       try {
         await _settingsDao.setString(SettingsKeys.flowingPracticeState, raw);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        debugPrint('UkeFlow: 练琴设置写透失败 $error\n$stackTrace');
+      }
     }());
   }
 

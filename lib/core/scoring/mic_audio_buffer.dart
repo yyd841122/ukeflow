@@ -47,6 +47,13 @@ class MicAudioBuffer {
   double? get startSec =>
       _chunks.isEmpty ? null : _chunks.first.startAt(sampleRate);
 
+  /// 窗口淘汰(票65 WP-K):丢弃 [cutoff) 之前的整段,防长会话缓冲
+  /// 无界增长(44.1kHz mono PCM16 ≈ 88KB/s)。已过判定窗的旧音频淘汰
+  /// 后,对应重听返回空(窗口越界钳制语义不变)。
+  void evictBefore(double cutoff) {
+    _chunks.removeWhere((chunk) => chunk.endSec < cutoff);
+  }
+
   /// 末样本引擎秒;空缓冲 null。
   double? get endSec => _chunks.isEmpty ? null : _chunks.last.endSec;
 

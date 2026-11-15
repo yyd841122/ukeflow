@@ -69,6 +69,12 @@ CifraSearchRead? decodeCifraSearchPayload(Object? input) {
         final path = raw['u'];
         if (title is! String || title.isEmpty) continue;
         if (path is! String || !path.startsWith('/')) continue;
+        // 站内路径必须有界(F05):`//evil/x` 协议相对引用会把导航带去
+        // 别的 origin;带 scheme/authority 的一律不是站内路径。
+        final parsedPath = Uri.tryParse(path);
+        if (parsedPath == null || parsedPath.hasScheme || parsedPath.hasAuthority) {
+          continue;
+        }
         if (!seenPaths.add(path)) continue; // 同链接去重
         final artist = raw['a'];
         hits.add(CifraSearchHit(

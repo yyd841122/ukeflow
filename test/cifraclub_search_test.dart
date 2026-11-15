@@ -32,6 +32,18 @@ void main() {
       expect(ok.hits[1].artist, isNull);
     });
 
+    test('协议相对/带 authority 的条目拒收,不进命中(F05)', () {
+      final read = decodeCifraSearchPayload(
+        '{"status":"ok","hits":['
+        '{"t":"ev1","u":"//attacker.example/mj/beat-it/"},'
+        '{"t":"ev2","u":"https://attacker.example/mj/beat-it/"},'
+        '{"t":"good","u":"/mj/beat-it/"}]}',
+      );
+      final ok = read as CifraSearchOkRead;
+      expect(ok.hits, hasLength(1), reason: '越界条目跳过,好条目保留');
+      expect(ok.hits.single.path, '/mj/beat-it/');
+    });
+
     test('zero / pending 各自成读', () {
       expect(decodeCifraSearchPayload('{"status":"zero"}'),
           isA<CifraSearchZeroRead>());

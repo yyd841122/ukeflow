@@ -352,6 +352,43 @@ void main() {
     test('音符效果:泛音类型无效', () {
       expectNoteEffect('harmonicType', 2, 'note-harmonic');
     });
+    test('音符效果:非 12 品自然泛音不放行(F18)', () {
+      expectViolation(
+          mutated((s) {
+            final note = noteOf(s, 6);
+            note['harmonicType'] = 1;
+            note['fret'] = 7; // 非 12 品:音高会错,守门须拦
+          }),
+          ruleId: 'note-harmonic-fret',
+          verdict: ScoreHealthVerdict.needsRules,
+          measure: 6,
+          messageContains: '仅支持 12 品');
+    });
+    test('结构:和弦弦数 ≠ 4 拒(F17)', () {
+      expectViolation(
+          mutated((s) {
+            // 找谱中实际引用的和弦 id,截短其弦数组。
+            final staff =
+                ((s['tracks'] as List)[0]['staves'] as List)[0] as Map;
+            final beats = (staff['bars'] as List)
+                .expand((b) => ((b as Map)['voices'] as List))
+                .expand((v) => ((v as Map)['beats'] as List))
+                .whereType<Map>();
+            final chordId = beats
+                .map((b) => b['chordId'])
+                .firstWhere((id) => id is String, orElse: () => fail('谱无和弦'));
+            (staff['chords'] as Map)[chordId]['strings'] = [0, 1, 0];
+          }),
+          ruleId: 'chord-shape',
+          verdict: ScoreHealthVerdict.insufficient,
+          messageContains: '弦数');
+    });
+    test('结构:空谱拒绝(F17)', () {
+      expectViolation(mutated((s) => (s['masterBars'] as List).clear()),
+          ruleId: 'empty-score',
+          verdict: ScoreHealthVerdict.insufficient,
+          messageContains: '空');
+    });
   });
 
   group('变异电池·结构类(资料不够,当场中止)', () {

@@ -307,7 +307,12 @@ List<T> _parseEach<T>(
 
 BackupCheckIn _parseCheckIn(Map<String, Object?> map, int index) {
   final where = '打卡记录第${index + 1}条';
-  final day = _intField(map, 'day', where);
+  // 打卡日 = epoch day,必须是正数(F04):负/零日会让打卡域计算越界。
+  final dayCheck = _intField(map, 'day', where);
+  if (dayCheck <= 0) {
+    throw BackupFormatException('$where的「day」不是合法日期');
+  }
+  final day = dayCheck;
   final kindIndex = _intField(map, 'kind', where);
   if (kindIndex < 0 || kindIndex >= CheckInKind.values.length) {
     throw BackupFormatException('$where的打卡种类不对');
