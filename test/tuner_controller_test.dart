@@ -17,6 +17,9 @@ class FakeRecorder implements TunerRecorder {
   int startStreamCalls = 0;
   int stopCalls = 0;
 
+  /// 开麦门闩(竞速用例):置起后 startStream 挂起,测试手动放行。
+  Completer<Stream<Uint8List>>? startGate;
+
   @override
   Future<bool> hasPermission({bool request = true}) async {
     if (request) requestCalls++;
@@ -26,6 +29,7 @@ class FakeRecorder implements TunerRecorder {
   @override
   Future<Stream<Uint8List>> startStream() async {
     startStreamCalls++;
+    if (startGate != null) return startGate!.future;
     return controller.stream;
   }
 
@@ -134,7 +138,26 @@ void main() {
     }
     expect(state().reading, isNull, reason: '静音段不得残留/误报音高');
   });
+
+  test('竞速:开麦等待期 stop,迟到的麦流就地停掉不复活(F01)', () async {
+    recorder.startGate = Completer<Stream<Uint8List>>();
+    final starting = tuner().start();
+    // startStream 已挂起在门闩上;此时用户切页 stop。
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await tuner().stop();
+    expect(state().listening, isFalse);
+
+    // 放行迟到的开麦结果:启动流程代数已过期,须就地停麦、不接线。
+    recorder.startGate!
+        .complete(Stream<Uint8List>.fromIterable(const Iterable.empty()));
+    await starting;
+    expect(recorder.stopCalls, greaterThanOrEqualTo(2),
+        reason: 'stop 自身一次 + 迟到开麦就地停一次');
+    expect(state().listening, isFalse, reason: 'abort 后不得复活监听');
+  });
 }
+
+/// 全零 PCM16LE,总时长与 sineChunks 默认同量级。
 
 /// 全零 PCM16LE,总时长与 sineChunks 默认同量级。
 List<Uint8List> silenceChunks() => [

@@ -8,9 +8,9 @@
 
 ## Work Packages
 
-- [ ] WP-A(F01,F14)评分麦克风:启动可取消(abort/切页后 pending 请求失效,
+- [x] WP-A(F01,F14)评分麦克风:启动可取消(abort/切页后 pending 请求失效,
   await 后逐点检查)+ 拆线字段先同步摘除再等取消。High+Medium。
-- [ ] WP-B(F03)备份补 flowing_sessions 段:格式加键,老备份无该段 = 保留
+- [x] WP-B(F03)备份补 flowing_sessions 段:格式加键,老备份无该段 = 保留
   现有(前向兼容同 image_charts 惯例);恢复到新机不再丢练琴记录。High。
 - [ ] WP-C(F04,F12,F13)设置域:备份导入值过界钳制(A4/BPM/打卡日);
   A4 改动用 copyWith 保住 latency;缺键回退改为「默认值」而非「当前值」。
@@ -34,10 +34,11 @@
 - [ ] WP-M(F22,F23)性能票:每帧整页重建拆分 + 文本画笔显式 dispose。
 - [ ] WP-N(F28,F30,F31)清理:fake_webview 平台桩/未用依赖(photo_view、
   crypto、cupertino_icons、webview_flutter_platform_interface)/残留注释。
-- [ ] WP-O(F02)**复核判误报**:审计称 flowing provider 非 autoDispose
-  导致退页不停声——引的是 Riverpod 2 文档;Riverpod 3 默认全 provider
-  自动回收(仓库迁移记录「AutoDispose 类已删」),票06 机检亦实证退页
-  落库路径执行。复核确认后标 wontfix;若复核翻案,升格 WP 修复。
+- [x] WP-O(F02)**复核判误报, wontfix**:证据链——①Riverpod 3.4.3
+  源码删除了 AutoDispose 变体,全 provider 监听清空即回收(keepAlive 链
+  才是选退);②仓库迁移期测试注释「Riverpod 3 无监听即回收」为既立规矩;
+  ③票06 真机机检实证退页落库(onDispose 路径执行)。审计引 Riverpod 2
+  旧文档误判。
 - [ ] WP-P(F25,F26)随 WP-O/WP-F 补测试:真路由弹出保留容器、过旧循环
   边界听音频、坏档输入后重触发 load。
 
@@ -47,3 +48,11 @@
   建议:WP-O 复核(先判误报)→ WP-A/B(High)→ WP-E/F/G(调度族)→
   WP-C/D/H/I/J/K(中小)→ WP-N 清理 → WP-L/M 票化。 WP-I 的谱传递件
   与票07 同批落地。
+- 2026-11-15: WP-O/WP-A/WP-B 落地。WP-O 判误报(见上)。WP-A:评分/
+  调音两控制器加停麦代数(abort/finish/fail/teardown 经 _stopMic 递增,
+  启动流程跨 await 校验过期即弃,迟到麦流就地 stop 不接线不翻状态),
+  _stopMic 先同步摘字段再等取消;竞速回归测试×2(开麦门闩挂起→中途
+  abort→放行,断言停麦≥2次/不复活/嘀声不接线)。WP-B:备份格式 v2 补
+  flowing_sessions 段(v1 备份无该段=空段,覆盖语义按备份清空;未知键
+  前向兼容惯例),collect/restore 全字段往返(id 保留自评寻址不变),
+  回归测试锁定时长/位置/速度/自评逐字段 + v1 旧格式可解析。938 全过。

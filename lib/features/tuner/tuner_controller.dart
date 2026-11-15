@@ -74,6 +74,9 @@ class TunerController extends Notifier<TunerState> {
 
   StreamSubscription<Uint8List>? _sub;
 
+  /// 停拾音代数(工单65 F01):stop/销毁递增,启动跨 await 后校验过期即弃。
+  int _generation = 0;
+
   /// 最近 [_bufSamples] 个样本的 PCM16LE 字节(攒窗)。
   final List<int> _pcm = [];
   DateTime _lastDetect = DateTime.fromMillisecondsSinceEpoch(0);
@@ -86,6 +89,7 @@ class TunerController extends Notifier<TunerState> {
   TunerState build() {
     final recorder = ref.watch(tunerRecorderProvider);
     ref.onDispose(() {
+      _generation++;
       _sub?.cancel();
       recorder.stop();
     });
@@ -99,17 +103,23 @@ class TunerController extends Notifier<TunerState> {
   /// 通过后开采集。已在监听则空操作。
   Future<void> start() async {
     if (state.listening) return;
+    final gen = _generation;
     final recorder = ref.read(tunerRecorderProvider);
     var granted = await recorder.hasPermission(request: false);
     if (!granted) granted = await recorder.hasPermission(); // 系统弹窗
-    if (!ref.mounted) return;
+    // 权限等待期被停(切页竞速):无资源在手,直接弃(工单65 F01)。
+    if (gen != _generation || !ref.mounted) return;
     if (!granted) {
       state = state.copyWith(listening: false, permissionDenied: true);
       return;
     }
     try {
       final stream = await recorder.startStream();
-      if (!ref.mounted) return;
+      // 开麦成功但已被停:麦流就地停掉,不接线不翻 listening。
+      if (gen != _generation || !ref.mounted) {
+        unawaited(recorder.stop());
+        return;
+      }
       _sub?.cancel();
       _pcm.clear();
       _filter.reset();
@@ -135,6 +145,7 @@ class TunerController extends Notifier<TunerState> {
   /// 测试收尾;真实事件循环里它至多再投递一帧在途数据,下一帧被
   /// listening=false 闸拦下,无害。
   Future<void> stop() async {
+    _generation++;
     _sub?.cancel();
     _sub = null;
     _filter.reset();

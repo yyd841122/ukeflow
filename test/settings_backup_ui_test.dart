@@ -45,6 +45,7 @@ void main() {
     utf8.encode(
       jsonEncode(
         BackupDoc(
+          flowingSessions: const [],
           settings: const {'reference_a4': '432', 'default_bpm': '96'},
           checkIns: const [],
           customCharts: const [

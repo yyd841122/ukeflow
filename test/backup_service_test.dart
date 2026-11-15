@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,8 +21,16 @@ void main() {
   });
   tearDown(() async => db.close());
 
-  /// 种子一份非空数据:两打卡(含补卡)、两自建谱、两设置。
+  /// 种子一份非空数据:两打卡(含补卡)、两自建谱、一练琴记录、两设置。
   Future<void> seed(AppDatabase target) async {
+    final sessionId = await target.flowingSessionsDao.start(1700000000000);
+    await target.flowingSessionsDao.saveSnapshot(
+      id: sessionId,
+      durationMs: 192000,
+      endPositionSeconds: 64.4,
+      speed: 0.75,
+    );
+    await target.flowingSessionsDao.setRating(sessionId, 3);
     await target.checkInsDao.checkIn(
       day: 1,
       kind: CheckInKind.completed,
@@ -56,6 +66,17 @@ void main() {
         for (final row in await target.customChartsDao.getAll())
           BackupCustomChart(id: row.id, title: row.title, source: row.source),
       ],
+      flowingSessions: [
+        for (final row in await target.flowingSessionsDao.getAll())
+          BackupFlowingSession(
+            id: row.id,
+            startedAtMs: row.startedAtMs,
+            durationMs: row.durationMs,
+            endPositionSeconds: row.endPositionSeconds,
+            speed: row.speed,
+            rating: row.rating,
+          ),
+      ],
     );
   }
 
@@ -71,6 +92,29 @@ void main() {
     expect(doc.customCharts, expected.customCharts);
   });
 
+  test('练琴记录全往返:时长/位置/速度/自评逐字段保留(票65 WP-B)', () async {
+    await seed(db);
+    final json = await BackupService(db).collectJson();
+
+    final fresh = AppDatabase(NativeDatabase.memory());
+    addTearDown(fresh.close);
+    await BackupService(fresh).restoreJson(json);
+
+    final rows = await fresh.flowingSessionsDao.getAll();
+    expect(rows, hasLength(1));
+    final row = rows.single;
+    expect(row.id, 1, reason: 'id 保留=自评定点改的寻址不变');
+    expect(row.startedAtMs, 1700000000000);
+    expect(row.durationMs, 192000);
+    expect(row.endPositionSeconds, 64.4);
+    expect(row.speed, 0.75);
+    expect(row.rating, 3);
+    // v1 旧格式(无 flowing_sessions 段)可解析:段按空处理。
+    final oldJson = jsonDecode(json) as Map;
+    oldJson.remove('flowing_sessions');
+    expect(parseBackupJson(jsonEncode(oldJson)).flowingSessions, isEmpty);
+  });
+
   test('导出→清数据→导入:新库状态完整还原(id 保留)', () async {
     await seed(db);
     final service = BackupService(db);
@@ -81,7 +125,7 @@ void main() {
     addTearDown(fresh.close);
     await BackupService(fresh).restoreJson(json);
 
-    expect(await readState(fresh), isNot(BackupDoc(settings: const {}, checkIns: const [], customCharts: const [])));
+    expect(await readState(fresh), isNot(BackupDoc(settings: const {}, checkIns: const [], customCharts: const [], flowingSessions: const [])));
     // 逐面断言:id 保留(=入库序=曲库展示序)、字节原样、设置原样。
     expect(await readState(fresh), expected);
     final charts = await fresh.customChartsDao.getAll();

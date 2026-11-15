@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -149,6 +151,33 @@ void main() {
     expect(ok, isFalse);
     expect(container.read(practiceScoringProvider).error, isNotNull);
     expect(handle.scoringTicksCalls, isEmpty);
+  });
+
+  test('竞速:开麦等待期 abort,迟到的麦流就地停掉不复活(F01)', () async {
+    final parts = scoringTestContainer();
+    final recorder = parts.recorder;
+    final handle = parts.handle;
+    final container = parts.container;
+    addTearDown(container.dispose);
+    recorder.startGate = Completer<Stream<Uint8List>>();
+    final controller = container.read(practiceScoringProvider.notifier);
+    final starting = controller.startSession();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    // 开麦还挂在门闩上,用户退出跟练页 → abort。
+    controller.abort();
+    expect(container.read(practiceScoringProvider).status, ScoringStatus.idle);
+
+    // 放行迟到的开麦:代数已过期,就地停麦,不接线不翻状态。
+    recorder.startGate!
+        .complete(Stream<Uint8List>.fromIterable(const Iterable.empty()));
+    final ok = await starting;
+    expect(ok, isFalse, reason: '过期启动返回 false');
+    expect(recorder.stopCount, greaterThanOrEqualTo(1),
+        reason: '迟到的麦流被就地停止');
+    expect(container.read(practiceScoringProvider).status, ScoringStatus.idle,
+        reason: 'abort 后不得复活 listening');
+    expect(handle.scoringTicksCalls, isNot(contains(isTrue)),
+        reason: 'abort 后评分嘀声不得接线(true)');
   });
 
   test('开麦失败:startSession false + 错误文案', () async {

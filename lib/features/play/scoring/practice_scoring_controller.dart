@@ -133,6 +133,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   StreamSubscription<Uint8List>? _sub;
   TunerRecorder? _recorder;
   OnsetDetector? _detector;
+
+  /// 停麦代数(工单65 F01):每次 [_stopMic] 递增;启动流程跨 await 后
+  /// 校验,过期即弃——abort/finish 与开麦竞速时,迟到的麦流被就地停掉,
+  /// 不接线、不翻状态。
+  int _generation = 0;
   MicAudioBuffer _buffer = MicAudioBuffer();
   final _onsets = <_OnsetRec>[];
 
@@ -205,9 +210,11 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   /// 开麦失败),跟练照常开始不评分(错误文案在 [PracticeScoringState.error])。
   Future<bool> startSession() async {
     if (state.status != ScoringStatus.idle) return false;
+    final gen = _generation;
     final recorder = ref.read(tunerRecorderProvider);
     final granted = await recorder.hasPermission(request: true);
-    if (!ref.mounted) return false;
+    // 权限等待期被停(abort/finish 竞速):无资源在手,直接弃(工单65 F01)。
+    if (gen != _generation || !ref.mounted) return false;
     if (!granted) {
       state = state.copyWith(error: '需要麦克风权限才能跟练评分');
       return false;
@@ -219,8 +226,14 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
     try {
       stream = await recorder.startStream();
     } on Object catch (error) {
-      if (!ref.mounted) return false;
+      if (gen != _generation || !ref.mounted) return false;
       state = state.copyWith(error: '开麦失败,本轮不评分:$error');
+      return false;
+    }
+    // 开麦成功但会话已被弃:这条麦流就地停掉,不接线不翻状态——
+    // 否则 abort 之后录音复活(F01)。
+    if (gen != _generation || !ref.mounted) {
+      unawaited(recorder.stop());
       return false;
     }
     _recorder = recorder;
@@ -776,10 +789,14 @@ class PracticeScoringController extends Notifier<PracticeScoringState> {
   }
 
   Future<void> _stopMic() async {
-    await _sub?.cancel();
+    // 先同步摘字段再等取消(F14):并发停/新启动交替时,迟到的 cancel
+    // 不得清掉新订阅、stop 不得停掉新录音。代数递增让在途启动过期。
+    _generation++;
+    final sub = _sub;
     _sub = null;
     final recorder = _recorder;
     _recorder = null;
+    await sub?.cancel();
     if (recorder != null) {
       try {
         await recorder.stop();

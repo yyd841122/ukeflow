@@ -12,6 +12,7 @@ import 'package:ukeflow/features/settings/backup_flow.dart';
 void main() {
   final validJson = jsonEncode(
     BackupDoc(
+      flowingSessions: const [],
       settings: const {'reference_a4': '432'},
       checkIns: const [
         BackupCheckIn(day: 1, kind: CheckInKind.completed, checkedOnDay: 20650),

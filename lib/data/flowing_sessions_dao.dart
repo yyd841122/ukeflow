@@ -46,6 +46,13 @@ class FlowingSessionsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// 最近 n 条(起始时刻降序;票06 列表页,默认 20)。
+  /// 全量(备份导出用;备份语义 = 全表,不受 recent 的 20 条窗口限)。
+  Future<List<FlowingSession>> getAll() {
+    final query = select(flowingSessions)
+      ..orderBy([(t) => OrderingTerm.asc(t.id)]);
+    return query.get();
+  }
+
   Future<List<FlowingSession>> recent({int limit = 20}) {
     return (select(flowingSessions)
           ..orderBy([(r) => OrderingTerm.desc(r.startedAtMs)])

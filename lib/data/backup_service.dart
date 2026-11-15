@@ -27,6 +27,7 @@ class BackupService {
       final settings = await _db.settingsDao.getAll();
       final checkIns = await _db.checkInsDao.getAll();
       final customCharts = await _db.customChartsDao.getAll();
+      final flowingSessions = await _db.flowingSessionsDao.getAll();
 
       return jsonEncode(
         BackupDoc(
@@ -47,6 +48,17 @@ class BackupService {
                 source: row.source,
               ),
           ],
+          flowingSessions: [
+            for (final row in flowingSessions)
+              BackupFlowingSession(
+                id: row.id,
+                startedAtMs: row.startedAtMs,
+                durationMs: row.durationMs,
+                endPositionSeconds: row.endPositionSeconds,
+                speed: row.speed,
+                rating: row.rating,
+              ),
+          ],
         ).toJsonMap(),
       );
     });
@@ -65,6 +77,7 @@ class BackupService {
       await _db.batch((batch) {
         batch.deleteAll(_db.checkIns);
         batch.deleteAll(_db.customCharts);
+        batch.deleteAll(_db.flowingSessions);
         batch.deleteAll(_db.settings);
       });
       await _db.batch((batch) {
@@ -82,6 +95,17 @@ class BackupService {
               id: Value(e.id),
               title: e.title,
               source: e.source,
+            ),
+        ]);
+        batch.insertAll(_db.flowingSessions, [
+          for (final e in doc.flowingSessions)
+            FlowingSessionsCompanion.insert(
+              id: Value(e.id),
+              startedAtMs: e.startedAtMs,
+              durationMs: Value(e.durationMs),
+              endPositionSeconds: Value(e.endPositionSeconds),
+              speed: Value(e.speed),
+              rating: Value(e.rating),
             ),
         ]);
         batch.insertAll(_db.settings, [

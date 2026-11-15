@@ -10,6 +10,16 @@ import 'package:ukeflow/core/model/checkin.dart';
 void main() {
   // 造一份全量非空的备份文档:三表各至少一条。
   BackupDoc fullDoc() => BackupDoc(
+    flowingSessions: const [
+      BackupFlowingSession(
+        id: 1,
+        startedAtMs: 1700000000000,
+        durationMs: 60000,
+        endPositionSeconds: 20.5,
+        speed: 1.0,
+        rating: 2,
+      ),
+    ],
     settings: const {'reference_a4': '432', 'default_bpm': '96'},
     checkIns: const [
       BackupCheckIn(day: 1, kind: CheckInKind.completed, checkedOnDay: 20650),
@@ -21,9 +31,9 @@ void main() {
     ],
   );
 
-  test('格式版本号:导出文档带 version=1', () {
+  test('格式版本号:导出文档带 version=2', () {
     final map = fullDoc().toJsonMap();
-    expect(map['version'], 1);
+    expect(map['version'], 2);
   });
 
   test('合法文档往返:四表全字段还原', () {
@@ -141,6 +151,7 @@ void main() {
       // 全空段+单条最小形态都放行——丢弃/误拒合法内容是静默数据损失。
       final json = jsonEncode(
         BackupDoc(
+          flowingSessions: const [],
           settings: const {'k': 'v'},
           checkIns: const [
             BackupCheckIn(day: 30, kind: CheckInKind.madeUp, checkedOnDay: 0),

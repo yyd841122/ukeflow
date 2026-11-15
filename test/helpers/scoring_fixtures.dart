@@ -95,6 +95,10 @@ final class FakeRecorder implements TunerRecorder {
   bool startOk = true;
   int stopCount = 0;
 
+  /// 开麦门闩(竞速用例,工单65 F01):置起后 startStream 挂起,测试
+  /// 手动放行。
+  Completer<Stream<Uint8List>>? startGate;
+
   StreamController<Uint8List>? _chunks;
 
   @override
@@ -103,6 +107,7 @@ final class FakeRecorder implements TunerRecorder {
   @override
   Future<Stream<Uint8List>> startStream() async {
     if (!startOk) throw Exception('模拟开麦失败');
+    if (startGate != null) return startGate!.future;
     _chunks = StreamController<Uint8List>();
     return _chunks!.stream;
   }
