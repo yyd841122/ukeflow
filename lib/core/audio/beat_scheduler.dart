@@ -175,7 +175,8 @@ class BeatScheduler {
         now = engine.engineTime();
       } catch (_) {}
       for (final entry in pending) {
-        if (now == null || entry.time <= now) continue;
+        // 时钟不可用宁滥勿漏,全停(工单65 F07)。
+        if (now != null && entry.time <= now) continue;
         try {
           engine.stop(entry.voice);
         } catch (_) {}

@@ -111,7 +111,9 @@ class TabNoteScheduler {
       now = engine.engineTime();
     } catch (_) {}
     for (final entry in pending) {
-      if (now == null || entry.time <= now) continue;
+      // 时钟不可用(拿不到 now)宁滥勿漏:全部尝试停——已响的 voice
+      // stop 是无害 no-op;拿得到 now 才跳过已发声项(工单65 F07)。
+      if (now != null && entry.time <= now) continue;
       try {
         engine.stop(entry.voice);
       } catch (_) {}

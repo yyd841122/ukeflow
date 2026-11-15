@@ -51,7 +51,7 @@ class BrokenCustomStrum extends CustomStrumEntry {
 
 /// 曲库内容(工单 15):弹唱谱 = 内置 + 自建(尾随),指弹谱 = 内置,
 /// 图片谱(工单 18)= 内置资产 + 相册入库(尾随),独奏谱(工单 43)=
-/// 内置组合 + 导入源(尾随,见 importedSolos)。
+/// 内置谱与自建谱条目。
 typedef LibraryContent = ({
   List<BuiltInChart> builtinStrum,
   List<CustomStrumEntry> customStrum,
@@ -182,7 +182,7 @@ final builtinChartVisibilityProvider = Provider<BuiltinChartVisibility>(
 );
 
 /// 曲库数据源(工单 15):三路曲目合流为一处 AsyncValue,曲库页
-/// 统一呈现加载/错误/数据。自建谱走流,导入
+/// 统一呈现加载/错误/数据。自建谱走流,导入后
 /// 后本 provider 自动重建,新谱即出现在列表(「同一列表」验收的数据面)。
 final libraryProvider = FutureProvider<LibraryContent>((ref) async {
   final builtinStrum = await ref.watch(builtinChartsProvider.future);

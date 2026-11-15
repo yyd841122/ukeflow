@@ -397,6 +397,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   /// 数四下(票03):起播/换段(seek 后、曲末重开)先四下预备拍
   /// (独立预备钟:占真实时刻不占曲谱时间,红线定在起点),数完自动
   /// 起播;暂停续播不重数(codex 同款)。可开关。
+  bool _starting = false;
+  Future<void> _startupFuture = Future<void>.value();
+
   Future<void> play() async {
     final score = state.score;
     if (score == null ||
@@ -406,6 +409,19 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         state.status == FlowingStatus.error) {
       return;
     }
+    // 启动重入闸(F11):引擎初始化/建行的 await 期间 status 仍是
+    // ready/paused,连点会双建会话行、叠调度器。重入并到同一次启动。
+    if (_starting) return _startupFuture;
+    _starting = true;
+    _startupFuture = _playInner();
+    try {
+      return await _startupFuture;
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _playInner() async {
     try {
       await _engine.ensureInitialized();
     } catch (error) {
@@ -530,9 +546,14 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     } catch (_) {
       _playingSinceMs = null;
     }
+    final statusBefore = state.status;
     final scheduler = _buildScheduler(score, speed);
-    scheduler.start(t0: t0);
+    // 先挂引用:onError 若同步走(引擎异常),清理路径要摸得到调度器。
     _scheduler = scheduler;
+    scheduler.start(t0: t0);
+    // start 同步触发 onError 时,错误态已落地——不得再用 playing 覆盖
+    // (错误被「成功播放」洗掉,F10)。
+    if (state.status != statusBefore) return;
     _startTelemetry();
     state = state.copyWith(
       status: FlowingStatus.playing,
@@ -606,6 +627,16 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
       throw ArgumentError.value(value, 'speed', '只支持 0.5/0.75/1.0');
     }
     if (value == state.speed) return;
+    if (state.status == FlowingStatus.counting) {
+      // 数拍中变速:旧速度的 tick/截止时刻已失真,按新速度同起点重起
+      // 数拍(F09;tick 重排听感 = 变速即刻生效,预备拍重新数)。
+      final from = _countFrom ?? 0.0;
+      state = state.copyWith(speed: value);
+      _cancelCount();
+      _beginCount(from);
+      _persistPracticeSettings();
+      return;
+    }
     if (state.status != FlowingStatus.playing || state.score == null) {
       // 静止态只换倍率:下次 play() 按新速度锚定。
       state = state.copyWith(speed: value);
@@ -645,6 +676,9 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
   void setCountOptions({bool? countInEnabled, bool? countPerLoop}) {
     final perLoopChanged =
         countPerLoop != null && countPerLoop != state.countPerLoop;
+    // 位置先按【旧配置】采样(F09):gap 折算依赖 countPerLoop,先翻
+    // 状态再采样会把已流逝时间按新轮长重算,位置跳变。
+    final positionBefore = perLoopChanged ? currentSeconds() : null;
     state = state.copyWith(
       countInEnabled: countInEnabled,
       countPerLoop: countPerLoop,
@@ -655,7 +689,7 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         state.activeLoop == null) {
       return;
     }
-    final position = currentSeconds();
+    final position = positionBefore!;
     final now = _engine.engineTime();
     final old = _scheduler;
     final t0 = now -
@@ -781,7 +815,11 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
         Duration(
             microseconds: (pos / state.speed * Duration.microsecondsPerSecond)
                 .round());
-    final scheduler = _buildScheduler(score, state.speed, loop: loop);
+    // loop 显式给定时 loopFromState 关断:清循环瞬间 state 还是旧值,
+    // `loop ?? state.activeLoop` 会把「显式清空」当「未传」读回旧循环,
+    // 声音继续打转而画面直进(F08)。
+    final scheduler =
+        _buildScheduler(score, state.speed, loop: loop, loopFromState: false);
     old?.stop(silenceRinging: false);
     scheduler.start(t0: t0, consumedUntil: now);
     _scheduler = scheduler;
@@ -808,10 +846,13 @@ class FlowingPracticeController extends Notifier<FlowingPracticeState> {
     ReferenceScore score,
     double speed, {
     ({double start, double end})? loop,
+    bool loopFromState = true,
   }) {
     final pluck = ref.read(pluckPlayerProvider);
     final controller = this;
-    final effectiveLoop = loop ?? state.activeLoop;
+    // loopFromState=false:loop 参数即最终语义(显式 null = 无循环),
+    // 不回读 state.activeLoop(_applyLoop 清循环专用,F08)。
+    final effectiveLoop = loopFromState ? (loop ?? state.activeLoop) : loop;
     final loopCount =
         state.countPerLoop && effectiveLoop != null;
     return FlowingNoteScheduler(

@@ -516,6 +516,35 @@ void main() {
         reason: '无循环时窗外起点不吸附');
   });
 
+  test('清循环后声音真停循环:过旧边界直进到曲末(F08 回归)', () async {
+    await pumpLoopWindow();
+    await pumpSteps(8); // now=2.8,可听位 0.6。
+    controller().clearLoop();
+    expect(state().activeLoop, isNull);
+    // 不暂停不重开——调度器换新后直进:推钟越过旧边界直至曲长 6s,
+    // 应回到 finished(bug 版:调度器仍持旧循环,永远打转卡 playing)。
+    // now 已 2.8s;推 5.4s 越过曲长 6s(绝对 8.2s)。
+    var elapsed = Duration.zero;
+    while (elapsed < const Duration(milliseconds: 5400)) {
+      engine.advance(const Duration(milliseconds: 350));
+      elapsed += const Duration(milliseconds: 350);
+      await pumpPolls();
+    }
+    expect(state().status, FlowingStatus.finished,
+        reason: '清循环后调度器不得再按旧循环回跳');
+    expect(controller().currentSeconds(), closeTo(6.0, 0.1),
+        reason: '位置钳在曲长');
+  });
+
+  test('数拍配置切换先按旧配置采样,位置连续不跳(F09 回归)', () async {
+    await pumpLoopWindow();
+    await pumpSteps(4); // now=1.4,轮内可听位 1.4。
+    final before = controller().currentSeconds();
+    controller().setCountOptions(countPerLoop: false);
+    expect(controller().currentSeconds(), closeTo(before, 1e-6),
+        reason: '切开关采样旧配置,重锚可听位连续(bug 版按新轮长重算跳变)');
+  });
+
   test('数四下:起播先预备,曲谱位置冻结不推进,数完自动起播', () async {
     await pumpLoad();
     controller().setCountOptions(countInEnabled: true);
