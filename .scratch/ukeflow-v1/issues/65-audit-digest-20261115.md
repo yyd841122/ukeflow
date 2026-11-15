@@ -4,7 +4,7 @@
 (threadId 01a1ddbc-1bd2-7092-89c4-514a4c397c49,/continue 可续查)
 31 条:3 High / 24 Medium / 4 Low,无 Critical。
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Work Packages
 
@@ -65,3 +65,7 @@
   非12品泛音,电池用例红绿验证);WP-J 三处静默 catch 补日志;WP-K 重听
   缓冲 20 分钟窗口淘汰+挂起期不进缓冲;WP-N 清理(fake_webview/依赖/
   注释)。WP-M/L 票化(67/68)。941→944 全绿。
+- 2026-11-15: 装机机检(OPPO PCAM00):曲库两类目录 → 指弹谱 → 天空之城
+  体检闸 → 跟练页,全动线零回归(logcat 无 E/flutter/FATAL);审计修复批
+  (位置换算重构/闸门谱传递覆盖装载缝)真机实证。剩余 WP-M/L 已票化
+  (67/68),本票收口翻 done。
